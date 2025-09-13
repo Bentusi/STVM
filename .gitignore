@@ -1,3 +1,6 @@
 ./vscode
 *.o
 st_compiler
+st_parser.tab.c
+st_parser.tab.h
+st_lexer.c

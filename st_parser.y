@@ -1,6 +1,6 @@
 /*
  * IEC61131 结构化文本语言语法分析器
- * 支持：程序结构、变量声明、控制流、表达式
+ * 支持：程序结构、变量声明、控制流、表达式、函数定义和调用
  */
 
 %{
@@ -52,7 +52,8 @@ ASTNode *ast_root = NULL;
 /* 非终结符类型 */
 %type <node> program statement_list statement assignment_stmt function_decl function_block_decl
 %type <node> if_stmt for_stmt while_stmt case_stmt case_item expression term factor
-%type <node> comparison logical_expr case_list
+%type <node> comparison logical_expr case_list function_call argument_list
+%type <node> param_list param_decl function_body
 %type <var_decl> var_declaration var_decl_list
 %type <data_type> data_type
 
@@ -74,6 +75,16 @@ ASTNode *ast_root = NULL;
 program: PROGRAM IDENTIFIER var_section statement_list END_PROGRAM
         {
             $$ = create_program_node($2, $4);
+            ast_root = $$;
+        }
+        | function_decl
+        {
+            $$ = $1;
+            ast_root = $$;
+        }
+        | function_block_decl
+        {
+            $$ = $1;
             ast_root = $$;
         }
         ;
@@ -117,16 +128,66 @@ statement_list: statement
               ;
 
 /* 函数声明 */
-function_decl: FUNCTION IDENTIFIER COLON data_type statement_list END_FUNCTION
+function_decl: FUNCTION IDENTIFIER LPAREN param_list RPAREN COLON data_type function_body END_FUNCTION
              {
-                 $$ = create_function_node($2, $4, $5);
+                 $$ = create_function_node($2, $4, $7, $8);
+             }
+             | FUNCTION IDENTIFIER LPAREN RPAREN COLON data_type function_body END_FUNCTION
+             {
+                 $$ = create_function_node($2, NULL, $6, $7);
              }
              ;
 
+/* 函数体 */
+function_body: var_section statement_list
+             {
+                 $$ = $2;
+             }
+             | statement_list
+             {
+                 $$ = $1;
+             }
+             ;
+
+/* 参数列表 */
+param_list: param_decl
+          {
+              $$ = $1;
+          }
+          | param_list SEMICOLON param_decl
+          {
+              ASTNode *current = $1;
+              while (current->next != NULL) {
+                  current = current->next;
+              }
+              current->next = $3;
+              $$ = $1;
+          }
+          ;
+
+/* 参数声明 */
+param_decl: IDENTIFIER COLON data_type
+          {
+              $$ = create_param_node($1, $3);
+          }
+          | VAR_INPUT IDENTIFIER COLON data_type
+          {
+              $$ = create_input_param_node($2, $4);
+          }
+          | VAR_OUTPUT IDENTIFIER COLON data_type
+          {
+              $$ = create_output_param_node($2, $4);
+          }
+          | VAR_IN_OUT IDENTIFIER COLON data_type
+          {
+              $$ = create_inout_param_node($2, $4);
+          }
+          ;
+
 /* 函数块声明 */
-function_block_decl: FUNCTION_BLOCK IDENTIFIER COLON data_type statement_list END_FUNCTION_BLOCK
+function_block_decl: FUNCTION_BLOCK IDENTIFIER function_body END_FUNCTION_BLOCK
                    {
-                       $$ = create_function_block_node($2, $4, $5);
+                       $$ = create_function_block_node($2, TYPE_VOID, $3);
                    }
                    ;
 
@@ -136,6 +197,7 @@ statement: assignment_stmt SEMICOLON { $$ = $1; }
          | for_stmt                  { $$ = $1; }
          | while_stmt                { $$ = $1; }
          | case_stmt                 { $$ = $1; }
+         | function_call SEMICOLON   { $$ = $1; }
          ;
 
 /* 赋值语句 */
@@ -144,6 +206,33 @@ assignment_stmt: IDENTIFIER ASSIGN expression
                    $$ = create_assign_node($1, $3);
                }
                ;
+
+/* 函数调用 */
+function_call: IDENTIFIER LPAREN argument_list RPAREN
+             {
+                 $$ = create_function_call_node($1, $3);
+             }
+             | IDENTIFIER LPAREN RPAREN
+             {
+                 $$ = create_function_call_node($1, NULL);
+             }
+             ;
+
+/* 参数列表 */
+argument_list: expression
+             {
+                 $$ = $1;
+             }
+             | argument_list COMMA expression
+             {
+                 ASTNode *current = $1;
+                 while (current->next != NULL) {
+                     current = current->next;
+                 }
+                 current->next = $3;
+                 $$ = $1;
+             }
+             ;
 
 /* IF语句 */
 if_stmt: IF expression THEN statement_list END_IF
@@ -179,11 +268,10 @@ case_stmt: CASE expression OF case_list END_CASE
 
 case_list: case_item
          {
-             $$ = $1;  // 单个case项
+             $$ = $1;
          }
          | case_list case_item
          {
-             // 将新的case_item添加到列表末尾
              ASTNode *current = $1;
              while (current->next != NULL) {
                  current = current->next;
@@ -254,13 +342,25 @@ term: factor
     {
         $$ = create_binary_op_node(OP_SUB, $1, $3);
     }
+    | term MUL factor
+    {
+        $$ = create_binary_op_node(OP_MUL, $1, $3);
+    }
+    | term DIV factor
+    {
+        $$ = create_binary_op_node(OP_DIV, $1, $3);
+    }
+    | term MOD factor
+    {
+        $$ = create_binary_op_node(OP_MOD, $1, $3);
+    }
     ;
 
-factor:IDENTIFIER
+factor: IDENTIFIER
       {
           $$ = create_identifier_node($1);
       }
-      |MINUS factor %prec UMINUS
+      | MINUS factor %prec UMINUS
       {
           $$ = create_unary_op_node(OP_NEG, $2);
       }
@@ -284,13 +384,9 @@ factor:IDENTIFIER
       {
           $$ = $2;
       }
-      | factor MUL factor
+      | function_call
       {
-          $$ = create_binary_op_node(OP_MUL, $1, $3);
-      }
-      | factor DIV factor
-      {
-          $$ = create_binary_op_node(OP_DIV, $1, $3);
+          $$ = $1;
       }
       ;
 
