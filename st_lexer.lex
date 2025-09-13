@@ -30,13 +30,17 @@ COMMENT    \(\*[^*]*\*+([^)*][^*]*\*+)*\)
 %%
 
   /* IEC61131关键字 */
-"PROGRAM"       { return PROGRAM; }
-"END_PROGRAM"   { return END_PROGRAM; }
-"VAR"           { return VAR; }
-"END_VAR"       { return END_VAR; }
-"VAR_INPUT"     { return VAR_INPUT; }
-"VAR_OUTPUT"    { return VAR_OUTPUT; }
-"VAR_IN_OUT"    { return VAR_IN_OUT; }
+"PROGRAM"            { return PROGRAM; }
+"END_PROGRAM"        { return END_PROGRAM; }
+"VAR"                { return VAR; }
+"END_VAR"            { return END_VAR; }
+"VAR_INPUT"          { return VAR_INPUT; }
+"VAR_OUTPUT"         { return VAR_OUTPUT; }
+"VAR_IN_OUT"         { return VAR_IN_OUT; }
+"FUNCTION"           { return FUNCTION; }
+"END_FUNCTION"       { return END_FUNCTION; }
+"FUNCTION_BLOCK"     { return FUNCTION_BLOCK; }
+"END_FUNCTION_BLOCK" { return END_FUNCTION_BLOCK; }
 
   /* 数据类型关键字 */
 "BOOL"          { return BOOL_TYPE; }

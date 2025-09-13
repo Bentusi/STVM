@@ -28,6 +28,8 @@ typedef enum {
     NODE_PROGRAM,
     NODE_STATEMENT_LIST,
     NODE_ASSIGN,
+    NODE_FUNCTION,
+    NODE_FUNCTION_BLOCK,
     NODE_IF,
     NODE_FOR,
     NODE_WHILE,
@@ -82,6 +84,8 @@ ASTNode *create_program_node(char *name, ASTNode *statements);
 ASTNode *create_statement_list(ASTNode *statement);
 ASTNode *add_statement(ASTNode *list, ASTNode *statement);
 ASTNode *create_assign_node(char *var_name, ASTNode *expr);
+ASTNode *create_function_node(char *func_name, ASTNode *statements);
+ASTNode *create_function_block_node(char *fb_name, ASTNode *statements);
 ASTNode *create_if_node(ASTNode *condition, ASTNode *then_stmt, ASTNode *else_stmt);
 ASTNode *create_for_node(char *var_name, ASTNode *start, ASTNode *end, ASTNode *statements);
 ASTNode *create_while_node(ASTNode *condition, ASTNode *statements);

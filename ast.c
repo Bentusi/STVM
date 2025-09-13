@@ -46,6 +46,26 @@ ASTNode *add_statement(ASTNode *list, ASTNode *statement) {
     return list;
 }
 
+/* 创建函数节点 */
+ASTNode *create_function_node(char *func_name, ASTNode *statements) {
+    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    node->type = NODE_FUNCTION;
+    node->identifier = strdup(func_name);
+    node->statements = statements;
+    node->left = node->right = node->condition = node->else_statements = node->next = NULL;
+    return node;
+}
+
+/* 创建函数块节点 */
+ASTNode *create_function_block_node(char *fb_name, ASTNode *statements) {
+    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    node->type = NODE_FUNCTION_BLOCK;
+    node->identifier = strdup(fb_name);
+    node->statements = statements;
+    node->left = node->right = node->condition = node->else_statements = node->next = NULL;
+    return node;
+}
+
 /* 创建赋值节点 */
 ASTNode *create_assign_node(char *var_name, ASTNode *expr) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));

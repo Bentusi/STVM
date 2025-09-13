@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ast.h"
-#include "vm.h"
 
 extern int yylex();
 extern void yyerror(const char *msg);
@@ -36,7 +35,7 @@ ASTNode *ast_root = NULL;
 %token <bool_val> BOOL_LITERAL
 
 /* 关键字 */
-%token PROGRAM END_PROGRAM VAR END_VAR VAR_INPUT VAR_OUTPUT VAR_IN_OUT
+%token PROGRAM END_PROGRAM VAR END_VAR VAR_INPUT VAR_OUTPUT VAR_IN_OUT FUNCTION END_FUNCTION FUNCTION_BLOCK END_FUNCTION_BLOCK
 %token BOOL_TYPE INT_TYPE REAL_TYPE STRING_TYPE
 %token IF THEN ELSE ELSIF END_IF FOR TO BY DO END_FOR WHILE END_WHILE
 %token CASE OF END_CASE
@@ -51,13 +50,14 @@ ASTNode *ast_root = NULL;
 %token ERROR
 
 /* 非终结符类型 */
-%type <node> program statement_list statement assignment_stmt
+%type <node> program statement_list statement assignment_stmt function_decl function_block_decl
 %type <node> if_stmt for_stmt while_stmt case_stmt case_item expression term factor
 %type <node> comparison logical_expr case_list
 %type <var_decl> var_declaration var_decl_list
 %type <data_type> data_type
 
 /* 运算符优先级 */
+%right UMINUS
 %left OR
 %left AND
 %left EQ NE
@@ -65,7 +65,6 @@ ASTNode *ast_root = NULL;
 %left PLUS MINUS
 %left MUL DIV MOD
 %right NOT
-%right UMINUS
 
 %start program
 
@@ -116,6 +115,20 @@ statement_list: statement
                   $$ = add_statement($1, $2);
               }
               ;
+
+/* 函数声明 */
+function_decl: FUNCTION IDENTIFIER COLON data_type statement_list END_FUNCTION
+             {
+                 $$ = create_function_node($2, $4, $5);
+             }
+             ;
+
+/* 函数块声明 */
+function_block_decl: FUNCTION_BLOCK IDENTIFIER COLON data_type statement_list END_FUNCTION_BLOCK
+                   {
+                       $$ = create_function_block_node($2, $4, $5);
+                   }
+                   ;
 
 /* 语句 */
 statement: assignment_stmt SEMICOLON { $$ = $1; }
@@ -243,9 +256,13 @@ term: factor
     }
     ;
 
-factor: IDENTIFIER
+factor:IDENTIFIER
       {
           $$ = create_identifier_node($1);
+      }
+      |MINUS factor %prec UMINUS
+      {
+          $$ = create_unary_op_node(OP_NEG, $2);
       }
       | INT_LITERAL
       {
@@ -274,10 +291,6 @@ factor: IDENTIFIER
       | factor DIV factor
       {
           $$ = create_binary_op_node(OP_DIV, $1, $3);
-      }
-      | MINUS factor %prec UMINUS
-      {
-          $$ = create_unary_op_node(OP_NEG, $2);
       }
       ;
 

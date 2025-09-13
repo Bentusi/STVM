@@ -105,6 +105,7 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             vm_emit(vm, VM_HALT);
             break;
         }
+        
         case NODE_STATEMENT_LIST: {
             vm_compile_ast(vm, ast->left);
             if (ast->next) {
@@ -112,9 +113,49 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             }
             break;
         }
+        
         case NODE_ASSIGN: {
             vm_compile_ast(vm, ast->right);  // 计算右侧表达式
             vm_emit(vm, VM_STORE_VAR, ast->identifier);
+            break;
+        }
+
+        case NODE_FUNCTION: {
+            /* 函数定义处理 - 生成函数的字节码 */
+            // 为函数创建标签/地址
+            int func_start = vm->code_size;
+            
+            // 编译函数体
+            vm_compile_ast(vm, ast->statements);
+            
+            // 函数返回指令
+            vm_emit(vm, VM_RET);
+            
+            // 将函数信息存储到符号表或函数表中
+            // 这里简化处理，可以扩展为完整的函数表管理
+            char func_label[256];
+            snprintf(func_label, sizeof(func_label), "__func_%s__", ast->identifier);
+            VMValue func_addr = {TYPE_INT, {.int_val = func_start}};
+            vm_set_variable(vm, func_label, func_addr);
+            break;
+        }
+        
+        case NODE_FUNCTION_BLOCK: {
+            /* 功能块处理 - 类似函数但可能有状态保持 */
+            // 为功能块创建标签/地址
+            int fb_start = vm->code_size;
+            
+            // 编译功能块体
+            vm_compile_ast(vm, ast->statements);
+            
+            // 功能块返回指令
+            vm_emit(vm, VM_RET);
+            
+            // 将功能块信息存储
+            char fb_label[256];
+            snprintf(fb_label, sizeof(fb_label), "__fb_%s__", ast->identifier);
+            VMValue fb_addr = {TYPE_INT, {.int_val = fb_start}};
+            vm_set_variable(vm, fb_label, fb_addr);
             break;
         }
         case NODE_IF: {
@@ -327,28 +368,63 @@ int vm_run(VMState *vm) {
                 vm_set_variable(vm, instr->str_operand, val);
                 break;
             }
+
+            case VM_NEG: {
+                VMValue val = vm_pop(vm);
+                if (val.type == TYPE_INT) {
+                    val.value.int_val = -val.value.int_val;
+                } else if (val.type == TYPE_REAL) {
+                    val.value.real_val = -val.value.real_val;
+                } else {
+                    vm_set_error(vm, "NEG操作数类型错误");
+                    return -1;
+                }
+                vm_push(vm, val);
+                break;
+            }
             
             case VM_ADD: {
                 VMValue b = vm_pop(vm);
                 VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_INT, {.int_val = a.value.int_val + b.value.int_val}};
-                vm_push(vm, result);
+                if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
+                    double aval = (a.type == TYPE_REAL) ? a.value.real_val : (double)a.value.int_val;
+                    double bval = (b.type == TYPE_REAL) ? b.value.real_val : (double)b.value.int_val;
+                    VMValue result = {TYPE_REAL, {.real_val = aval + bval}};
+                    vm_push(vm, result);
+                } else {
+                    VMValue result = {TYPE_INT, {.int_val = a.value.int_val + b.value.int_val}};
+                    vm_push(vm, result);
+                }
                 break;
             }
             
             case VM_SUB: {
                 VMValue b = vm_pop(vm);
                 VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_INT, {.int_val = a.value.int_val - b.value.int_val}};
-                vm_push(vm, result);
+                if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
+                    double aval = (a.type == TYPE_REAL) ? a.value.real_val : (double)a.value.int_val;
+                    double bval = (b.type == TYPE_REAL) ? b.value.real_val : (double)b.value.int_val;
+                    VMValue result = {TYPE_REAL, {.real_val = aval - bval}};
+                    vm_push(vm, result);
+                } else {
+                    VMValue result = {TYPE_INT, {.int_val = a.value.int_val - b.value.int_val}};
+                    vm_push(vm, result);
+                }
                 break;
             }
             
             case VM_MUL: {
                 VMValue b = vm_pop(vm);
                 VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_INT, {.int_val = a.value.int_val * b.value.int_val}};
-                vm_push(vm, result);
+                if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
+                    double aval = (a.type == TYPE_REAL) ? a.value.real_val : (double)a.value.int_val;
+                    double bval = (b.type == TYPE_REAL) ? b.value.real_val : (double)b.value.int_val;
+                    VMValue result = {TYPE_REAL, {.real_val = aval * bval}};
+                    vm_push(vm, result);
+                } else {
+                    VMValue result = {TYPE_INT, {.int_val = a.value.int_val * b.value.int_val}};
+                    vm_push(vm, result);
+                }
                 break;
             }
 
@@ -593,6 +669,9 @@ void vm_print_code(VMState *vm) {
                 break;
             case VM_MUL:
                 printf("MUL");
+                break;
+            case VM_NEG:
+                printf("NEG");
                 break;
             case VM_DIV:
                 printf("DIV");
