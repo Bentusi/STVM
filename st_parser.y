@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ast.h"
+#include "vm.h"
 
 extern int yylex();
 extern void yyerror(const char *msg);
@@ -25,6 +26,7 @@ ASTNode *ast_root = NULL;
     int bool_val;
     ASTNode *node;
     VarDecl *var_decl;
+    ParamDecl *param_decl;
     DataType data_type;
 }
 
@@ -53,7 +55,8 @@ ASTNode *ast_root = NULL;
 %type <node> program statement_list statement assignment_stmt function_decl function_block_decl
 %type <node> if_stmt for_stmt while_stmt case_stmt case_item expression term factor
 %type <node> comparison logical_expr case_list function_call argument_list
-%type <node> param_list param_decl function_body
+%type <node> function_body
+%type <param_decl> param_list param_decl
 %type <var_decl> var_declaration var_decl_list
 %type <data_type> data_type
 
@@ -156,7 +159,7 @@ param_list: param_decl
           }
           | param_list SEMICOLON param_decl
           {
-              ASTNode *current = $1;
+              ParamDecl *current = $1;
               while (current->next != NULL) {
                   current = current->next;
               }

@@ -1,6 +1,8 @@
-/*
- * IEC61131 虚拟机 (VM) 实现
- * 平台无关的字节码执行引擎实现
+ /*
+  * 整合词法分析、语法分析和虚拟机执行
+  * IEC61131 结构化文本编译器和虚拟机主程序
+  * IEC61131 虚拟机 (VM) 实现
+  * 平台无关的字节码执行引擎实现
  */
 
 #include <stdio.h>
@@ -25,6 +27,9 @@ VMState *vm_create(void) {
     vm->stack_size = MAX_STACK_SIZE;
     vm->sp = 0;
     vm->variables = NULL;
+    vm->functions = NULL;
+    vm->current_frame = NULL;
+    vm->frame_count = 0;
     vm->running = 0;
     vm->error_msg = NULL;
     
@@ -50,8 +55,81 @@ void vm_destroy(VMState *vm) {
         var = next;
     }
     
+    /* 释放函数表 */
+    VMFunction *func = vm->functions;
+    while (func) {
+        VMFunction *next = func->next;
+        free(func->name);
+        free(func);
+        func = next;
+    }
+    
+    /* 释放调用帧 */
+    while (vm->current_frame) {
+        vm_pop_frame(vm);
+    }
+    
     if (vm->error_msg) free(vm->error_msg);
     free(vm);
+}
+
+/* 注册函数到函数表 */
+void vm_register_function(VMState *vm, const char *name, int address, DataType return_type, ParamDecl *params) {
+    VMFunction *func = (VMFunction *)malloc(sizeof(VMFunction));
+    func->name = strdup(name);
+    func->address = address;
+    func->return_type = return_type;
+    func->params = params;
+    
+    /* 计算参数个数 */
+    func->param_count = 0;
+    ParamDecl *param = params;
+    while (param) {
+        func->param_count++;
+        param = param->next;
+    }
+    
+    /* 添加到函数链表 */
+    func->next = vm->functions;
+    vm->functions = func;
+}
+
+/* 查找函数 */
+VMFunction *vm_find_function(VMState *vm, const char *name) {
+    VMFunction *func = vm->functions;
+    while (func) {
+        if (strcmp(func->name, name) == 0) {
+            return func;
+        }
+        func = func->next;
+    }
+    return NULL;
+}
+
+/* 创建调用帧 */
+void vm_push_frame(VMState *vm, VMFunction *func, int return_addr) {
+    VMFrame *frame = (VMFrame *)malloc(sizeof(VMFrame));
+    frame->return_address = return_addr;
+    frame->base_pointer = vm->sp;
+    frame->function = func;
+    frame->prev = vm->current_frame;
+    
+    vm->current_frame = frame;
+    vm->frame_count++;
+}
+
+/* 弹出调用帧 */
+void vm_pop_frame(VMState *vm) {
+    if (!vm->current_frame) return;
+    
+    VMFrame *frame = vm->current_frame;
+    vm->current_frame = frame->prev;
+    vm->frame_count--;
+    
+    /* 恢复栈指针到函数调用前 */
+    vm->sp = frame->base_pointer;
+    
+    free(frame);
 }
 
 /* 生成虚拟机指令 */
@@ -121,43 +199,87 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
         }
 
         case NODE_FUNCTION: {
-            /* 函数定义处理 - 生成函数的字节码 */
-            // 为函数创建标签/地址
+            /* 函数定义处理 */
             int func_start = vm->code_size;
             
-            // 编译函数体
+            /* 为参数分配栈空间 */
+            if (ast->params) {
+                ParamDecl *param = ast->params;
+                while (param) {
+                    /* 参数已经在调用时压入栈中，这里只需要记录位置 */
+                    param = param->next;
+                }
+            }
+            
+            /* 编译函数体 */
             vm_compile_ast(vm, ast->statements);
             
-            // 函数返回指令
+            /* 如果函数没有显式返回，添加默认返回 */
+            if (ast->return_type != TYPE_VOID) {
+                /* 对于有返回值的函数，如果没有显式返回，返回默认值 */
+                switch (ast->return_type) {
+                    case TYPE_INT:
+                        vm_emit(vm, VM_LOAD_INT, 0);
+                        break;
+                    case TYPE_REAL:
+                        vm_emit(vm, VM_LOAD_REAL, 0.0);
+                        break;
+                    case TYPE_BOOL:
+                        vm_emit(vm, VM_LOAD_BOOL, 0);
+                        break;
+                    case TYPE_STRING:
+                        vm_emit(vm, VM_LOAD_STRING, "");
+                        break;
+                    default:
+                        break;
+                }
+            }
+            
+            /* 函数返回指令 */
             vm_emit(vm, VM_RET);
             
-            // 将函数信息存储到符号表或函数表中
-            // 这里简化处理，可以扩展为完整的函数表管理
-            char func_label[256];
-            snprintf(func_label, sizeof(func_label), "__func_%s__", ast->identifier);
-            VMValue func_addr = {TYPE_INT, {.int_val = func_start}};
-            vm_set_variable(vm, func_label, func_addr);
+            /* 注册函数到函数表 */
+            vm_register_function(vm, ast->identifier, func_start, ast->return_type, ast->params);
             break;
         }
         
-        case NODE_FUNCTION_BLOCK: {
-            /* 功能块处理 - 类似函数但可能有状态保持 */
-            // 为功能块创建标签/地址
-            int fb_start = vm->code_size;
+        case NODE_FUNCTION_CALL: {
+            /* 函数调用处理 */
+            VMFunction *func = vm_find_function(vm, ast->identifier);
+            if (!func) {
+                vm_set_error(vm, "未定义的函数");
+                return;
+            }
             
-            // 编译功能块体
-            vm_compile_ast(vm, ast->statements);
+            /* 计算并压入参数 */
+            int arg_count = 0;
+            ASTNode *arg = ast->arguments;
+            while (arg) {
+                vm_compile_ast(vm, arg);
+                arg_count++;
+                arg = arg->next;
+            }
             
-            // 功能块返回指令
-            vm_emit(vm, VM_RET);
+            /* 检查参数个数 */
+            if (arg_count != func->param_count) {
+                vm_set_error(vm, "函数参数个数不匹配");
+                return;
+            }
             
-            // 将功能块信息存储
-            char fb_label[256];
-            snprintf(fb_label, sizeof(fb_label), "__fb_%s__", ast->identifier);
-            VMValue fb_addr = {TYPE_INT, {.int_val = fb_start}};
-            vm_set_variable(vm, fb_label, fb_addr);
+            /* 生成函数调用指令 */
+            vm_emit(vm, VM_CALL, func->address);
             break;
         }
+        
+        case NODE_RETURN: {
+            /* 返回语句处理 */
+            if (ast->return_value) {
+                vm_compile_ast(vm, ast->return_value);
+            }
+            vm_emit(vm, VM_RET);
+            break;
+        }
+        
         case NODE_IF: {
             vm_compile_ast(vm, ast->condition);
             int jz_addr = vm->code_size;
@@ -527,6 +649,116 @@ int vm_run(VMState *vm) {
                 break;
             }
 
+            case VM_CALL: {
+                /* 函数调用指令 */
+                int func_addr = instr->int_operand;
+                
+                /* 创建新的调用帧 */
+                VMFunction *func = NULL;
+                VMFunction *f = vm->functions;
+                while (f) {
+                    if (f->address == func_addr) {
+                        func = f;
+                        break;
+                    }
+                    f = f->next;
+                }
+                
+                if (!func) {
+                    vm_set_error(vm, "无效的函数地址");
+                    return -1;
+                }
+                
+                /* 创建调用帧 */
+                vm_push_frame(vm, func, vm->pc + 1);
+                
+                /* 跳转到函数地址 */
+                vm->pc = func_addr - 1;  /* -1因为循环末尾会+1 */
+                break;
+            }
+            
+            case VM_RET: {
+                /* 函数返回指令 */
+                if (!vm->current_frame) {
+                    /* 主程序返回，停止执行 */
+                    vm->running = 0;
+                    break;
+                }
+                
+                /* 保存返回值（如果有） */
+                VMValue return_value = {TYPE_VOID, {.int_val = 0}};
+                if (vm->current_frame->function->return_type != TYPE_VOID && vm->sp > 0) {
+                    return_value = vm_pop(vm);
+                }
+                
+                /* 恢复返回地址 */
+                int return_addr = vm->current_frame->return_address;
+                
+                /* 弹出调用帧 */
+                vm_pop_frame(vm);
+                
+                /* 将返回值压回栈（如果有） */
+                if (return_value.type != TYPE_VOID) {
+                    vm_push(vm, return_value);
+                }
+                
+                /* 跳转到返回地址 */
+                vm->pc = return_addr - 1;  /* -1因为循环末尾会+1 */
+                break;
+            }
+            
+            case VM_LOAD_PARAM: {
+                /* 加载参数指令 */
+                int param_index = instr->int_operand;
+                if (!vm->current_frame) {
+                    vm_set_error(vm, "无当前调用帧");
+                    return -1;
+                }
+                
+                /* 参数在当前帧的基地址之前 */
+                int param_addr = vm->current_frame->base_pointer - vm->current_frame->function->param_count + param_index;
+                if (param_addr < 0 || param_addr >= vm->sp) {
+                    vm_set_error(vm, "无效的参数索引");
+                    return -1;
+                }
+                
+                vm_push(vm, vm->stack[param_addr]);
+                break;
+            }
+            
+            case VM_STORE_PARAM: {
+                /* 存储参数指令 */
+                int param_index = instr->int_operand;
+                VMValue val = vm_pop(vm);
+                
+                if (!vm->current_frame) {
+                    vm_set_error(vm, "无当前调用帧");
+                    return -1;
+                }
+                
+                /* 参数在当前帧的基地址之前 */
+                int param_addr = vm->current_frame->base_pointer - vm->current_frame->function->param_count + param_index;
+                if (param_addr < 0 || param_addr >= vm->stack_size) {
+                    vm_set_error(vm, "无效的参数索引");
+                    return -1;
+                }
+                
+                vm->stack[param_addr] = val;
+                break;
+            }
+            
+            case VM_PUSH_FRAME: {
+                /* 手动创建帧指令（如果需要） */
+                vm_push_frame(vm, NULL, vm->pc + 1);
+                break;
+            }
+            
+            case VM_POP_FRAME: {
+                /* 手动弹出帧指令（如果需要） */
+                vm_pop_frame(vm);
+                break;
+            }
+
             case VM_HALT:
                 vm->running = 0;
                 break;
@@ -703,11 +935,41 @@ void vm_print_code(VMState *vm) {
             case VM_HALT:
                 printf("HALT");
                 break;
+            case VM_CALL:
+                printf("CALL %d", instr->int_operand);
+                break;
+            case VM_RET:
+                printf("RET");
+                break;
+            case VM_LOAD_PARAM:
+                printf("LOAD_PARAM %d", instr->int_operand);
+                break;
+            case VM_STORE_PARAM:
+                printf("STORE_PARAM %d", instr->int_operand);
+                break;
+            case VM_PUSH_FRAME:
+                printf("PUSH_FRAME");
+                break;
+            case VM_POP_FRAME:
+                printf("POP_FRAME");
+                break;
             default:
                 printf("UNKNOWN");
                 break;
         }
         printf("\n");
+    }
+    printf("==============\n");
+}
+
+/* 打印函数表（调试用） */
+void vm_print_functions(VMState *vm) {
+    printf("=== 函数表 ===\n");
+    VMFunction *func = vm->functions;
+    while (func) {
+        printf("函数: %s, 地址: %d, 参数个数: %d, 返回类型: %d\n", 
+               func->name, func->address, func->param_count, func->return_type);
+        func = func->next;
     }
     printf("==============\n");
 }

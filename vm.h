@@ -47,6 +47,10 @@ typedef enum {
     VM_JNZ,         // 条件跳转（非零时跳转）
     VM_CALL,        // 函数调用
     VM_RET,         // 函数返回
+    VM_LOAD_PARAM,  //
+    VM_STORE_PARAM,  //
+    VM_PUSH_FRAME,
+    VM_POP_FRAME,
     
     /* 系统指令 */
     VM_HALT,        // 停机
@@ -70,6 +74,24 @@ typedef struct {
     };
 } VMInstruction;
 
+/* 函数信息结构 */
+typedef struct VMFunction {
+    char *name;
+    int address;
+    int param_count;
+    DataType return_type;
+    ParamDecl *params;
+    struct VMFunction *next;
+} VMFunction;
+
+/* 调用帧结构 */
+typedef struct VMFrame {
+    int return_address;
+    int base_pointer;
+    VMFunction *function;
+    struct VMFrame *prev;
+} VMFrame;
+
 /* 虚拟机变量存储 */
 typedef struct VMVariable {
     char *name;
@@ -87,7 +109,11 @@ typedef struct {
     int stack_size;             // 栈大小
     int sp;                     // 栈指针
     
+    VMFrame *current_frame;     // 当前调用帧
+    int frame_count;            // 调用帧数量
+    
     VMVariable *variables;      // 变量存储
+    VMFunction *functions;      // 函数表
     
     int running;                // 运行状态
     char *error_msg;           // 错误信息
@@ -114,6 +140,16 @@ VMValue vm_get_variable(VMState *vm, const char *name);
 /* 栈操作 */
 void vm_push(VMState *vm, VMValue value);
 VMValue vm_pop(VMState *vm);
+
+/* 帧管理 */
+void vm_push_frame(VMState *vm, VMFunction *func, int return_addr);
+void vm_pop_frame(VMState *vm);
+
+/* 函数管理 */
+void vm_register_function(VMState *vm, const char *name, int address, DataType return_type, ParamDecl *params);
+VMFunction *vm_find_function(VMState *vm, const char *name);
+void vm_call_function(VMState *vm, const char *name, int arg_count);
+void vm_return_function(VMState *vm);
 
 /* 调试和工具函数 */
 void vm_print_code(VMState *vm);

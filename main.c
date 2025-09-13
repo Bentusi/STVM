@@ -16,14 +16,17 @@ extern ASTNode *ast_root;
 extern int line_num;
 
 /* 函数声明 */
+
 void print_usage(const char *program_name);
 int compile_and_run_file(const char *filename);
 int compile_and_run_string(const char *source);
+void collect_functions(VMState *vm, ASTNode *ast);
+int validate_function_calls(VMState *vm, ASTNode *ast);
 
 /* 主函数 */
 int main(int argc, char *argv[]) {
     printf("IEC61131 结构化文本编译器和虚拟机 v1.0\n");
-    printf("支持：变量声明、赋值、IF/FOR/WHILE/CASE控制结构、表达式运算\n\n");
+    printf("支持：变量声明、赋值、IF/FOR/WHILE/CASE控制结构、表达式运算、函数定义和调用\n\n");
     
     if (argc < 2) {
         print_usage(argv[0]);
@@ -116,6 +119,11 @@ int compile_and_run_file(const char *filename) {
     }
     
     printf("生成字节码...\n");
+    
+    /* 预处理：收集函数定义 */
+    collect_functions(vm, ast_root);
+    
+    /* 编译AST到字节码 */
     vm_compile_ast(vm, ast_root);
     
     if (vm_get_error(vm)) {
@@ -126,6 +134,11 @@ int compile_and_run_file(const char *filename) {
     }
     
     printf("字节码生成完成！\n\n");
+    
+    /* 打印函数表（调试用） */
+    printf("=== 已注册的函数 ===\n");
+    vm_print_functions(vm);
+    printf("===================\n\n");
     
     /* 打印字节码（调试用） */
     printf("=== 生成的字节码 ===\n");
@@ -185,6 +198,9 @@ int compile_and_run_string(const char *source) {
         return 1;
     }
     
+    /* 预处理：收集函数定义 */
+    collect_functions(vm, ast_root);
+    
     vm_compile_ast(vm, ast_root);
     
     if (vm_get_error(vm)) {
@@ -200,6 +216,12 @@ int compile_and_run_string(const char *source) {
         printf("执行错误：%s\n", vm_get_error(vm));
     } else {
         vm_print_variables(vm);
+        
+        /* 在交互模式下显示函数表 */
+        if (vm->functions) {
+            printf("\n已定义的函数:\n");
+            vm_print_functions(vm);
+        }
     }
     
     /* 清理资源 */
@@ -207,4 +229,99 @@ int compile_and_run_string(const char *source) {
     free_ast(ast_root);
     
     return exec_result;
+}
+
+/* 收集函数定义的辅助函数 */
+void collect_functions(VMState *vm, ASTNode *ast) {
+    if (!ast) return;
+    
+    switch (ast->type) {
+        case NODE_FUNCTION: {
+            /* 为函数预分配地址并注册 */
+            int func_addr = vm->code_size;
+            vm_register_function(vm, ast->identifier, func_addr, ast->return_type, ast->params);
+            printf("注册函数: %s (地址: %d)\n", ast->identifier, func_addr);
+            break;
+        }
+        
+        case NODE_FUNCTION_BLOCK: {
+            /* 为函数块预分配地址并注册 */
+            int fb_addr = vm->code_size;
+            vm_register_function(vm, ast->identifier, fb_addr, ast->return_type, NULL);
+            printf("注册函数块: %s (地址: %d)\n", ast->identifier, fb_addr);
+            break;
+        }
+        
+        case NODE_PROGRAM: {
+            /* 递归处理程序中的语句 */
+            collect_functions(vm, ast->statements);
+            break;
+        }
+        
+        case NODE_STATEMENT_LIST: {
+            /* 递归处理语句列表 */
+            collect_functions(vm, ast->left);
+            if (ast->next) {
+                collect_functions(vm, ast->next);
+            }
+            break;
+        }
+        
+        default:
+            /* 对于其他节点类型，递归检查子节点 */
+            if (ast->left) collect_functions(vm, ast->left);
+            if (ast->right) collect_functions(vm, ast->right);
+            if (ast->condition) collect_functions(vm, ast->condition);
+            if (ast->statements) collect_functions(vm, ast->statements);
+            if (ast->else_statements) collect_functions(vm, ast->else_statements);
+            if (ast->next) collect_functions(vm, ast->next);
+            break;
+    }
+}
+
+/* 验证函数调用的辅助函数 */
+int validate_function_calls(VMState *vm, ASTNode *ast) {
+    if (!ast) return 1;
+    
+    switch (ast->type) {
+        case NODE_FUNCTION_CALL: {
+            VMFunction *func = vm_find_function(vm, ast->identifier);
+            if (!func) {
+                printf("错误：未定义的函数 '%s'\n", ast->identifier);
+                return 0;
+            }
+            
+            /* 计算参数个数 */
+            int arg_count = 0;
+            ASTNode *arg = ast->arguments;
+            while (arg) {
+                arg_count++;
+                arg = arg->next;
+            }
+            
+            if (arg_count != func->param_count) {
+                printf("错误：函数 '%s' 参数个数不匹配，期望 %d 个，实际 %d 个\n", 
+                       ast->identifier, func->param_count, arg_count);
+                return 0;
+            }
+            
+            printf("验证函数调用: %s (%d 个参数)\n", ast->identifier, arg_count);
+            break;
+        }
+        
+        default:
+            break;
+    }
+    
+    /* 递归验证子节点 */
+    int result = 1;
+    if (ast->left) result &= validate_function_calls(vm, ast->left);
+    if (ast->right) result &= validate_function_calls(vm, ast->right);
+    if (ast->condition) result &= validate_function_calls(vm, ast->condition);
+    if (ast->statements) result &= validate_function_calls(vm, ast->statements);
+    if (ast->else_statements) result &= validate_function_calls(vm, ast->else_statements);
+    if (ast->arguments) result &= validate_function_calls(vm, ast->arguments);
+    if (ast->next) result &= validate_function_calls(vm, ast->next);
+    
+    return result;
 }
