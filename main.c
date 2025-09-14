@@ -236,11 +236,27 @@ void collect_functions(VMState *vm, ASTNode *ast) {
     if (!ast) return;
     
     switch (ast->type) {
+        case NODE_COMPILATION_UNIT: {
+            /* 处理编译单元：先处理函数声明，再处理程序 */
+            if (ast->left) {
+                collect_functions(vm, ast->left);  /* 函数声明列表 */
+            }
+            if (ast->right) {
+                collect_functions(vm, ast->right); /* 程序 */
+            }
+            break;
+        }
+        
         case NODE_FUNCTION: {
             /* 为函数预分配地址并注册 */
             int func_addr = vm->code_size;
             vm_register_function(vm, ast->identifier, func_addr, ast->return_type, ast->params);
             printf("注册函数: %s (地址: %d)\n", ast->identifier, func_addr);
+            
+            /* 处理函数链表中的下一个函数 */
+            if (ast->next) {
+                collect_functions(vm, ast->next);
+            }
             break;
         }
         
@@ -249,6 +265,11 @@ void collect_functions(VMState *vm, ASTNode *ast) {
             int fb_addr = vm->code_size;
             vm_register_function(vm, ast->identifier, fb_addr, ast->return_type, NULL);
             printf("注册函数块: %s (地址: %d)\n", ast->identifier, fb_addr);
+            
+            /* 处理函数链表中的下一个函数块 */
+            if (ast->next) {
+                collect_functions(vm, ast->next);
+            }
             break;
         }
         

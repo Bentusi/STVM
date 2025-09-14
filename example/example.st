@@ -15,10 +15,6 @@ flag := FALSE;
 state := 2;
 result := 0.0;
 
-FUNCTION foo : INT
-    RETURN sum + 1;
-END_FUNCTION
-
 (* 计算1到10的和 *)
 FOR counter := 1 TO 10 DO
     sum := sum + counter;
@@ -26,9 +22,7 @@ END_FOR
 
 (* 计算平均值 *)
  average := sum / 10.0;
- average := -average + 1; (* 测试一元负号 *)
-
-foo();
+ average := (-average + 9); (* 测试一元负号 *)
 
 (* 条件判断 *)
 IF sum > 50 THEN

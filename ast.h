@@ -20,10 +20,12 @@ typedef enum {
 
 /* AST节点类型 */
 typedef enum {
+    NODE_COMPILATION_UNIT,
     NODE_PROGRAM,
     NODE_FUNCTION,
     NODE_FUNCTION_BLOCK,
     NODE_FUNCTION_CALL,
+    NODE_VAR_SECTION,
     NODE_PARAM,
     NODE_PARAM_LIST,
     NODE_RETURN,
@@ -70,6 +72,7 @@ struct ParamDecl {
     char *name;
     DataType type;
     ParamDirection direction;
+    ASTNode *default_value;  /* 新增：默认值 */
     struct ParamDecl *next;
 };
 
@@ -112,6 +115,8 @@ struct ASTNode {
     /* 函数相关字段 */
     DataType return_type;
     ParamDecl *params;
+    VarDecl *var_decls;
+    VarDecl *local_vars;
     ASTNode *arguments;
     ASTNode *return_value;
     
@@ -127,6 +132,7 @@ struct ASTNode {
 /* 函数声明 */
 
 /* AST节点创建函数 */
+ASTNode *create_compilation_unit_node(ASTNode *declarations, ASTNode *program);
 ASTNode *create_program_node(char *name, ASTNode *statements);
 ASTNode *create_statement_list(ASTNode *statement);
 ASTNode *add_statement(ASTNode *list, ASTNode *statement);
@@ -136,6 +142,12 @@ ASTNode *create_function_node(char *name, ParamDecl *params, DataType return_typ
 ASTNode *create_function_block_node(char *name, DataType return_type, ASTNode *body);
 ASTNode *create_function_call_node(char *name, ASTNode *arguments);
 ASTNode *create_return_node(ASTNode *value);
+ASTNode *create_function_node_complete(char *name, ParamDecl *params, DataType return_type, VarDecl *local_vars, ASTNode *body);
+ASTNode *create_function_block_node_complete(char *name, ParamDecl *params, VarDecl *local_vars, ASTNode *body);
+ASTNode *create_var_section_node(VarDecl *var_list);
+ParamDecl *add_param(ParamDecl *list, ParamDecl *param);
+ParamDecl *append_param_list(ParamDecl *list1, ParamDecl *list2);
+VarDecl *append_var_list(VarDecl *list1, VarDecl *list2);
 
 /* 参数相关函数 */
 ParamDecl *create_param_node(char *name, DataType type);
@@ -176,6 +188,9 @@ void print_ast(ASTNode *node, int indent);
 void print_params(ParamDecl *params, int indent);
 void free_ast(ASTNode *node);
 void free_params(ParamDecl *params);
+void print_vars(VarDecl *vars, int indent); 
+void free_vars(VarDecl *vars);
+void print_functions();
 
 /* 类型检查函数 */
 DataType get_expression_type(ASTNode *expr);

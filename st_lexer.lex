@@ -41,6 +41,7 @@ COMMENT    \(\*[^*]*\*+([^)*][^*]*\*+)*\)
 "END_FUNCTION"       { return END_FUNCTION; }
 "FUNCTION_BLOCK"     { return FUNCTION_BLOCK; }
 "END_FUNCTION_BLOCK" { return END_FUNCTION_BLOCK; }
+"RETURN"             { return RETURN; }
 
   /* 数据类型关键字 */
 "BOOL"          { return BOOL_TYPE; }

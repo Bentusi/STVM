@@ -178,6 +178,17 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
     if (!ast) return;
     
     switch (ast->type) {
+        case NODE_COMPILATION_UNIT: {
+            /* 编译单元：先编译所有函数，再编译程序 */
+            if (ast->left) {
+                vm_compile_ast(vm, ast->left);  /* 编译函数声明列表 */
+            }
+            if (ast->right) {
+                vm_compile_ast(vm, ast->right); /* 编译程序 */
+            }
+            break;
+        }
+        
         case NODE_PROGRAM: {
             vm_compile_ast(vm, ast->statements);
             vm_emit(vm, VM_HALT);
@@ -240,6 +251,11 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             
             /* 注册函数到函数表 */
             vm_register_function(vm, ast->identifier, func_start, ast->return_type, ast->params);
+            
+            /* 处理函数链表中的下一个函数 */
+            if (ast->next) {
+                vm_compile_ast(vm, ast->next);
+            }
             break;
         }
         

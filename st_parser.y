@@ -37,7 +37,7 @@ ASTNode *ast_root = NULL;
 %token <bool_val> BOOL_LITERAL
 
 /* 关键字 */
-%token PROGRAM END_PROGRAM VAR END_VAR VAR_INPUT VAR_OUTPUT VAR_IN_OUT FUNCTION END_FUNCTION FUNCTION_BLOCK END_FUNCTION_BLOCK
+%token PROGRAM END_PROGRAM VAR END_VAR VAR_INPUT VAR_OUTPUT VAR_IN_OUT FUNCTION END_FUNCTION FUNCTION_BLOCK END_FUNCTION_BLOCK RETURN
 %token BOOL_TYPE INT_TYPE REAL_TYPE STRING_TYPE
 %token IF THEN ELSE ELSIF END_IF FOR TO BY DO END_FOR WHILE END_WHILE
 %token CASE OF END_CASE
@@ -52,12 +52,14 @@ ASTNode *ast_root = NULL;
 %token ERROR
 
 /* 非终结符类型 */
-%type <node> program statement_list statement assignment_stmt function_decl function_block_decl
+%type <node> compilation_unit program statement_list statement assignment_stmt function_decl function_block_decl
 %type <node> if_stmt for_stmt while_stmt case_stmt case_item expression term factor
-%type <node> comparison logical_expr case_list function_call argument_list
-%type <node> function_body
-%type <param_decl> param_list param_decl
-%type <var_decl> var_declaration var_decl_list
+%type <node> comparison logical_expr case_list function_call argument_list return_stmt
+%type <node> function_body var_section_list var_section declaration_list
+%type <param_decl> input_decls output_decls inout_decls function_param_sections
+%type <param_decl> input_param_section output_param_section inout_param_section
+%type <param_decl> input_param_decl output_param_decl inout_param_decl
+%type <var_decl> var_declaration var_decl_list local_var_decls
 %type <data_type> data_type
 
 /* 运算符优先级 */
@@ -70,40 +72,111 @@ ASTNode *ast_root = NULL;
 %left MUL DIV MOD
 %right NOT
 
-%start program
+%start compilation_unit
 
 %%
 
+/* 编译单元 - 支持多个函数定义和一个程序 */
+compilation_unit: declaration_list program
+                {
+                    /* 创建包含函数声明和程序的编译单元 */
+                    $$ = create_compilation_unit_node($1, $2);
+                    ast_root = $$;
+                }
+                | program
+                {
+                    $$ = $1;
+                    ast_root = $$;
+                }
+                | declaration_list
+                {
+                    /* 只有函数声明，没有程序 */
+                    $$ = $1;
+                    ast_root = $$;
+                }
+                ;
+
+/* 声明列表 - 函数和函数块的列表 */
+declaration_list: function_decl
+                {
+                    $$ = $1;
+                }
+                | function_block_decl
+                {
+                    $$ = $1;
+                }
+                | declaration_list function_decl
+                {
+                    /* 将新函数链接到声明列表的末尾 */
+                    ASTNode *current = $1;
+                    while (current->next != NULL) {
+                        current = current->next;
+                    }
+                    current->next = $2;
+                    $$ = $1;  /* 返回链表头 */
+                }
+                | declaration_list function_block_decl
+                {
+                    /* 将新函数块链接到声明列表的末尾 */
+                    ASTNode *current = $1;
+                    while (current->next != NULL) {
+                        current = current->next;
+                    }
+                    current->next = $2;
+                    $$ = $1;  /* 返回链表头 */
+                }
+                ;
+
 /* 程序结构 */
-program: PROGRAM IDENTIFIER var_section statement_list END_PROGRAM
+program: PROGRAM IDENTIFIER var_section_list statement_list END_PROGRAM
         {
             $$ = create_program_node($2, $4);
-            ast_root = $$;
-        }
-        | function_decl
-        {
-            $$ = $1;
-            ast_root = $$;
-        }
-        | function_block_decl
-        {
-            $$ = $1;
-            ast_root = $$;
         }
         ;
 
+/* 变量声明段列表 */
+var_section_list: /* empty */
+                {
+                    $$ = NULL;
+                }
+                | var_section_list var_section
+                {
+                    if ($1 == NULL) {
+                        $$ = $2;
+                    } else {
+                        /* 链接多个变量声明段 */
+                        ASTNode *current = $1;
+                        while (current->next != NULL) {
+                            current = current->next;
+                        }
+                        current->next = $2;
+                        $$ = $1;
+                    }
+                }
+                ;
+
 /* 变量声明段 */
-var_section: /* empty */
-           | VAR var_decl_list END_VAR
+var_section: VAR var_decl_list END_VAR
+           {
+               $$ = create_var_section_node($2);
+           }
            ;
 
 var_decl_list: var_declaration
              {
                  add_variable($1);
+                 $$ = $1;
              }
              | var_decl_list var_declaration
              {
                  add_variable($2);
+                 /* 链接变量声明 */
+                 VarDecl *current = $1;
+                 while (current->next != NULL) {
+                     current = current->next;
+                 }
+                 current->next = $2;
+                 $$ = $1;
              }
              ;
 
@@ -120,77 +193,177 @@ data_type: BOOL_TYPE   { $$ = TYPE_BOOL; }
          ;
 
 /* 语句列表 */
-statement_list: statement
+statement_list: /* empty */
               {
-                  $$ = create_statement_list($1);
+                  $$ = NULL;
               }
               | statement_list statement
               {
-                  $$ = add_statement($1, $2);
+                  if ($1 == NULL) {
+                      $$ = create_statement_list($2);
+                  } else {
+                      $$ = add_statement($1, $2);
+                  }
               }
               ;
 
-/* 函数声明 */
-function_decl: FUNCTION IDENTIFIER LPAREN param_list RPAREN COLON data_type function_body END_FUNCTION
+/* 函数声明 - 完整实现 */
+function_decl: FUNCTION IDENTIFIER COLON data_type function_param_sections local_var_decls function_body END_FUNCTION
              {
-                 $$ = create_function_node($2, $4, $7, $8);
+                 $$ = create_function_node_complete($2, $5, $4, $6, $7);
+                 /* 将函数注册到函数表中 */
+                 FunctionDecl *func_decl = create_function_decl($2, $4, $5, $7);
+                 add_function(func_decl);
              }
-             | FUNCTION IDENTIFIER LPAREN RPAREN COLON data_type function_body END_FUNCTION
+             | FUNCTION IDENTIFIER COLON data_type function_param_sections function_body END_FUNCTION
              {
-                 $$ = create_function_node($2, NULL, $6, $7);
+                 $$ = create_function_node_complete($2, $5, $4, NULL, $6);
+                 /* 将函数注册到函数表中 */
+                 FunctionDecl *func_decl = create_function_decl($2, $4, $5, $6);
+                 add_function(func_decl);
+             }
+             | FUNCTION IDENTIFIER COLON data_type local_var_decls function_body END_FUNCTION
+             {
+                 $$ = create_function_node_complete($2, NULL, $4, $5, $6);
+                 /* 将函数注册到函数表中 */
+                 FunctionDecl *func_decl = create_function_decl($2, $4, NULL, $6);
+                 add_function(func_decl);
+             }
+             | FUNCTION IDENTIFIER COLON data_type function_body END_FUNCTION
+             {
+                 $$ = create_function_node_complete($2, NULL, $4, NULL, $5);
+                 /* 将函数注册到函数表中 */
+                 FunctionDecl *func_decl = create_function_decl($2, $4, NULL, $5);
+                 add_function(func_decl);
              }
              ;
 
+/* 函数参数声明段 - 可选 */
+function_param_sections: /* empty */
+                       {
+                           $$ = NULL;
+                       }
+                       | function_param_sections input_param_section
+                       {
+                           $$ = append_param_list($1, $2);
+                       }
+                       | function_param_sections output_param_section
+                       {
+                           $$ = append_param_list($1, $2);
+                       }
+                       | function_param_sections inout_param_section
+                       {
+                           $$ = append_param_list($1, $2);
+                       }
+                       ;
+
+/* 输入参数段 */
+input_param_section: VAR_INPUT input_decls END_VAR
+                   {
+                       $$ = $2;
+                   }
+                   ;
+
+/* 输出参数段 */
+output_param_section: VAR_OUTPUT output_decls END_VAR
+                    {
+                        $$ = $2;
+                    }
+                    ;
+
+/* 输入输出参数段 */
+inout_param_section: VAR_IN_OUT inout_decls END_VAR
+                   {
+                       $$ = $2;
+                   }
+                   ;
+
+/* 输入参数声明 */
+input_decls: input_param_decl
+           {
+               $$ = $1;
+           }
+           | input_decls input_param_decl
+           {
+               $$ = append_param_list($1, $2);
+           }
+           ;
+
+/* 输出参数声明 */
+output_decls: output_param_decl
+            {
+                $$ = $1;
+            }
+            | output_decls output_param_decl
+            {
+                $$ = append_param_list($1, $2);
+            }
+            ;
+
+/* 输入输出参数声明 */
+inout_decls: inout_param_decl
+           {
+               $$ = $1;
+           }
+           | inout_decls inout_param_decl
+           {
+               $$ = append_param_list($1, $2);
+           }
+           ;
+
+/* 具体参数声明 */
+input_param_decl: IDENTIFIER COLON data_type SEMICOLON
+                {
+                    $$ = create_input_param_node($1, $3);
+                }
+                ;
+
+output_param_decl: IDENTIFIER COLON data_type SEMICOLON
+                 {
+                     $$ = create_output_param_node($1, $3);
+                 }
+                 ;
+
+inout_param_decl: IDENTIFIER COLON data_type SEMICOLON
+                {
+                    $$ = create_inout_param_node($1, $3);
+                }
+                ;
+
+/* 局部变量声明 - 可选 */
+local_var_decls: /* empty */
+               {
+                   $$ = NULL;
+               }
+               | VAR var_decl_list END_VAR
+               {
+                   $$ = $2;
+               }
+               ;
+
 /* 函数体 */
-function_body: var_section statement_list
-             {
-                 $$ = $2;
-             }
-             | statement_list
+function_body: statement_list
              {
                  $$ = $1;
              }
              ;
 
-/* 参数列表 */
-param_list: param_decl
-          {
-              $$ = $1;
-          }
-          | param_list SEMICOLON param_decl
-          {
-              ParamDecl *current = $1;
-              while (current->next != NULL) {
-                  current = current->next;
-              }
-              current->next = $3;
-              $$ = $1;
-          }
-          ;
-
-/* 参数声明 */
-param_decl: IDENTIFIER COLON data_type
-          {
-              $$ = create_param_node($1, $3);
-          }
-          | VAR_INPUT IDENTIFIER COLON data_type
-          {
-              $$ = create_input_param_node($2, $4);
-          }
-          | VAR_OUTPUT IDENTIFIER COLON data_type
-          {
-              $$ = create_output_param_node($2, $4);
-          }
-          | VAR_IN_OUT IDENTIFIER COLON data_type
-          {
-              $$ = create_inout_param_node($2, $4);
-          }
-          ;
-
 /* 函数块声明 */
-function_block_decl: FUNCTION_BLOCK IDENTIFIER function_body END_FUNCTION_BLOCK
+function_block_decl: FUNCTION_BLOCK IDENTIFIER function_param_sections local_var_decls function_body END_FUNCTION_BLOCK
                    {
-                       $$ = create_function_block_node($2, TYPE_VOID, $3);
+                       $$ = create_function_block_node_complete($2, $3, $4, $5);
+                   }
+                   | FUNCTION_BLOCK IDENTIFIER function_param_sections function_body END_FUNCTION_BLOCK
+                   {
+                       $$ = create_function_block_node_complete($2, $3, NULL, $4);
+                   }
+                   | FUNCTION_BLOCK IDENTIFIER local_var_decls function_body END_FUNCTION_BLOCK
+                   {
+                       $$ = create_function_block_node_complete($2, NULL, $3, $4);
+                   }
+                   | FUNCTION_BLOCK IDENTIFIER function_body END_FUNCTION_BLOCK
+                   {
+                       $$ = create_function_block_node_complete($2, NULL, NULL, $3);
                    }
                    ;
 
@@ -201,6 +374,7 @@ statement: assignment_stmt SEMICOLON { $$ = $1; }
          | while_stmt                { $$ = $1; }
          | case_stmt                 { $$ = $1; }
          | function_call SEMICOLON   { $$ = $1; }
+         | return_stmt SEMICOLON     { $$ = $1; }
          ;
 
 /* 赋值语句 */
@@ -392,6 +566,12 @@ factor: IDENTIFIER
           $$ = $1;
       }
       ;
+
+return_stmt: RETURN expression
+           {
+               $$ = create_return_node($2);
+           }
+           ;
 
 %%
 
