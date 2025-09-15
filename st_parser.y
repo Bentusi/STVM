@@ -164,10 +164,10 @@ var_decl_list: var_declaration
              ;
 
 var_declaration: IDENTIFIER COLON data_type SEMICOLON
-               {
+         {
                    $$ = create_var_decl($1, $3);
-               }
-               ;
+            }
+            ;
 
 data_type: BOOL_TYPE   { $$ = TYPE_BOOL; }
          | INT_TYPE    { $$ = TYPE_INT; }

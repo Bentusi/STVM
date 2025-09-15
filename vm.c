@@ -225,7 +225,7 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             vm->code[while_exit].int_operand = vm->code_size;
             break;
         }
-        
+
         case NODE_CASE: {
             /* CASE语句编译：计算表达式值，然后与各个CASE项比较 */
             vm_compile_ast(vm, ast->left);  // 编译CASE表达式
@@ -340,6 +340,17 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
         default:
             vm_set_error(vm, "未知AST节点类型");
             break;
+    }
+}
+
+/* 重置虚拟机 */
+void vm_reset(VMState *vm) {
+    vm->pc = 0;
+    vm->sp = 0;
+    vm->running = 0;
+    if (vm->error_msg) {
+        free(vm->error_msg);
+        vm->error_msg = NULL;
     }
 }
 
@@ -653,28 +664,41 @@ const char *vm_get_error(VMState *vm) {
     return vm->error_msg;
 }
 
+/* 打印函数列表状态（调试用） */
+void vm_print_functions(VMState *vm) {
+    printf("=== 函数列表 ===\n");
+    VMFunction *func = vm->functions;
+    while (func) {
+        printf("0x%04x %s\n", func->addr, func->name);
+        func = func->next;
+    }
+    printf("================\n");
+}
+
 /* 打印变量状态（调试用） */
 void vm_print_variables(VMState *vm) {
+    int index = 0;
     printf("=== 变量状态 ===\n");
     VMVariable *var = vm->variables;
     while (var) {
         printf("%s = ", var->name);
         switch (var->value.type) {
             case TYPE_INT:
-                printf("%d", var->value.value.int_val);
+                printf("0x%04x %d\n", index, var->value.value.int_val);
                 break;
             case TYPE_REAL:
-                printf("%f", var->value.value.real_val);
+                printf("0x%04x %f\n", index, var->value.value.real_val);
                 break;
             case TYPE_BOOL:
-                printf("%s", var->value.value.bool_val ? "TRUE" : "FALSE");
+                printf("0x%04x %s\n", index, var->value.value.bool_val ? "TRUE" : "FALSE");
                 break;
             case TYPE_STRING:
-                printf("\"%s\"", var->value.value.str_val ? var->value.value.str_val : "");
+                printf("0x%04x \"%s\"\n", index, var->value.value.str_val ? var->value.value.str_val : "");
                 break;
             default:
                 printf("未知类型");
                 break;
+            index++;
         }
         printf("\n");
         var = var->next;
@@ -687,7 +711,7 @@ void vm_print_code(VMState *vm) {
     printf("=== 字节码 ===\n");
     for (int i = 0; i < vm->code_size; i++) {
         VMInstruction *instr = &vm->code[i];
-        printf("%d: ", i);
+        printf("0x%04x: ", i);
         
         switch (instr->opcode) {
             case VM_LOAD_INT:

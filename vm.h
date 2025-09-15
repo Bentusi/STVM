@@ -129,6 +129,7 @@ VMValue vm_pop(VMState *vm);
 void vm_print_code(VMState *vm);
 void vm_print_stack(VMState *vm);
 void vm_print_variables(VMState *vm);
+void vm_print_functions(VMState *vm);
 
 /* 错误处理 */
 void vm_set_error(VMState *vm, const char *error);

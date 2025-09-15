@@ -143,6 +143,7 @@ int compile_and_run_file(const char *filename) {
     } else {
         printf("=== 执行完成 ===\n\n");
         vm_print_variables(vm);
+        vm_print_functions(vm);
     }
     
     /* 清理资源 */

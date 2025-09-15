@@ -10,10 +10,10 @@ END_FUNCTION
 
 FUNCTION min : INT
     VAR
-        in : INT;
+        in2 : INT;
     END_VAR
 
-    RETURN in + 1;
+    RETURN in2 + 1;
 END_FUNCTION
 
 PROGRAM ExampleProgram
