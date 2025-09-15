@@ -64,6 +64,7 @@ COMMENT    \(\*[^*]*\*+([^)*][^*]*\*+)*\)
 "CASE"          { return CASE; }
 "OF"            { return OF; }
 "END_CASE"      { return END_CASE; }
+"RETURN"        { return RETURN; }
 
   /* 布尔常量 */
 "TRUE"          { yylval.bool_val = 1; return BOOL_LITERAL; }
@@ -120,6 +121,6 @@ COMMENT    \(\*[^*]*\*+([^)*][^*]*\*+)*\)
 %%
 
   /* 用户代码段 */
-void yyerror(const char *msg) {
+/* void yyerror(const char *msg) {
     printf("词法错误：第%d行 %s\n", line_num, msg);
-}
+} */

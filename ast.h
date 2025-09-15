@@ -13,7 +13,8 @@ typedef enum {
     TYPE_BOOL,
     TYPE_INT,
     TYPE_REAL,
-    TYPE_STRING
+    TYPE_STRING,
+    TYPE_VOID
 } DataType;
 
 /* 操作符类型 */
@@ -30,6 +31,7 @@ typedef enum {
     NODE_ASSIGN,
     NODE_FUNCTION,
     NODE_FUNCTION_BLOCK,
+    NODE_RETURN,
     NODE_IF,
     NODE_FOR,
     NODE_WHILE,
@@ -53,6 +55,14 @@ typedef union {
     char *str_val;
 } Value;
 
+/* 变量声明结构 */
+typedef struct VarDecl {
+    char *name;
+    DataType type;
+    Value value;
+    struct VarDecl *next;
+} VarDecl;
+
 /* AST节点结构 */
 typedef struct ASTNode {
     NodeType type;
@@ -65,17 +75,13 @@ typedef struct ASTNode {
     struct ASTNode *else_statements;
     struct ASTNode *case_value;
     struct ASTNode *case_list;
+    struct ASTNode *func_list;
+    VarDecl *param_list;
+    DataType return_type;
     struct ASTNode *next;
     OpType op_type;
     char *identifier;
 } ASTNode;
-
-/* 变量声明结构 */
-typedef struct VarDecl {
-    char *name;
-    DataType type;
-    struct VarDecl *next;
-} VarDecl;
 
 /* 函数声明 */
 
@@ -84,8 +90,6 @@ ASTNode *create_program_node(char *name, ASTNode *statements);
 ASTNode *create_statement_list(ASTNode *statement);
 ASTNode *add_statement(ASTNode *list, ASTNode *statement);
 ASTNode *create_assign_node(char *var_name, ASTNode *expr);
-ASTNode *create_function_node(char *func_name, ASTNode *statements);
-ASTNode *create_function_block_node(char *fb_name, ASTNode *statements);
 ASTNode *create_if_node(ASTNode *condition, ASTNode *then_stmt, ASTNode *else_stmt);
 ASTNode *create_for_node(char *var_name, ASTNode *start, ASTNode *end, ASTNode *statements);
 ASTNode *create_while_node(ASTNode *condition, ASTNode *statements);
@@ -99,11 +103,17 @@ ASTNode *create_int_literal_node(int value);
 ASTNode *create_real_literal_node(double value);
 ASTNode *create_bool_literal_node(int value);
 ASTNode *create_string_literal_node(char *value);
+ASTNode *create_compilation_unit_node(ASTNode *func_list, ASTNode *program);
+ASTNode *create_function_node(char *func_name, DataType return_type, VarDecl *param_list, ASTNode *statements);
+ASTNode *create_function_block_node(char *fb_name, VarDecl *param_list, ASTNode *statements);
+ASTNode *create_return_node(ASTNode *return_value);
 
 /* 变量管理函数 */
 VarDecl *create_var_decl(char *name, DataType type);
-void add_variable(VarDecl *var);
+int add_global_variable(VarDecl *var);
+int add_global_function(ASTNode *func);
 VarDecl *find_variable(char *name);
+ASTNode *find_global_function(char *name);
 
 /* AST遍历和打印函数 */
 void print_ast(ASTNode *node, int indent);

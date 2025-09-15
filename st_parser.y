@@ -1,6 +1,6 @@
 /*
  * IEC61131 结构化文本语言语法分析器
- * 支持：程序结构、变量声明、控制流、表达式
+ * 支持：一个源文件中包含一个program和多个function
  */
 
 %{
@@ -38,7 +38,7 @@ ASTNode *ast_root = NULL;
 %token PROGRAM END_PROGRAM VAR END_VAR VAR_INPUT VAR_OUTPUT VAR_IN_OUT FUNCTION END_FUNCTION FUNCTION_BLOCK END_FUNCTION_BLOCK
 %token BOOL_TYPE INT_TYPE REAL_TYPE STRING_TYPE
 %token IF THEN ELSE ELSIF END_IF FOR TO BY DO END_FOR WHILE END_WHILE
-%token CASE OF END_CASE
+%token CASE OF END_CASE RETURN
 
 /* 运算符 */
 %token ASSIGN EQ NE LT LE GT GE PLUS MINUS MUL DIV MOD AND OR NOT
@@ -50,10 +50,11 @@ ASTNode *ast_root = NULL;
 %token ERROR
 
 /* 非终结符类型 */
-%type <node> program statement_list statement assignment_stmt function_decl function_block_decl
-%type <node> if_stmt for_stmt while_stmt case_stmt case_item expression term factor
-%type <node> comparison logical_expr case_list
-%type <var_decl> var_declaration var_decl_list
+%type <node> compilation_unit program_and_functions program_decl function_list function_decl
+%type <node> statement_list statement assignment_stmt 
+%type <node> if_stmt for_stmt while_stmt case_stmt case_item case_list return_stmt
+%type <node> expression logical_expr comparison term factor
+%type <var_decl> var_section var_decl_list var_declaration
 %type <data_type> data_type
 
 /* 运算符优先级 */
@@ -66,30 +67,95 @@ ASTNode *ast_root = NULL;
 %left MUL DIV MOD
 %right NOT
 
-%start program
+%start compilation_unit
 
 %%
 
-/* 程序结构 */
-program: PROGRAM IDENTIFIER var_section statement_list END_PROGRAM
-        {
-            $$ = create_program_node($2, $4);
-            ast_root = $$;
-        }
-        ;
+/* 编译单元 - 顶层规则：支持函数列表+程序 或 只有程序 */
+compilation_unit: program_and_functions
+                {
+                    $$ = $1;
+                    ast_root = $$;
+                }
+                ;
+
+/* 程序和函数组合 */
+program_and_functions: function_list program_decl
+                     {
+                         $$ = create_compilation_unit_node($1, $2);
+                     }
+                     | program_decl
+                     {
+                         $$ = create_compilation_unit_node(NULL, $1);
+                     }
+                     ;
+
+/* 程序声明 */
+program_decl: PROGRAM IDENTIFIER var_section statement_list END_PROGRAM
+            {
+                $$ = create_program_node($2, $4);
+            }
+            | PROGRAM IDENTIFIER statement_list END_PROGRAM
+            {
+                $$ = create_program_node($2, $3);
+            }
+            ;
+
+/* 函数列表 - 支持多个函数声明 */
+function_list: function_decl
+             {
+                 $$ = $1;
+                 add_global_function($1);
+             }
+             | function_list function_decl
+             {
+                /* 将新函数添加到列表尾 */
+                ASTNode *current = $1;
+                while (current->next != NULL) {
+                    current = current->next;
+                }
+                current->next = $2;
+                $$ = $1;
+                add_global_function($2);
+             }
+             ;
+
+/* 函数声明 */
+function_decl: FUNCTION IDENTIFIER COLON data_type var_section statement_list END_FUNCTION
+             {
+                 $$ = create_function_node($2, $4, $5, $6);
+                 /* 注册函数到全局函数表 */
+                 add_global_function($$);
+             }
+             | FUNCTION IDENTIFIER COLON data_type statement_list END_FUNCTION
+             {
+                 $$ = create_function_node($2, $4, NULL, $5);
+                 /* 注册函数到全局函数表 */
+                 add_global_function($$);
+             }
+             ;
+
 
 /* 变量声明段 */
-var_section: /* empty */
-           | VAR var_decl_list END_VAR
+var_section: /* empty */ { $$ = NULL; }
+           | VAR var_decl_list END_VAR { $$ = $2; }
            ;
 
 var_decl_list: var_declaration
              {
-                 add_variable($1);
+                 $$ = $1;
+                 add_global_variable($1);
              }
              | var_decl_list var_declaration
              {
-                 add_variable($2);
+                 /* 将新变量添加到列表末尾 */
+                 VarDecl *current = $1;
+                 while (current->next != NULL) {
+                     current = current->next;
+                 }
+                 current->next = $2;
+                 $$ = $1;
+                 add_global_variable($2);
              }
              ;
 
@@ -106,7 +172,8 @@ data_type: BOOL_TYPE   { $$ = TYPE_BOOL; }
          ;
 
 /* 语句列表 */
-statement_list: statement
+statement_list: /* empty */ { $$ = NULL; }
+              | statement
               {
                   $$ = create_statement_list($1);
               }
@@ -116,26 +183,13 @@ statement_list: statement
               }
               ;
 
-/* 函数声明 */
-function_decl: FUNCTION IDENTIFIER COLON data_type statement_list END_FUNCTION
-             {
-                 $$ = create_function_node($2, $4, $5);
-             }
-             ;
-
-/* 函数块声明 */
-function_block_decl: FUNCTION_BLOCK IDENTIFIER COLON data_type statement_list END_FUNCTION_BLOCK
-                   {
-                       $$ = create_function_block_node($2, $4, $5);
-                   }
-                   ;
-
 /* 语句 */
 statement: assignment_stmt SEMICOLON { $$ = $1; }
          | if_stmt                   { $$ = $1; }
          | for_stmt                  { $$ = $1; }
          | while_stmt                { $$ = $1; }
          | case_stmt                 { $$ = $1; }
+         | return_stmt SEMICOLON     { $$ = $1; }
          ;
 
 /* 赋值语句 */
@@ -144,6 +198,17 @@ assignment_stmt: IDENTIFIER ASSIGN expression
                    $$ = create_assign_node($1, $3);
                }
                ;
+
+/* RETURN语句 */
+return_stmt: RETURN
+           {
+               $$ = create_return_node(NULL);
+           }
+           | RETURN expression
+           {
+               $$ = create_return_node($2);
+           }
+           ;
 
 /* IF语句 */
 if_stmt: IF expression THEN statement_list END_IF
@@ -179,17 +244,11 @@ case_stmt: CASE expression OF case_list END_CASE
 
 case_list: case_item
          {
-             $$ = $1;  // 单个case项
+             $$ = create_statement_list($1);
          }
          | case_list case_item
          {
-             // 将新的case_item添加到列表末尾
-             ASTNode *current = $1;
-             while (current->next != NULL) {
-                 current = current->next;
-             }
-             current->next = $2;
-             $$ = $1;
+             $$ = add_statement($1, $2);
          }
          ;
 
@@ -256,11 +315,11 @@ term: factor
     }
     ;
 
-factor:IDENTIFIER
+factor: IDENTIFIER
       {
           $$ = create_identifier_node($1);
       }
-      |MINUS factor %prec UMINUS
+      | MINUS factor %prec UMINUS
       {
           $$ = create_unary_op_node(OP_NEG, $2);
       }
@@ -297,6 +356,42 @@ factor:IDENTIFIER
 %%
 
 /* 错误处理函数 */
-/* void yyerror(const char *msg) {
+void yyerror(const char *msg) {
     printf("语法错误：第%d行 %s\n", line_num, msg);
-} */
+}
+
+/* 主函数
+int main(int argc, char **argv) {
+    extern FILE *yyin;
+    
+    if (argc > 1) {
+        yyin = fopen(argv[1], "r");
+        if (!yyin) {
+            printf("无法打开文件 %s\n", argv[1]);
+            return 1;
+        }
+    }
+    
+    printf("开始解析IEC61131结构化文本程序...\n");
+    
+    if (yyparse() == 0) {
+        printf("解析成功！\n\n");
+        if (ast_root) {
+            printf("=== 抽象语法树 ===\n");
+            print_ast(ast_root, 0);
+            printf("\n=== 解析完成 ===\n");
+            
+            // 释放AST内存
+            free_ast(ast_root);
+        }
+    } else {
+        printf("解析失败！\n");
+    }
+    
+    if (argc > 1) {
+        fclose(yyin);
+    }
+    
+    return 0;
+}
+*/

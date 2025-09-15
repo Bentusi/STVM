@@ -11,6 +11,7 @@
 
 /* 全局变量表 */
 static VarDecl *variable_table = NULL;
+static ASTNode *function_table = NULL;
 
 /* 创建程序节点 */
 ASTNode *create_program_node(char *name, ASTNode *statements) {
@@ -46,23 +47,50 @@ ASTNode *add_statement(ASTNode *list, ASTNode *statement) {
     return list;
 }
 
+/* 创建编译单元 */
+ASTNode *create_compilation_unit_node(ASTNode *func_list, ASTNode *program) {
+    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    node->type = NODE_PROGRAM;  // 使用程序节点类型表示编译单元
+    node->statements = program;
+    node->left = func_list;  // 函数列表作为左子节点
+    node->right = node->condition = node->else_statements = node->next = NULL;
+    node->identifier = NULL;
+    return node;
+}
+
 /* 创建函数节点 */
-ASTNode *create_function_node(char *func_name, ASTNode *statements) {
+ASTNode *create_function_node(char *func_name, DataType return_type, VarDecl *param_list, ASTNode *statements) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
     node->type = NODE_FUNCTION;
     node->identifier = strdup(func_name);
-    node->statements = statements;
-    node->left = node->right = node->condition = node->else_statements = node->next = NULL;
+    node->param_list = param_list;      // 参数列表
+    node->return_type = return_type;    // 返回值类型
+    node->statements = statements; // 函数体语句
+    node->left = node->right = NULL;
+    node->condition = node->else_statements = node->next = NULL;
     return node;
 }
 
 /* 创建函数块节点 */
-ASTNode *create_function_block_node(char *fb_name, ASTNode *statements) {
+ASTNode *create_function_block_node(char *fb_name, VarDecl *param_list, ASTNode *statements) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
     node->type = NODE_FUNCTION_BLOCK;
     node->identifier = strdup(fb_name);
-    node->statements = statements;
-    node->left = node->right = node->condition = node->else_statements = node->next = NULL;
+    node->param_list = param_list;      // 参数列表
+    node->statements = statements; // 函数块体语句
+    node->left = node->right = NULL;
+    node->condition = node->else_statements = node->next = NULL;
+    return node;
+}
+
+/* 创建返回值节点 */
+ASTNode *create_return_node(ASTNode *return_value) {
+    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    node->type = NODE_RETURN;
+    node->left = return_value;  // 返回值表达式
+    node->return_type = return_value->data_type; // 设置返回值类型
+    node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
+    node->identifier = NULL;
     return node;
 }
 
@@ -148,6 +176,7 @@ ASTNode *create_case_item(ASTNode *value, ASTNode *statements) {
 /* 创建二元操作节点 */
 ASTNode *create_binary_op_node(OpType op, ASTNode *left, ASTNode *right) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    memset(node, 0, sizeof(ASTNode));
     node->type = NODE_BINARY_OP;
     node->op_type = op;
     node->left = left;
@@ -230,17 +259,49 @@ VarDecl *create_var_decl(char *name, DataType type) {
     return var;
 }
 
-/* 添加变量到符号表 */
-void add_variable(VarDecl *var) {
-    if (variable_table == NULL) {
-        variable_table = var;
-    } else {
-        VarDecl *current = variable_table;
-        while (current->next != NULL) {
-            current = current->next;
-        }
-        current->next = var;
+/* 添加函数到函数表 */
+int add_global_function(ASTNode *func) {
+    // 检查函数是否已存在，避免重复声明
+    ASTNode *existing = find_global_function(func->identifier);
+    if (existing != NULL) {
+        free(func->identifier);
+        free(func);
+        return -1; // 或者返回错误码
     }
+    
+    // 将新函数添加到链表头部
+    func->next = function_table;
+    function_table = func;
+    return 0; // 成功
+}
+
+/* 添加变量到符号表 */
+int add_global_variable(VarDecl *var) {
+    // 检查变量是否已存在，避免重复声明
+    VarDecl *existing = find_variable(var->name);
+    if (existing != NULL) {
+        // 如果变量已存在，释放新变量并返回错误
+        free(var->name);
+        free(var);
+        return -1; // 或者可以返回错误码
+    }
+    
+    // 将新变量添加到链表头部
+    var->next = variable_table;
+    variable_table = var;
+    return 0; // 成功
+}
+
+/* 查找函数 */
+ASTNode *find_global_function(char *name) {
+    ASTNode *current = function_table;
+    while (current != NULL) {
+        if (strcmp(current->identifier, name) == 0) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
 }
 
 /* 查找变量 */

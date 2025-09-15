@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "typeinfo": "c",
-        "vm.h": "c"
+        "vm.h": "c",
+        "ast.h": "c"
     }
 }
