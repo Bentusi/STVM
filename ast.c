@@ -88,7 +88,6 @@ ASTNode *create_return_node(ASTNode *return_value) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
     node->type = NODE_RETURN;
     node->left = return_value;  // 返回值表达式
-    node->return_type = return_value->data_type; // 设置返回值类型
     node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
     node->identifier = NULL;
     return node;

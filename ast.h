@@ -10,15 +10,17 @@
 
 /* 数据类型枚举 */
 typedef enum {
+    TYPE_INVALID,
+    TYPE_VOID,
     TYPE_BOOL,
     TYPE_INT,
     TYPE_REAL,
-    TYPE_STRING,
-    TYPE_VOID
+    TYPE_STRING
 } DataType;
 
 /* 操作符类型 */
 typedef enum {
+    OP_INVALID,
     OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD,
     OP_EQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE,
     OP_AND, OP_OR, OP_NOT, OP_NEG
@@ -26,6 +28,7 @@ typedef enum {
 
 /* AST节点类型 */
 typedef enum {
+    NODE_INVALID,
     NODE_PROGRAM,
     NODE_STATEMENT_LIST,
     NODE_ASSIGN,
