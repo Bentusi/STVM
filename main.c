@@ -112,6 +112,7 @@ int compile_and_run_file(const char *filename) {
     if (!vm) {
         printf("错误：无法创建虚拟机\n");
         free_ast(ast_root);
+        clear_global_functions();
         return 1;
     }
     
@@ -122,6 +123,7 @@ int compile_and_run_file(const char *filename) {
         printf("编译错误：%s\n", vm_get_error(vm));
         vm_destroy(vm);
         free_ast(ast_root);
+        clear_global_functions();
         return 1;
     }
     
@@ -146,6 +148,7 @@ int compile_and_run_file(const char *filename) {
     /* 清理资源 */
     vm_destroy(vm);
     free_ast(ast_root);
+    clear_global_functions();
     
     return exec_result;
 }
@@ -182,6 +185,7 @@ int compile_and_run_string(const char *source) {
     if (!vm) {
         printf("错误：无法创建虚拟机\n");
         free_ast(ast_root);
+        clear_global_functions();
         return 1;
     }
     
@@ -191,6 +195,7 @@ int compile_and_run_string(const char *source) {
         printf("编译错误：%s\n", vm_get_error(vm));
         vm_destroy(vm);
         free_ast(ast_root);
+        clear_global_functions();
         return 1;
     }
     
@@ -205,6 +210,7 @@ int compile_and_run_string(const char *source) {
     /* 清理资源 */
     vm_destroy(vm);
     free_ast(ast_root);
+    clear_global_functions();
     
     return exec_result;
 }

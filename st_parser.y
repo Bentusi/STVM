@@ -99,6 +99,10 @@ program_decl: PROGRAM IDENTIFIER var_section statement_list END_PROGRAM
             {
                 $$ = create_program_node($2, $3);
             }
+            | PROGRAM IDENTIFIER END_PROGRAM
+            {
+                $$ = create_program_node($2, NULL);
+            }
             ;
 
 /* 函数列表 - 支持多个函数声明 */

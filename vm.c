@@ -100,6 +100,18 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
     if (!ast) return;
     
     switch (ast->type) {
+        case NODE_COMPILATION_UNIT: {
+            // 编译函数列表
+            if (ast->left) {
+                vm_compile_ast(vm, ast->left);
+            }
+            // 编译程序
+            if (ast->right) {
+                vm_compile_ast(vm, ast->right);
+            }
+            break;
+        }
+        
         case NODE_PROGRAM: {
             vm_compile_ast(vm, ast->statements);
             vm_emit(vm, VM_HALT);
@@ -131,12 +143,10 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             // 函数返回指令
             vm_emit(vm, VM_RET);
             
-            // 将函数信息存储到符号表或函数表中
-            // 这里简化处理，可以扩展为完整的函数表管理
+            // 将函数信息存储到函数表中
             char func_label[256];
             snprintf(func_label, sizeof(func_label), "__func_%s__", ast->identifier);
-            VMValue func_addr = {TYPE_INT, {.int_val = func_start}};
-            vm_set_variable(vm, func_label, func_addr);
+            vm_set_function(vm, func_label, func_start);
             break;
         }
         
@@ -154,10 +164,10 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             // 将功能块信息存储
             char fb_label[256];
             snprintf(fb_label, sizeof(fb_label), "__fb_%s__", ast->identifier);
-            VMValue fb_addr = {TYPE_INT, {.int_val = fb_start}};
-            vm_set_variable(vm, fb_label, fb_addr);
+            vm_set_function(vm, fb_label, fb_start);
             break;
         }
+
         case NODE_IF: {
             vm_compile_ast(vm, ast->condition);
             int jz_addr = vm->code_size;
@@ -177,6 +187,7 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             }
             break;
         }
+
         case NODE_FOR: {
             // FOR循环实现：初始化 -> 条件检查 -> 循环体 -> 增量 -> 跳转
             vm_compile_ast(vm, ast->left);  // 初始值
@@ -214,6 +225,7 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             vm->code[while_exit].int_operand = vm->code_size;
             break;
         }
+        
         case NODE_CASE: {
             /* CASE语句编译：计算表达式值，然后与各个CASE项比较 */
             vm_compile_ast(vm, ast->left);  // 编译CASE表达式
@@ -317,6 +329,14 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             vm_emit(vm, VM_LOAD_STRING, ast->value.str_val);
             break;
             
+        case NODE_RETURN:
+            if (ast->right) {
+                // 编译返回值表达式
+                vm_compile_ast(vm, ast->right);
+            }
+            vm_emit(vm, VM_RET);
+            break;
+            
         default:
             vm_set_error(vm, "未知AST节点类型");
             break;
@@ -346,7 +366,7 @@ int vm_run(VMState *vm) {
             }
             
             case VM_LOAD_BOOL: {
-                VMValue val = {TYPE_BOOL, {.bool_val = instr->int_operand}};
+                VMValue val = {TYPE_BOOL, {.bool_val = instr->bool_operand}};
                 vm_push(vm, val);
                 break;
             }
@@ -527,6 +547,11 @@ int vm_run(VMState *vm) {
                 break;
             }
 
+            case VM_RET:
+                // 函数返回 - 目前简单处理，只是停止执行
+                vm->running = 0;
+                break;
+
             case VM_HALT:
                 vm->running = 0;
                 break;
@@ -540,6 +565,25 @@ int vm_run(VMState *vm) {
     }
     
     return 0;
+}
+
+/* 设置函数表 */
+void vm_set_function(VMState *vm, const char *name, int addr) {
+    VMFunction *func = vm->functions;
+    while (func) {
+        if (strcmp(func->name, name) == 0) {
+            func->addr = addr;
+            return;
+        }
+        func = func->next;
+    }
+
+    /* 创建新函数 */
+    func = (VMFunction *)malloc(sizeof(VMFunction));
+    func->name = strdup(name);
+    func->addr = addr;
+    func->next = vm->functions;
+    vm->functions = func;
 }
 
 /* 设置变量值 */
@@ -653,7 +697,7 @@ void vm_print_code(VMState *vm) {
                 printf("LOAD_REAL %f", instr->real_operand);
                 break;
             case VM_LOAD_BOOL:
-                printf("LOAD_BOOL %d", instr->int_operand);
+                printf("LOAD_BOOL %s", instr->bool_operand ? "TRUE" : "FALSE");
                 break;
             case VM_LOAD_VAR:
                 printf("LOAD_VAR %s", instr->str_operand);
@@ -702,6 +746,9 @@ void vm_print_code(VMState *vm) {
                 break;
             case VM_HALT:
                 printf("HALT");
+                break;
+            case VM_RET:
+                printf("RET");
                 break;
             default:
                 printf("UNKNOWN");

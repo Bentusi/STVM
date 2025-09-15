@@ -64,6 +64,7 @@ typedef struct {
     VMOpcode opcode;
     union {
         int int_operand;
+        int bool_operand;
         double real_operand;
         char *str_operand;
         int addr_operand;
@@ -77,6 +78,13 @@ typedef struct VMVariable {
     struct VMVariable *next;
 } VMVariable;
 
+/* 虚拟机函数存储 */
+typedef struct VMFunction {
+    char *name;
+    int addr;
+    struct VMFunction *next;
+} VMFunction;
+
 /* 虚拟机状态 */
 typedef struct {
     VMInstruction *code;        // 指令代码段
@@ -88,7 +96,8 @@ typedef struct {
     int sp;                     // 栈指针
     
     VMVariable *variables;      // 变量存储
-    
+    VMFunction *functions;      // 函数存储
+
     int running;                // 运行状态
     char *error_msg;           // 错误信息
 } VMState;
@@ -109,6 +118,7 @@ void vm_reset(VMState *vm);
 
 /* 变量操作 */
 void vm_set_variable(VMState *vm, const char *name, VMValue value);
+void vm_set_function(VMState *vm, const char *name, int addr);
 VMValue vm_get_variable(VMState *vm, const char *name);
 
 /* 栈操作 */

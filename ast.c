@@ -50,10 +50,11 @@ ASTNode *add_statement(ASTNode *list, ASTNode *statement) {
 /* 创建编译单元 */
 ASTNode *create_compilation_unit_node(ASTNode *func_list, ASTNode *program) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
-    node->type = NODE_PROGRAM;  // 使用程序节点类型表示编译单元
-    node->statements = program;
-    node->left = func_list;  // 函数列表作为左子节点
-    node->right = node->condition = node->else_statements = node->next = NULL;
+    node->type = NODE_COMPILATION_UNIT;
+    node->left = func_list;     // 函数列表作为左子节点
+    node->right = program;      // 程序作为右子节点，不是statements
+    node->statements = NULL;    // 避免重复引用
+    node->condition = node->else_statements = node->next = NULL;
     node->identifier = NULL;
     return node;
 }
@@ -263,14 +264,15 @@ int add_global_function(ASTNode *func) {
     // 检查函数是否已存在，避免重复声明
     ASTNode *existing = find_global_function(func->identifier);
     if (existing != NULL) {
-        free(func->identifier);
-        free(func);
-        return -1; // 或者返回错误码
+        return -1; // 返回错误码，但不释放节点
     }
     
-    // 将新函数添加到链表头部
-    func->next = function_table;
-    function_table = func;
+    // 创建函数节点的副本用于函数表
+    ASTNode *func_copy = (ASTNode *)malloc(sizeof(ASTNode));
+    *func_copy = *func; // 复制内容
+    func_copy->identifier = strdup(func->identifier); // 复制标识符
+    func_copy->next = function_table; // 链接到函数表
+    function_table = func_copy;
     return 0; // 成功
 }
 
@@ -322,6 +324,15 @@ void print_ast(ASTNode *node, int indent) {
     for (int i = 0; i < indent; i++) printf("  ");
     
     switch (node->type) {
+        case NODE_COMPILATION_UNIT:
+            printf("编译单元\n");
+            if (node->left) {  // 函数列表
+                print_ast(node->left, indent + 1);
+            }
+            if (node->right) {  // 程序
+                print_ast(node->right, indent + 1);
+            }
+            break;
         case NODE_PROGRAM:
             printf("程序: %s\n", node->identifier);
             print_ast(node->statements, indent + 1);
@@ -383,6 +394,21 @@ void print_ast(ASTNode *node, int indent) {
         case NODE_IDENTIFIER:
             printf("标识符: %s\n", node->identifier);
             break;
+        case NODE_FUNCTION:
+            printf("函数: %s\n", node->identifier);
+            if (node->statements) {
+                print_ast(node->statements, indent + 1);
+            }
+            if (node->next) {
+                print_ast(node->next, indent);  // 下一个函数
+            }
+            break;
+        case NODE_RETURN:
+            printf("返回值\n");
+            if (node->left) {
+                print_ast(node->left, indent + 1);
+            }
+            break;
         default:
             printf("未知节点类型\n");
             break;
@@ -406,4 +432,18 @@ void free_ast(ASTNode *node) {
     }
     
     free(node);
+}
+
+/* 清理全局函数表 */
+void clear_global_functions() {
+    ASTNode *current = function_table;
+    while (current) {
+        ASTNode *next = current->next;
+        if (current->identifier) {
+            free(current->identifier);
+        }
+        free(current);
+        current = next;
+    }
+    function_table = NULL;
 }

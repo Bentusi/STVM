@@ -30,6 +30,7 @@ typedef enum {
 typedef enum {
     NODE_INVALID,
     NODE_PROGRAM,
+    NODE_COMPILATION_UNIT,
     NODE_STATEMENT_LIST,
     NODE_ASSIGN,
     NODE_FUNCTION,
@@ -121,5 +122,6 @@ ASTNode *find_global_function(char *name);
 /* AST遍历和打印函数 */
 void print_ast(ASTNode *node, int indent);
 void free_ast(ASTNode *node);
+void clear_global_functions(void);
 
 #endif // AST_H
