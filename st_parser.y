@@ -139,35 +139,50 @@ function_decl: FUNCTION IDENTIFIER COLON data_type var_section statement_list EN
              }
              ;
 
-
 /* 变量声明段 */
 var_section: /* empty */ { $$ = NULL; }
-           | VAR var_decl_list END_VAR { $$ = $2; }
-           ;
-
-var_decl_list: var_declaration
-             {
-                 $$ = $1;
-                 add_global_variable($1);
-             }
-             | var_decl_list var_declaration
-             {
-                 /* 将新变量添加到列表末尾 */
-                 VarDecl *current = $1;
-                 while (current->next != NULL) {
-                     current = current->next;
-                 }
-                 current->next = $2;
-                 $$ = $1;
-                 add_global_variable($2);
-             }
-             ;
-
-var_declaration: IDENTIFIER COLON data_type SEMICOLON
-         {
-                   $$ = create_var_decl($1, $3);
+            | VAR var_decl_list END_VAR 
+            { 
+                $$ = $2; 
+                /* 确保变量声明被正确处理 */
+                if ($2) {
+                    printf("Debug: 解析到变量声明段\n");
+                }
             }
             ;
+
+var_decl_list: var_declaration
+                {
+                    $$ = $1;
+                    if ($1) {
+                        printf("Debug: 添加变量 %s\n", $1->name);
+                        add_global_variable($1);
+                    }
+                }
+                | var_decl_list var_declaration
+                {
+                    if ($1 && $2) {
+                        /* 将新变量添加到列表末尾 */
+                        VarDecl *current = $1;
+                        while (current->next != NULL) {
+                            current = current->next;
+                        }
+                        current->next = $2;
+                        $$ = $1;
+                        printf("Debug: 添加变量 %s 到列表\n", $2->name);
+                        add_global_variable($2);
+                    }
+                }
+                ;
+
+var_declaration: IDENTIFIER COLON data_type SEMICOLON
+                {
+                    $$ = create_var_decl($1, $3);
+                    if ($$) {
+                        printf("Debug: 创建变量声明 %s, 类型 %d\n", $1, $3);
+                    }
+                }
+                ;
 
 data_type: BOOL_TYPE   { $$ = TYPE_BOOL; }
          | INT_TYPE    { $$ = TYPE_INT; }

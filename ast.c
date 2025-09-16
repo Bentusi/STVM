@@ -259,6 +259,11 @@ VarDecl *create_var_decl(char *name, DataType type) {
     return var;
 }
 
+/* 获取函数表 */
+ASTNode *get_function_table() {
+    return function_table;
+}
+
 /* 添加函数到函数表 */
 int add_global_function(ASTNode *func) {
     // 检查函数是否已存在，避免重复声明
@@ -281,10 +286,8 @@ int add_global_variable(VarDecl *var) {
     // 检查变量是否已存在，避免重复声明
     VarDecl *existing = find_variable(var->name);
     if (existing != NULL) {
-        // 如果变量已存在，释放新变量并返回错误
-        free(var->name);
-        free(var);
-        return -1; // 或者可以返回错误码
+        // 如果变量已存在，返回错误
+        return -1;
     }
     
     // 将新变量添加到链表头部
@@ -303,6 +306,11 @@ ASTNode *find_global_function(char *name) {
         current = current->next;
     }
     return NULL;
+}
+
+/* 获取变量表 */
+VarDecl *get_variable_table() {
+    return variable_table;
 }
 
 /* 查找变量 */

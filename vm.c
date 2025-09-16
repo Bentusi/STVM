@@ -25,6 +25,7 @@ VMState *vm_create(void) {
     vm->stack_size = MAX_STACK_SIZE;
     vm->sp = 0;
     vm->variables = NULL;
+    vm->functions = NULL;
     vm->running = 0;
     vm->error_msg = NULL;
     
@@ -359,7 +360,9 @@ int vm_run(VMState *vm) {
     vm->running = 1;
     vm->pc = 0;
     vm->sp = 0;
-    
+    vm->error_msg = NULL;
+    vm->variables = get_variable_table();
+
     while (vm->running && vm->pc < vm->code_size) {
         VMInstruction *instr = &vm->code[vm->pc];
         
@@ -681,26 +684,24 @@ void vm_print_variables(VMState *vm) {
     printf("=== 变量状态 ===\n");
     VMVariable *var = vm->variables;
     while (var) {
-        printf("%s = ", var->name);
+        index++;
         switch (var->value.type) {
             case TYPE_INT:
-                printf("0x%04x %d\n", index, var->value.value.int_val);
+                printf("0x%04x %s = %d\n", index, var->name, var->value.value.int_val);
                 break;
             case TYPE_REAL:
-                printf("0x%04x %f\n", index, var->value.value.real_val);
+                printf("0x%04x %s = %f\n", index, var->name, var->value.value.real_val);
                 break;
             case TYPE_BOOL:
-                printf("0x%04x %s\n", index, var->value.value.bool_val ? "TRUE" : "FALSE");
+                printf("0x%04x %s = %s\n", index, var->name, var->value.value.bool_val ? "TRUE" : "FALSE");
                 break;
             case TYPE_STRING:
-                printf("0x%04x \"%s\"\n", index, var->value.value.str_val ? var->value.value.str_val : "");
+                printf("0x%04x %s = \"%s\"\n", index, var->name, var->value.value.str_val ? var->value.value.str_val : "");
                 break;
             default:
                 printf("未知类型");
                 break;
-            index++;
         }
-        printf("\n");
         var = var->next;
     }
     printf("================\n");

@@ -118,6 +118,8 @@ int add_global_variable(VarDecl *var);
 int add_global_function(ASTNode *func);
 VarDecl *find_variable(char *name);
 ASTNode *find_global_function(char *name);
+VarDecl *get_variable_table();
+ASTNode *get_function_table();
 
 /* AST遍历和打印函数 */
 void print_ast(ASTNode *node, int indent);
