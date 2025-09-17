@@ -136,7 +136,7 @@ function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type 
                  $$ = create_function_node($2, $7, $4, $9);
                  /* 设置变量声明到函数中 */
                  if ($8) {
-                     // TODO: 处理函数内部变量声明
+                     add_function_var_decl($2, $8);
                  }
              }
              | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type statement_list END_FUNCTION
