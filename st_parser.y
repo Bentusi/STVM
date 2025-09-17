@@ -13,13 +13,6 @@ extern int yylex();
 extern void yyerror(const char *msg);
 extern int line_num;
 
-/* 函数调用验证和作用域管理函数声明 */
-int validate_function_call(char *func_name, ASTNode *args);
-ASTNode *create_function_call_node(char *func_name, ASTNode *args);
-ASTNode *create_argument_list(ASTNode *argument);
-ASTNode *add_argument(ASTNode *list, ASTNode *argument);
-VarDecl *add_parameter(VarDecl *list, VarDecl *param);
-
 /* 抽象语法树根节点 */
 ASTNode *ast_root = NULL;
 %}
@@ -135,6 +128,11 @@ function_list: function_decl
 /* 函数声明 */
 function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type var_section statement_list END_FUNCTION
              {
+                 /* 验证函数是否重复定义 */
+                 if (validate_function_call($2, NULL) == 0) {
+                     yyerror("函数重复定义");
+                     YYERROR;
+                 }
                  $$ = create_function_node($2, $7, $4, $9);
                  /* 设置变量声明到函数中 */
                  if ($8) {
@@ -143,14 +141,29 @@ function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type 
              }
              | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type statement_list END_FUNCTION
              {
+                /* 验证函数是否重复定义 */
+                 if (validate_function_call($2, NULL) == 0) {
+                     yyerror("函数重复定义");
+                     YYERROR;
+                 }
                  $$ = create_function_node($2, $7, $4, $8);
              }
              | FUNCTION IDENTIFIER COLON data_type var_section statement_list END_FUNCTION
              {
+                /* 验证函数是否重复定义 */
+                 if (validate_function_call($2, NULL) == 0) {
+                     yyerror("函数重复定义");
+                     YYERROR;
+                 }
                  $$ = create_function_node($2, $4, NULL, $6);
              }
              | FUNCTION IDENTIFIER COLON data_type statement_list END_FUNCTION
              {
+                /* 验证函数是否重复定义 */
+                 if (validate_function_call($2, NULL) == 0) {
+                     yyerror("函数重复定义");
+                     YYERROR;
+                 }
                  $$ = create_function_node($2, $4, NULL, $5);
              }
              ;
@@ -463,67 +476,6 @@ parameter_decl: IDENTIFIER COLON data_type
 /* 错误处理函数 */
 void yyerror(const char *msg) {
     printf("语法错误：第%d行 %s\n", line_num, msg);
-}
-
-/* 函数调用验证的实现 */
-int validate_function_call(char *func_name, ASTNode *args) {
-    // 查找函数是否存在
-    ASTNode *func = find_global_function(func_name);
-    if (func == NULL) {
-        printf("错误：函数 '%s' 未定义\n", func_name);
-        return -1; // 函数不存在
-    }
-    
-    // 计算实参数量
-    int arg_count = 0;
-    ASTNode *current = args;
-    while (current != NULL) {
-        arg_count++;
-        current = current->next;
-    }
-    
-    // 计算形参数量
-    int param_count = 0;
-    VarDecl *param = func->param_list;
-    while (param != NULL) {
-        param_count++;
-        param = param->next;
-    }
-    
-    // 检查参数数量是否匹配
-    if (arg_count != param_count) {
-        printf("错误：函数 '%s' 期望 %d 个参数，但提供了 %d 个\n", 
-               func_name, param_count, arg_count);
-        return -2; // 参数数量不匹配
-    }
-    
-    return 0; // 验证通过
-}
-
-/* 打印函数信息 */
-void print_function_info() {
-    ASTNode *func = get_function_table();
-    printf("\n=== 已定义的函数 ===\n");
-    while (func != NULL) {
-        printf("函数: %s", func->identifier);
-        if (func->param_list) {
-            printf("(");
-            VarDecl *param = func->param_list;
-            int first = 1;
-            while (param != NULL) {
-                if (!first) printf(", ");
-                printf("%s: %d", param->name, param->type);
-                param = param->next;
-                first = 0;
-            }
-            printf(")");
-        } else {
-            printf("()");
-        }
-        printf(" -> %d\n", func->return_type);
-        func = func->next;
-    }
-    printf("===================\n");
 }
 
 /* 主函数 */

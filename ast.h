@@ -137,6 +137,14 @@ LocalScope *get_current_scope();
 int enter_function_scope(ASTNode *func);
 void exit_function_scope();
 
+/* 函数调用验证和作用域管理函数声明 */
+int validate_function_call(char *func_name, ASTNode *args);
+ASTNode *create_function_call_node(char *func_name, ASTNode *args);
+ASTNode *create_argument_list(ASTNode *argument);
+ASTNode *add_argument(ASTNode *list, ASTNode *argument);
+VarDecl *add_parameter(VarDecl *list, VarDecl *param);
+int count_arguments(ASTNode *args);
+
 /* AST遍历和打印函数 */
 void print_ast(ASTNode *node, int indent);
 void print_var_list(VarDecl *list, int indent);

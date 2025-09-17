@@ -569,12 +569,6 @@ void print_ast(ASTNode *node, int indent) {
     }
 }
 
-/* 创建函数调用的额外函数 */
-ASTNode *create_func_call_with_params(char *func_name, VarDecl *params);
-int validate_function_call(char *func_name, ASTNode *args);
-int count_arguments(ASTNode *args);
-int match_parameter_types(VarDecl *params, ASTNode *args);
-
 /* 创建函数调用节点，包含参数验证 */
 ASTNode *create_func_call_with_params(char *func_name, VarDecl *params) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
@@ -585,15 +579,24 @@ ASTNode *create_func_call_with_params(char *func_name, VarDecl *params) {
     return node;
 }
 
-/* 验证函数调用 */
+/* 函数调用验证的实现 */
 int validate_function_call(char *func_name, ASTNode *args) {
+    // 查找函数是否存在
     ASTNode *func = find_global_function(func_name);
     if (func == NULL) {
+        //printf("错误：函数 '%s' 未定义\n", func_name);
         return -1; // 函数不存在
     }
     
-    // 检查参数个数
-    int arg_count = count_arguments(args);
+    // 计算实参数量
+    int arg_count = 0;
+    ASTNode *current = args;
+    while (current != NULL) {
+        arg_count++;
+        current = current->next;
+    }
+    
+    // 计算形参数量
     int param_count = 0;
     VarDecl *param = func->param_list;
     while (param != NULL) {
@@ -601,11 +604,40 @@ int validate_function_call(char *func_name, ASTNode *args) {
         param = param->next;
     }
     
+    // 检查参数数量是否匹配
     if (arg_count != param_count) {
-        return -2; // 参数个数不匹配
+        printf("错误：函数 '%s' 期望 %d 个参数，但提供了 %d 个\n", 
+               func_name, param_count, arg_count);
+        return -2; // 参数数量不匹配
     }
     
     return 0; // 验证通过
+}
+
+/* 打印函数信息 */
+void print_function_info() {
+    ASTNode *func = get_function_table();
+    printf("\n=== 已定义的函数 ===\n");
+    while (func != NULL) {
+        printf("函数: %s", func->identifier);
+        if (func->param_list) {
+            printf("(");
+            VarDecl *param = func->param_list;
+            int first = 1;
+            while (param != NULL) {
+                if (!first) printf(", ");
+                printf("%s: %d", param->name, param->type);
+                param = param->next;
+                first = 0;
+            }
+            printf(")");
+        } else {
+            printf("()");
+        }
+        printf(" -> %d\n", func->return_type);
+        func = func->next;
+    }
+    printf("===================\n");
 }
 
 /* 计算参数个数 */
