@@ -361,8 +361,8 @@ int vm_run(VMState *vm) {
     vm->pc = 0;
     vm->sp = 0;
     vm->error_msg = NULL;
-    vm->variables = get_variable_table();
-
+    vm->variables = NULL;
+    
     while (vm->running && vm->pc < vm->code_size) {
         VMInstruction *instr = &vm->code[vm->pc];
         

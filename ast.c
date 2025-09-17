@@ -12,6 +12,7 @@
 /* 全局变量表 */
 static VarDecl *variable_table = NULL;
 static ASTNode *function_table = NULL;
+static LocalScope *current_scope = NULL;
 
 /* 创建程序节点 */
 ASTNode *create_program_node(char *name, ASTNode *statements) {
@@ -44,6 +45,40 @@ ASTNode *add_statement(ASTNode *list, ASTNode *statement) {
         current = current->next;
     }
     current->next = create_statement_list(statement);
+    return list;
+}
+
+/* 创建函数调用节点 */
+ASTNode *create_function_call_node(char *func_name, ASTNode *args) {
+    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    node->type = NODE_FUNCTION_CALL;
+    node->identifier = strdup(func_name);
+    node->left = args;  // 参数列表
+    node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
+    return node;
+}
+
+/* 创建参数列表节点 */
+ASTNode *create_argument_list(ASTNode *argument) {
+    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    node->type = NODE_ARGUMENT_LIST;
+    node->left = argument;
+    node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
+    node->identifier = NULL;
+    return node;
+}
+
+/* 添加参数到参数列表 */
+ASTNode *add_argument(ASTNode *list, ASTNode *argument) {
+    if (list == NULL) {
+        return create_argument_list(argument);
+    }
+    
+    ASTNode *current = list;
+    while (current->next != NULL) {
+        current = current->next;
+    }
+    current->next = create_argument_list(argument);
     return list;
 }
 
@@ -259,6 +294,93 @@ VarDecl *create_var_decl(char *name, DataType type) {
     return var;
 }
 
+/* 添加变量到参数列表 */
+VarDecl *add_parameter(VarDecl *list, VarDecl *param) {
+    if (list == NULL) {
+        return param;
+    }
+    
+    VarDecl *current = list;
+    while (current->next != NULL) {
+        current = current->next;
+    }
+    current->next = param;
+    return list;
+}
+
+/* 创建新的局部作用域 */
+void push_local_scope() {
+    LocalScope *new_scope = (LocalScope *)malloc(sizeof(LocalScope));
+    new_scope->local_vars = NULL;
+    new_scope->parent = current_scope;
+    current_scope = new_scope;
+}
+
+/* 弹出当前局部作用域 */
+void pop_local_scope() {
+    if (current_scope == NULL) return;
+    
+    LocalScope *old_scope = current_scope;
+    current_scope = current_scope->parent;
+    
+    // 释放局部变量
+    VarDecl *var = old_scope->local_vars;
+    while (var != NULL) {
+        VarDecl *next = var->next;
+        free(var->name);
+        free(var);
+        var = next;
+    }
+    
+    free(old_scope);
+}
+
+/* 添加局部变量 */
+int add_local_variable(VarDecl *var) {
+    if (current_scope == NULL) {
+        return -1; // 没有局部作用域
+    }
+    
+    // 检查当前作用域中是否已存在同名变量
+    VarDecl *existing = find_local_variable(var->name);
+    if (existing != NULL) {
+        return -1; // 变量已存在
+    }
+    
+    // 添加到当前作用域
+    var->next = current_scope->local_vars;
+    current_scope->local_vars = var;
+    return 0;
+}
+
+/* 查找局部变量（包括所有上级作用域） */
+VarDecl *find_local_variable(char *name) {
+    LocalScope *scope = current_scope;
+    while (scope != NULL) {
+        VarDecl *var = scope->local_vars;
+        while (var != NULL) {
+            if (strcmp(var->name, name) == 0) {
+                return var;
+            }
+            var = var->next;
+        }
+        scope = scope->parent;
+    }
+    return NULL;
+}
+
+/* 查找变量（先查找局部变量，再查找全局变量） */
+VarDecl *find_variable_in_scope(char *name) {
+    // 先查找局部变量
+    VarDecl *local_var = find_local_variable(name);
+    if (local_var != NULL) {
+        return local_var;
+    }
+    
+    // 再查找全局变量
+    return find_variable(name);
+}
+
 /* 获取函数表 */
 ASTNode *get_function_table() {
     return function_table;
@@ -323,6 +445,16 @@ VarDecl *find_variable(char *name) {
         current = current->next;
     }
     return NULL;
+}
+
+/* 打印变量表结构（调试用） */
+void print_var_list(VarDecl *list, int indent) {
+    VarDecl *current = list;
+    while (current != NULL) {
+        for (int i = 0; i < indent; i++) printf("  ");
+        printf("变量: %s (类型: %d)\n", current->name, current->type);
+        current = current->next;
+    }
 }
 
 /* 打印AST结构（调试用） */
@@ -404,12 +536,26 @@ void print_ast(ASTNode *node, int indent) {
             break;
         case NODE_FUNCTION:
             printf("函数: %s\n", node->identifier);
+            if (node->param_list) {
+                for (int i = 0; i < indent; i++) printf("  ");
+                printf("参数列表:\n");
+                VarDecl *param = node->param_list;
+                while (param) {
+                    for (int i = 0; i < indent + 1; i++) printf("  ");
+                    printf("参数: %s (类型: %d)\n", param->name, param->type);
+                    param = param->next;
+                }
+            }
             if (node->statements) {
                 print_ast(node->statements, indent + 1);
             }
             if (node->next) {
                 print_ast(node->next, indent);  // 下一个函数
             }
+            break;
+        case NODE_FUNCTION_CALL:
+            printf("函数调用: %s\n", node->identifier);
+            print_var_list(node->param_list, indent + 1);
             break;
         case NODE_RETURN:
             printf("返回值\n");
@@ -420,6 +566,114 @@ void print_ast(ASTNode *node, int indent) {
         default:
             printf("未知节点类型\n");
             break;
+    }
+}
+
+/* 创建函数调用的额外函数 */
+ASTNode *create_func_call_with_params(char *func_name, VarDecl *params);
+int validate_function_call(char *func_name, ASTNode *args);
+int count_arguments(ASTNode *args);
+int match_parameter_types(VarDecl *params, ASTNode *args);
+
+/* 创建函数调用节点，包含参数验证 */
+ASTNode *create_func_call_with_params(char *func_name, VarDecl *params) {
+    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    node->type = NODE_STATEMENT_LIST; // 临时使用已有类型
+    node->identifier = strdup(func_name);
+    node->param_list = params;
+    node->left = node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
+    return node;
+}
+
+/* 验证函数调用 */
+int validate_function_call(char *func_name, ASTNode *args) {
+    ASTNode *func = find_global_function(func_name);
+    if (func == NULL) {
+        return -1; // 函数不存在
+    }
+    
+    // 检查参数个数
+    int arg_count = count_arguments(args);
+    int param_count = 0;
+    VarDecl *param = func->param_list;
+    while (param != NULL) {
+        param_count++;
+        param = param->next;
+    }
+    
+    if (arg_count != param_count) {
+        return -2; // 参数个数不匹配
+    }
+    
+    return 0; // 验证通过
+}
+
+/* 计算参数个数 */
+int count_arguments(ASTNode *args) {
+    int count = 0;
+    ASTNode *current = args;
+    while (current != NULL) {
+        count++;
+        current = current->next;
+    }
+    return count;
+}
+
+/* 检查参数类型匹配 */
+int match_parameter_types(VarDecl *params, ASTNode *args) {
+    VarDecl *param = params;
+    ASTNode *arg = args;
+    
+    while (param != NULL && arg != NULL) {
+        // 这里可以添加更复杂的类型匹配逻辑
+        // 简单的实现：跳过类型检查，仅检查个数
+        param = param->next;
+        arg = arg->next;
+    }
+    
+    // 确保参数和实参数量匹配
+    return (param == NULL && arg == NULL) ? 0 : -1;
+}
+
+/* 获取函数参数个数 */
+int get_function_param_count(ASTNode *func) {
+    if (func == NULL || func->param_list == NULL) {
+        return 0;
+    }
+    
+    int count = 0;
+    VarDecl *param = func->param_list;
+    while (param != NULL) {
+        count++;
+        param = param->next;
+    }
+    return count;
+}
+
+/* 创建函数调用结果节点 */
+ASTNode *create_function_call_result(char *func_name, ASTNode *args, DataType return_type) {
+    ASTNode *node = create_function_call_node(func_name, args);
+    node->data_type = return_type;
+    return node;
+}
+
+/* 释放参数列表 */
+void free_param_list(VarDecl *params) {
+    VarDecl *current = params;
+    while (current != NULL) {
+        VarDecl *next = current->next;
+        if (current->name) {
+            free(current->name);
+        }
+        free(current);
+        current = next;
+    }
+}
+
+/* 释放局部作用域变量 */
+void free_local_variables() {
+    while (current_scope != NULL) {
+        pop_local_scope();
     }
 }
 
@@ -454,4 +708,51 @@ void clear_global_functions() {
         current = next;
     }
     function_table = NULL;
+}
+
+/* 清理全局变量表 */
+void clear_global_variables() {
+    VarDecl *current = variable_table;
+    while (current) {
+        VarDecl *next = current->next;
+        if (current->name) {
+            free(current->name);
+        }
+        free(current);
+        current = next;
+    }
+    variable_table = NULL;
+}
+
+/* 获取当前作用域 */
+LocalScope *get_current_scope() {
+    return current_scope;
+}
+
+/* 函数调用时的作用域管理 */
+int enter_function_scope(ASTNode *func) {
+    if (func == NULL || func->type != NODE_FUNCTION) {
+        return -1;
+    }
+    
+    push_local_scope();
+    
+    // 将函数参数添加到局部作用域
+    VarDecl *param = func->param_list;
+    while (param != NULL) {
+        VarDecl *local_param = create_var_decl(param->name, param->type);
+        if (add_local_variable(local_param) != 0) {
+            free(local_param->name);
+            free(local_param);
+            return -1;
+        }
+        param = param->next;
+    }
+    
+    return 0;
+}
+
+/* 退出函数作用域 */
+void exit_function_scope() {
+    pop_local_scope();
 }

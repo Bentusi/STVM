@@ -35,6 +35,8 @@ typedef enum {
     NODE_ASSIGN,
     NODE_FUNCTION,
     NODE_FUNCTION_BLOCK,
+    NODE_FUNCTION_CALL,
+    NODE_ARGUMENT_LIST,
     NODE_RETURN,
     NODE_IF,
     NODE_FOR,
@@ -66,6 +68,12 @@ typedef struct VarDecl {
     Value value;
     struct VarDecl *next;
 } VarDecl;
+
+/* 局部变量作用域栈 */
+typedef struct LocalScope {
+    VarDecl *local_vars;
+    struct LocalScope *parent;
+} LocalScope;
 
 /* AST节点结构 */
 typedef struct ASTNode {
@@ -120,9 +128,18 @@ VarDecl *find_variable(char *name);
 ASTNode *find_global_function(char *name);
 VarDecl *get_variable_table();
 ASTNode *get_function_table();
+VarDecl *find_local_variable(char *name);
+VarDecl *find_variable_in_scope(char *name);
+int add_local_variable(VarDecl *var);
+void push_local_scope();
+void pop_local_scope();
+LocalScope *get_current_scope();
+int enter_function_scope(ASTNode *func);
+void exit_function_scope();
 
 /* AST遍历和打印函数 */
 void print_ast(ASTNode *node, int indent);
+void print_var_list(VarDecl *list, int indent);
 void free_ast(ASTNode *node);
 void clear_global_functions(void);
 
