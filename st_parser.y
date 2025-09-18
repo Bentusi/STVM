@@ -54,8 +54,7 @@ ASTNode *ast_root = NULL;
 %type <node> statement_list statement assignment_stmt function_call_stmt
 %type <node> if_stmt for_stmt while_stmt case_stmt case_item case_list return_stmt
 %type <node> expression logical_expr comparison term factor function_call
-%type <node> argument_list argument_expression
-%type <var_decl> var_section var_decl_list var_declaration parameter_list parameter_decl
+%type <var_decl> var_section var_decl_list var_declaration parameter_list parameter_decl argument_list
 %type <data_type> data_type
 
 /* 运算符优先级 */
@@ -129,20 +128,16 @@ function_list: function_decl
 function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type var_section statement_list END_FUNCTION
              {
                  /* 验证函数是否重复定义 */
-                 if (validate_function_call($2, NULL) == 0) {
+                 if (find_global_function($2) != 0) {
                      yyerror("函数重复定义");
                      YYERROR;
                  }
                  $$ = create_function_node($2, $7, $4, $9);
-                 /* 设置变量声明到函数中 */
-                 if ($8) {
-                     add_function_var_decl($2, $8);
-                 }
              }
              | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type statement_list END_FUNCTION
              {
                 /* 验证函数是否重复定义 */
-                 if (validate_function_call($2, NULL) == 0) {
+                 if (find_global_function($2) != 0) {
                      yyerror("函数重复定义");
                      YYERROR;
                  }
@@ -151,7 +146,7 @@ function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type 
              | FUNCTION IDENTIFIER COLON data_type var_section statement_list END_FUNCTION
              {
                 /* 验证函数是否重复定义 */
-                 if (validate_function_call($2, NULL) == 0) {
+                 if (find_global_function($2) != 0) {
                      yyerror("函数重复定义");
                      YYERROR;
                  }
@@ -160,7 +155,7 @@ function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type 
              | FUNCTION IDENTIFIER COLON data_type statement_list END_FUNCTION
              {
                 /* 验证函数是否重复定义 */
-                 if (validate_function_call($2, NULL) == 0) {
+                 if (find_global_function($2) != 0) {
                      yyerror("函数重复定义");
                      YYERROR;
                  }
@@ -417,17 +412,17 @@ factor: IDENTIFIER
 function_call: IDENTIFIER LPAREN RPAREN
              {
                  /* 验证函数是否存在 */
-                 if (validate_function_call($1, NULL) != 0) {
-                     yyerror("函数不存在或参数不匹配");
+                 if (find_global_function($1) != 0) {
+                     yyerror("函数不存在");
                      YYERROR;
                  }
                  $$ = create_function_call_node($1, NULL);
              }
              | IDENTIFIER LPAREN argument_list RPAREN
              {
-                 /* 验证函数是否存在并检查参数 */
-                 if (validate_function_call($1, $3) != 0) {
-                     yyerror("函数不存在或参数不匹配");
+                 /* 验证函数是否存在 */
+                 if (find_global_function($1) != 0) {
+                     yyerror("函数不存在或参数错误");
                      YYERROR;
                  }
                  $$ = create_function_call_node($1, $3);
@@ -435,22 +430,76 @@ function_call: IDENTIFIER LPAREN RPAREN
              ;
 
 /* 参数列表 */
-argument_list: argument_expression
-             {
-                 $$ = create_argument_list($1);
-             }
-             | argument_list COMMA argument_expression
-             {
-                 $$ = add_argument($1, $3);
-             }
-             ;
+argument_list: INT_LITERAL
+              {
+                  VarDecl *arg = create_var_decl(NULL, TYPE_INT);
+                  arg->next = NULL;
+                  arg->value.int_val = $1;
+                  $$ = arg;
+              }
+              | REAL_LITERAL
+              {
+                  VarDecl *arg = create_var_decl(NULL, TYPE_REAL);
+                  arg->next = NULL;
+                  arg->value.real_val = $1;
+                  $$ = arg;
+              }
+              | BOOL_LITERAL
+              {
+                  VarDecl *arg = create_var_decl(NULL, TYPE_BOOL);
+                  arg->next = NULL;
+                  arg->value.bool_val = $1;
+                  $$ = arg;
+              }
+              | STRING_LITERAL
+              {
+                  VarDecl *arg = create_var_decl(NULL, TYPE_STRING);
+                  arg->next = NULL;
+                  arg->value.str_val = $1;
+                  $$ = arg;
+              }
+              | argument_list COMMA INT_LITERAL
+              {
+                  VarDecl *arg = create_var_decl(NULL, TYPE_INT);
+                  arg->next = NULL;
+                  arg->value.int_val = $3;
+                  $$ = add_parameter($1, arg);
+              }
+              | argument_list COMMA REAL_LITERAL
+              {
+                  VarDecl *arg = create_var_decl(NULL, TYPE_REAL);
+                  arg->next = NULL;
+                  arg->value.real_val = $3;
+                  $$ = add_parameter($1, arg);
+              }
+              | argument_list COMMA BOOL_LITERAL
+              {
+                  VarDecl *arg = create_var_decl(NULL, TYPE_BOOL);
+                  arg->next = NULL;
+                  arg->value.bool_val = $3;
+                  $$ = add_parameter($1, arg);
+              }
+              | argument_list COMMA STRING_LITERAL
+              {
+                  VarDecl *arg = create_var_decl(NULL, TYPE_STRING);
+                  arg->next = NULL;
+                  arg->value.str_val = $3;
+                  $$ = add_parameter($1, arg);
+              }
+              | argument_list COMMA IDENTIFIER
+              {
+                  VarDecl *arg = create_var_decl_from_identifier($3);
+                  arg->next = NULL;
+                  $$ = add_parameter($1, arg);
+              }
+              | IDENTIFIER
+              {
+                  VarDecl *arg = create_var_decl_from_identifier($1);
+                  arg->next = NULL;
+                  $$ = arg;
+              }
+              ;
 
-/* 参数表达式 */
-argument_expression: expression
-                   {
-                       $$ = $1;
-                   }
-                   ;
 
 /* 函数参数列表 */
 parameter_list: /* empty */ { $$ = NULL; }
@@ -477,48 +526,3 @@ parameter_decl: IDENTIFIER COLON data_type
 void yyerror(const char *msg) {
     printf("语法错误：第%d行 %s\n", line_num, msg);
 }
-
-/* 主函数 */
-/*
-int main(int argc, char **argv) {
-    extern FILE *yyin;
-    
-    if (argc > 1) {
-        yyin = fopen(argv[1], "r");
-        if (!yyin) {
-            printf("无法打开文件 %s\n", argv[1]);
-            return 1;
-        }
-    }
-    
-    printf("开始解析IEC61131结构化文本程序...\n");
-    
-    if (yyparse() == 0) {
-        printf("解析成功！\n\n");
-        
-        // 打印函数信息
-        print_function_info();
-        
-        if (ast_root) {
-            printf("=== 抽象语法树 ===\n");
-            print_ast(ast_root, 0);
-            printf("\n=== 解析完成 ===\n");
-            
-            // 释放AST内存
-            free_ast(ast_root);
-        }
-    } else {
-        printf("解析失败！\n");
-    }
-    
-    if (argc > 1) {
-        fclose(yyin);
-    }
-    
-    // 清理全局符号表
-    clear_global_functions();
-    clear_global_variables();
-    
-    return 0;
-}
-*/

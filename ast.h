@@ -122,6 +122,7 @@ ASTNode *create_return_node(ASTNode *return_value);
 
 /* 变量管理函数 */
 VarDecl *create_var_decl(char *name, DataType type);
+VarDecl *create_var_decl_from_identifier(char *name);
 int add_global_variable(VarDecl *var);
 int add_global_function(ASTNode *func);
 VarDecl *find_variable(char *name);
@@ -138,12 +139,13 @@ int enter_function_scope(ASTNode *func);
 void exit_function_scope();
 
 /* 函数调用验证和作用域管理函数声明 */
-int validate_function_call(char *func_name, ASTNode *args);
-ASTNode *create_function_call_node(char *func_name, ASTNode *args);
+int validate_function_call(char *func_name, VarDecl *args);
+ASTNode *create_function_call_node(char *func_name, VarDecl *args);
 ASTNode *create_argument_list(ASTNode *argument);
 ASTNode *add_argument(ASTNode *list, ASTNode *argument);
 VarDecl *add_parameter(VarDecl *list, VarDecl *param);
 int count_arguments(ASTNode *args);
+int add_function_var_decl(ASTNode *func, VarDecl *var);
 
 /* AST遍历和打印函数 */
 void print_ast(ASTNode *node, int indent);

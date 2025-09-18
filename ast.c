@@ -49,12 +49,12 @@ ASTNode *add_statement(ASTNode *list, ASTNode *statement) {
 }
 
 /* 创建函数调用节点 */
-ASTNode *create_function_call_node(char *func_name, ASTNode *args) {
+ASTNode *create_function_call_node(char *func_name, VarDecl *params) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
     node->type = NODE_FUNCTION_CALL;
     node->identifier = strdup(func_name);
-    node->left = args;  // 参数列表
-    node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
+    node->param_list = params;
+    node->left = node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
     return node;
 }
 
@@ -106,6 +106,8 @@ ASTNode *create_function_node(char *func_name, DataType return_type, VarDecl *pa
     node->condition = node->else_statements = node->next = NULL;
     return node;
 }
+
+
 
 /* 创建函数块节点 */
 ASTNode *create_function_block_node(char *fb_name, VarDecl *param_list, ASTNode *statements) {
@@ -288,10 +290,24 @@ ASTNode *create_string_literal_node(char *value) {
 /* 创建变量声明 */
 VarDecl *create_var_decl(char *name, DataType type) {
     VarDecl *var = (VarDecl *)malloc(sizeof(VarDecl));
-    var->name = strdup(name);
+    var->name = strdup(name ? name : "NO_NAME"); // 处理NULL名称
     var->type = type;
     var->next = NULL;
     return var;
+}
+
+/* 通过标识名称符创建变量声明 */
+/* 先在函数局部变量表中查找变量，没有再从全局变量表中查找 */
+VarDecl *create_var_decl_from_identifier(char *name) {
+    VarDecl *local_var = find_local_variable(name);
+    if (local_var != NULL) {
+        return create_var_decl(local_var->name, local_var->type);
+    }
+    VarDecl *global_var = find_variable(name);
+    if (global_var != NULL) {
+        return create_var_decl(global_var->name, global_var->type);
+    }
+    return NULL;
 }
 
 /* 添加变量到参数列表 */
@@ -569,28 +585,18 @@ void print_ast(ASTNode *node, int indent) {
     }
 }
 
-/* 创建函数调用节点，包含参数验证 */
-ASTNode *create_func_call_with_params(char *func_name, VarDecl *params) {
-    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
-    node->type = NODE_STATEMENT_LIST; // 临时使用已有类型
-    node->identifier = strdup(func_name);
-    node->param_list = params;
-    node->left = node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
-    return node;
-}
-
-/* 函数调用验证的实现 */
-int validate_function_call(char *func_name, ASTNode *args) {
+/*  函数调用验证参数验证 */
+int validate_function_call(char *func_name, VarDecl *args) {
     // 查找函数是否存在
     ASTNode *func = find_global_function(func_name);
     if (func == NULL) {
         //printf("错误：函数 '%s' 未定义\n", func_name);
         return -1; // 函数不存在
     }
-    
+
     // 计算实参数量
     int arg_count = 0;
-    ASTNode *current = args;
+    VarDecl *current = args;
     while (current != NULL) {
         arg_count++;
         current = current->next;
@@ -682,11 +688,25 @@ int get_function_param_count(ASTNode *func) {
     return count;
 }
 
-/* 创建函数调用结果节点 */
-ASTNode *create_function_call_result(char *func_name, ASTNode *args, DataType return_type) {
-    ASTNode *node = create_function_call_node(func_name, args);
-    node->data_type = return_type;
-    return node;
+/* 添加函数变量定义 */
+int add_function_var_decl(ASTNode *func, VarDecl *var) {
+    if (func == NULL || func->type != NODE_FUNCTION) {
+        return -1; // 不是函数节点
+    }
+    
+    // 检查变量是否已存在于函数参数中
+    VarDecl *existing = func->param_list;
+    while (existing != NULL) {
+        if (strcmp(existing->name, var->name) == 0) {
+            return -1; // 变量已存在
+        }
+        existing = existing->next;
+    }
+    
+    // 添加变量到函数参数列表
+    var->next = func->param_list;
+    func->param_list = var;
+    return 0; // 成功
 }
 
 /* 释放参数列表 */

@@ -7,7 +7,7 @@ FUNCTION max (in1 : INT, in2 : INT): INT
     END_IF
 END_FUNCTION
 
-FUNCTION max (in1 : INT, in2 : INT): INT
+FUNCTION min (in1 : INT, in2 : INT): INT
     IF in1 < in2 THEN
         RETURN in1;
     ELSE
