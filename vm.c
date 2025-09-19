@@ -889,14 +889,27 @@ int vm_run(VMState *vm) {
 void vm_setup_function_parameters(VMState *vm, char *func_name, int param_count) {
     if (!vm || !func_name || param_count <= 0) return;
     
+    // 修复函数名匹配：正确去掉"__func_"前缀并添加"__"后缀
+    char clean_func_name[256];
+    if (strncmp(func_name, "__func_", 7) == 0 && 
+        strlen(func_name) > 9 && 
+        strcmp(func_name + strlen(func_name) - 2, "__") == 0) {
+        // 去掉前缀"__func_"和后缀"__"
+        int len = strlen(func_name) - 9; // 7 + 2
+        strncpy(clean_func_name, func_name + 7, len);
+        clean_func_name[len] = '\0';
+    } else {
+        strcpy(clean_func_name, func_name);
+    }
+    
     // 查找函数定义获取参数名称
-    ASTNode *func_node = find_global_function(func_name + 7); // 去掉"__func_"前缀
+    ASTNode *func_node = find_global_function(clean_func_name);
     if (!func_node) {
-        printf("  警告: 无法找到函数定义 %s\n", func_name);
+        printf("  警告: 无法找到函数定义 %s (清理后: %s)\n", func_name, clean_func_name);
         return;
     }
     
-    printf("  设置函数参数:\n");
+    printf("  设置函数参数 (函数: %s):\n", clean_func_name);
     
     // 从栈中获取参数值并设置到参数变量
     VMValue *param_values = (VMValue *)malloc(param_count * sizeof(VMValue));
@@ -906,11 +919,14 @@ void vm_setup_function_parameters(VMState *vm, char *func_name, int param_count)
         param_values[i] = vm_pop(vm);
     }
     
-    // 设置参数变量
+    // 设置参数变量，使用特殊前缀避免与全局变量冲突
     VarDecl *param = func_node->param_list;
     for (int i = 0; i < param_count && param; i++) {
-        vm_set_variable(vm, param->name, param_values[i]);
-        printf("    参数 %s = ", param->name);
+        char param_var_name[512];
+        snprintf(param_var_name, sizeof(param_var_name), "__param_%s_%s", clean_func_name, param->name);
+        
+        vm_set_variable(vm, param_var_name, param_values[i]);
+        printf("    参数 %s (%s) = ", param->name, param_var_name);
         vm_print_value(param_values[i]);
         printf("\n");
         param = param->next;
@@ -921,11 +937,29 @@ void vm_setup_function_parameters(VMState *vm, char *func_name, int param_count)
 
 /* 清理函数参数变量 */
 void vm_cleanup_function_parameters(VMState *vm) {
-    if (!vm || !vm->call_stack) return;
+    if (!vm) return;
     
-    // 这里可以实现参数变量的清理逻辑
-    // 当前实现保持参数变量在全局空间中
     printf("  清理函数参数变量\n");
+    
+    // 清理所有参数变量
+    VMVariable **var_ptr = &vm->variables;
+    while (*var_ptr) {
+        if (strncmp((*var_ptr)->name, "__param_", 8) == 0) {
+            VMVariable *to_delete = *var_ptr;
+            *var_ptr = (*var_ptr)->next;
+            
+            printf("    清理参数变量: %s\n", to_delete->name);
+            
+            // 释放字符串值
+            if (to_delete->value.type == TYPE_STRING && to_delete->value.value.str_val) {
+                free(to_delete->value.value.str_val);
+            }
+            free(to_delete->name);
+            free(to_delete);
+        } else {
+            var_ptr = &(*var_ptr)->next;
+        }
+    }
 }
 
 /* 修复函数设置逻辑 */
@@ -989,8 +1023,26 @@ VMValue vm_get_variable(VMState *vm, const char *name) {
         return default_val;
     }
     
-    VMVariable *var = vm->variables;
+    // 首先查找当前函数的参数变量
+    if (vm->call_stack) {
+        // 构造参数变量名 - 需要知道当前函数名
+        VMVariable *var = vm->variables;
+        while (var) {
+            // 检查是否是参数变量且匹配参数名
+            if (strncmp(var->name, "__param_", 8) == 0) {
+                // 从参数变量名中提取实际参数名
+                char *last_underscore = strrchr(var->name, '_');
+                if (last_underscore && strcmp(last_underscore + 1, name) == 0) {
+                    printf("  找到参数变量: %s -> %s\n", name, var->name);
+                    return var->value;
+                }
+            }
+            var = var->next;
+        }
+    }
     
+    // 然后查找普通变量
+    VMVariable *var = vm->variables;
     while (var) {
         if (strcmp(var->name, name) == 0) {
             return var->value;

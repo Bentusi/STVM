@@ -1,4 +1,3 @@
-
 FUNCTION max (in1 : INT, in2 : INT): INT
     IF in1 > in2 THEN
         RETURN in1;

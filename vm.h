@@ -32,6 +32,7 @@ typedef struct CallFrame {
     int return_pc;      // 返回地址
     int frame_pointer;  // 帧指针
     int local_count;    // 局部变量数量
+    char *function_name; // 当前函数名，用于参数查找
     struct CallFrame *prev;  // 前一个栈帧
 } CallFrame;
 
