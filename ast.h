@@ -133,9 +133,8 @@ void clear_global_variables();
 /* 函数调用验证和作用域管理函数声明 */
 int validate_function_call(char *func_name, VarDecl *args);
 ASTNode *create_function_call_node(char *func_name, VarDecl *args);
-ASTNode *create_function_call_with_args(char *func_name, ASTNode *args);
-ASTNode *create_argument_list(ASTNode *argument);
-ASTNode *add_argument(ASTNode *list, ASTNode *argument);
+VarDecl *create_argument_list(ASTNode *argument);
+VarDecl *add_argument_to_list(VarDecl *list, VarDecl *argument);
 VarDecl *add_parameter(VarDecl *list, VarDecl *param);
 int count_arguments(ASTNode *args);
 int add_function_var_decl(ASTNode *func, VarDecl *var);

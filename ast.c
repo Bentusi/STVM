@@ -73,39 +73,31 @@ ASTNode *create_function_call_node(char *func_name, VarDecl *params) {
     return node;
 }
 
-/* 创建带参数列表的函数调用节点 */
-ASTNode *create_function_call_with_args(char *func_name, ASTNode *args) {
-    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
-    node->type = NODE_FUNCTION_CALL;
-    node->identifier = strdup(func_name);
-    node->left = args;  // 参数列表存储在left中
-    node->param_list = NULL;
-    node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
-    return node;
-}
-
 /* 创建参数列表节点 */
-ASTNode *create_argument_list(ASTNode *argument) {
-    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
-    node->type = NODE_ARGUMENT_LIST;
-    node->left = argument;
-    node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
-    node->identifier = NULL;
-    node->param_list = NULL;
-    return node;
+VarDecl *create_argument_list(ASTNode *argument) {
+    VarDecl *list = NULL;
+    if (argument) {
+        list = create_var_decl(argument->identifier, argument->data_type);
+    }
+    return list;
 }
 
 /* 添加参数到参数列表 */
-ASTNode *add_argument(ASTNode *list, ASTNode *argument) {
+VarDecl *add_argument_to_list(VarDecl *list, VarDecl *argument) {
+    if (argument == NULL) {
+        return list;
+    }
+
     if (list == NULL) {
-        return create_argument_list(argument);
+        return argument;
     }
-    
-    ASTNode *current = list;
-    while (current->right != NULL) {
-        current = current->right;
+
+    VarDecl *current = list;
+    while (current->next != NULL) {
+        current = current->next;
     }
-    current->right = create_argument_list(argument);
+    current->next = argument;
+    argument->next = NULL;
     return list;
 }
 
@@ -527,6 +519,34 @@ void print_var_list(VarDecl *list, int indent) {
     }
 }
 
+/* 打印函数调用参数表（调试用） */
+void print_arg_list(VarDecl *list, int indent) {
+    VarDecl *current = list;
+    printf("(");
+    while (current != NULL) {
+        for (int i = 0; i < indent; i++) printf("  ");
+        switch (current->type)
+        {
+        case TYPE_INT:
+            printf("%s:%d", current->name, current->value.int_val);
+            break;
+        case TYPE_REAL:
+            printf("%s:%f", current->name, current->value.real_val);
+            break;
+        case TYPE_BOOL:
+            printf("%s:%s", current->name, current->value.bool_val ? "TRUE" : "FALSE");
+            break;
+        case TYPE_STRING:
+            printf("%s:%s", current->name, current->value.str_val);
+            break;
+        default:
+            break;
+        }
+        current = current->next;
+        printf(current ? ", " : ")");
+    }
+}
+
 /* 打印AST结构（调试用） */
 void print_ast(ASTNode *node, int indent) {
     if (!node) return;
@@ -629,8 +649,9 @@ void print_ast(ASTNode *node, int indent) {
             printf("标识符: %s\n", node->identifier);
             break;
         case NODE_FUNCTION_CALL:
-            printf("函数调用: %s\n", node->identifier);
-            print_var_list(node->param_list, indent + 1);
+            printf("函数调用: %s", node->identifier);
+            print_arg_list(node->param_list, 0);
+            printf("\n");
             break;
         case NODE_RETURN:
             printf("返回值\n");

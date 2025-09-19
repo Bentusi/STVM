@@ -53,8 +53,9 @@ ASTNode *ast_root = NULL;
 %type <node> compilation_unit program_and_functions program_decl function_list function_decl
 %type <node> statement_list statement assignment_stmt function_call_stmt
 %type <node> if_stmt for_stmt while_stmt case_stmt case_item case_list return_stmt
-%type <node> expression logical_expr comparison term factor function_call argument_list
+%type <node> expression logical_expr comparison term factor function_call 
 %type <var_decl> var_section var_decl_list var_declaration parameter_list parameter_decl
+%type <var_decl> argument_list argument_decl
 %type <data_type> data_type
 
 /* 运算符优先级 */
@@ -433,22 +434,48 @@ function_call: IDENTIFIER LPAREN RPAREN
                      yyerror("函数不存在或参数错误");
                      YYERROR;
                  }
-                 $$ = create_function_call_with_args($1, $3);
+                 $$ = create_function_call_node($1, $3);
              }
              ;
 
-/* 参数列表 */
-argument_list: expression
+/* 函数调用参数列表 */
+argument_list: argument_decl
               {
-                  $$ = create_argument_list($1);
+                  $$ = $1;
               }
-              | argument_list COMMA expression
+              | argument_list COMMA argument_decl
               {
-                  $$ = add_argument($1, $3);
+                  $$ = add_argument_to_list($1, $3);
               }
               ;
 
-/* 函数参数列表 */
+argument_decl: IDENTIFIER
+              {
+                  $$ = find_variable($1);
+              }
+              | INT_LITERAL
+              {
+                  $$ = create_var_decl(NULL, TYPE_INT);
+                  $$->value.int_val = $1;
+              }
+              | REAL_LITERAL
+              {
+                  $$ = create_var_decl(NULL, TYPE_REAL);
+                  $$->value.real_val = $1;
+              }
+              | BOOL_LITERAL
+              {
+                  $$ = create_var_decl(NULL, TYPE_BOOL);
+                  $$->value.bool_val = $1;
+              }
+              | STRING_LITERAL
+              {
+                  $$ = create_var_decl(NULL, TYPE_STRING);
+                  $$->value.str_val = strdup($1);
+              }
+            ;
+
+/* 函数定义参数列表 */
 parameter_list: /* empty */ { $$ = NULL; }
               | parameter_decl
               {

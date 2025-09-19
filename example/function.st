@@ -20,8 +20,9 @@ VAR
     ma : INT;
     mi : INT;
 END_VAR
+    mi := 1;
 
-    ma := max(1, 5);
+    ma := max(mi, 5);
     mi := min(1, 5);
 
 END_PROGRAM
