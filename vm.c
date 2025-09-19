@@ -337,7 +337,25 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             }
             vm_emit(vm, VM_RET);
             break;
+        
+        case NODE_FUNCTION_CALL: {
+            /* 函数调用编译 */
+            // 编译参数列表
+            ASTNode *arg = ast->left;
+            while (arg) {
+                vm_compile_ast(vm, arg);
+                arg = arg->next;
+            }
+            // 调用函数
+            char func_label[256];
+            snprintf(func_label, sizeof(func_label), "__func_%s__", ast->identifier);
+            vm_emit(vm, VM_CALL, func_label);
+            break;
+        }
             
+        case NODE_ARGUMENT_LIST:
+            /* 参数列表在函数调用中处理 */
+            break;
         default:
             vm_set_error(vm, "未知AST节点类型");
             break;

@@ -30,27 +30,27 @@ typedef enum {
 typedef enum {
     NODE_INVALID,
     NODE_PROGRAM,
-    NODE_COMPILATION_UNIT,
-    NODE_STATEMENT_LIST,
-    NODE_ASSIGN,
     NODE_FUNCTION,
     NODE_FUNCTION_BLOCK,
-    NODE_FUNCTION_CALL,
-    NODE_ARGUMENT_LIST,
-    NODE_RETURN,
+    NODE_STATEMENT_LIST,
+    NODE_ASSIGN,
     NODE_IF,
     NODE_FOR,
     NODE_WHILE,
     NODE_CASE,
     NODE_CASE_LIST,
     NODE_CASE_ITEM,
-    NODE_BINARY_OP,
-    NODE_UNARY_OP,
+    NODE_RETURN,
     NODE_IDENTIFIER,
     NODE_INT_LITERAL,
     NODE_REAL_LITERAL,
     NODE_BOOL_LITERAL,
-    NODE_STRING_LITERAL
+    NODE_STRING_LITERAL,
+    NODE_BINARY_OP,
+    NODE_UNARY_OP,
+    NODE_FUNCTION_CALL,
+    NODE_ARGUMENT_LIST,
+    NODE_COMPILATION_UNIT
 } NodeType;
 
 /* 值联合体 */
@@ -141,6 +141,7 @@ void exit_function_scope();
 /* 函数调用验证和作用域管理函数声明 */
 int validate_function_call(char *func_name, VarDecl *args);
 ASTNode *create_function_call_node(char *func_name, VarDecl *args);
+ASTNode *create_function_call_with_args(char *func_name, ASTNode *args);
 ASTNode *create_argument_list(ASTNode *argument);
 ASTNode *add_argument(ASTNode *list, ASTNode *argument);
 VarDecl *add_parameter(VarDecl *list, VarDecl *param);

@@ -58,6 +58,17 @@ ASTNode *create_function_call_node(char *func_name, VarDecl *params) {
     return node;
 }
 
+/* 创建带参数列表的函数调用节点 */
+ASTNode *create_function_call_with_args(char *func_name, ASTNode *args) {
+    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+    node->type = NODE_FUNCTION_CALL;
+    node->identifier = strdup(func_name);
+    node->left = args;  // 参数列表存储在left中
+    node->param_list = NULL;
+    node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
+    return node;
+}
+
 /* 创建参数列表节点 */
 ASTNode *create_argument_list(ASTNode *argument) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
@@ -65,6 +76,7 @@ ASTNode *create_argument_list(ASTNode *argument) {
     node->left = argument;
     node->right = node->condition = node->statements = node->else_statements = node->next = NULL;
     node->identifier = NULL;
+    node->param_list = NULL;
     return node;
 }
 
@@ -75,10 +87,10 @@ ASTNode *add_argument(ASTNode *list, ASTNode *argument) {
     }
     
     ASTNode *current = list;
-    while (current->next != NULL) {
-        current = current->next;
+    while (current->right != NULL) {
+        current = current->right;
     }
-    current->next = create_argument_list(argument);
+    current->right = create_argument_list(argument);
     return list;
 }
 
@@ -299,6 +311,10 @@ VarDecl *create_var_decl(char *name, DataType type) {
 /* 通过标识名称符创建变量声明 */
 /* 先在函数局部变量表中查找变量，没有再从全局变量表中查找 */
 VarDecl *create_var_decl_from_identifier(char *name) {
+    if (name == NULL) {
+        return NULL;
+    }
+    
     VarDecl *local_var = find_local_variable(name);
     if (local_var != NULL) {
         return create_var_decl(local_var->name, local_var->type);
@@ -307,6 +323,8 @@ VarDecl *create_var_decl_from_identifier(char *name) {
     if (global_var != NULL) {
         return create_var_decl(global_var->name, global_var->type);
     }
+    
+    // 如果找不到变量，返回NULL而不是创建未定义的变量
     return NULL;
 }
 
@@ -590,7 +608,6 @@ int validate_function_call(char *func_name, VarDecl *args) {
     // 查找函数是否存在
     ASTNode *func = find_global_function(func_name);
     if (func == NULL) {
-        //printf("错误：函数 '%s' 未定义\n", func_name);
         return -1; // 函数不存在
     }
 
@@ -601,22 +618,15 @@ int validate_function_call(char *func_name, VarDecl *args) {
         arg_count++;
         current = current->next;
     }
-    
-    // 计算形参数量
-    int param_count = 0;
-    VarDecl *param = func->param_list;
-    while (param != NULL) {
-        param_count++;
-        param = param->next;
-    }
+
+    // 获取函数形参数量
+    int param_count = get_function_param_count(func);
     
     // 检查参数数量是否匹配
     if (arg_count != param_count) {
-        printf("错误：函数 '%s' 期望 %d 个参数，但提供了 %d 个\n", 
-               func_name, param_count, arg_count);
         return -2; // 参数数量不匹配
     }
-    
+
     return 0; // 验证通过
 }
 
