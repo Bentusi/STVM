@@ -8,128 +8,116 @@
 
 #include "ast.h"
 
-/* 虚拟机指令集 */
+/* 虚拟机操作码 */
 typedef enum {
-    /* 数据操作指令 */
-    VM_LOAD_INT,    // 加载整数常量
-    VM_LOAD_REAL,   // 加载实数常量
-    VM_LOAD_BOOL,   // 加载布尔常量
-    VM_LOAD_STRING, // 加载字符串常量
-    VM_LOAD_VAR,    // 从变量加载值
-    VM_STORE_VAR,   // 存储值到变量
-    VM_POP,         // 弹出栈顶元素
-    VM_DUP,         // 复制栈顶元素
-    
-    /* 算术运算指令 */
-    VM_ADD,         // 加法
-    VM_SUB,         // 减法
-    VM_MUL,         // 乘法
-    VM_DIV,         // 除法
-    VM_MOD,         // 取模
-    VM_NEG,         // 取负
-    
-    /* 比较运算指令 */
-    VM_EQ,          // 等于
-    VM_NE,          // 不等于
-    VM_LT,          // 小于
-    VM_LE,          // 小于等于
-    VM_GT,          // 大于
-    VM_GE,          // 大于等于
-    
-    /* 逻辑运算指令 */
-    VM_AND,         // 逻辑与
-    VM_OR,          // 逻辑或
-    VM_NOT,         // 逻辑非
-    
-    /* 控制流指令 */
-    VM_JMP,         // 无条件跳转
-    VM_JZ,          // 条件跳转（为零时跳转）
-    VM_JNZ,         // 条件跳转（非零时跳转）
-    VM_CALL,        // 函数调用
-    VM_RET,         // 函数返回
-    
-    /* 系统指令 */
-    VM_HALT,        // 停机
-    VM_NOP          // 空操作
+    VM_LOAD_INT,        // 加载整数到栈
+    VM_LOAD_REAL,       // 加载实数到栈
+    VM_LOAD_BOOL,       // 加载布尔值到栈
+    VM_LOAD_STRING,     // 加载字符串到栈
+    VM_LOAD_VAR,        // 加载变量值到栈
+    VM_STORE_VAR,       // 存储栈顶值到变量
+    VM_PUSH_ARGS,       // 压入参数个数
+    VM_CALL,            // 函数调用
+    VM_RET,             // 函数返回
+    VM_ADD, VM_SUB, VM_MUL, VM_DIV, VM_MOD,  // 算术运算
+    VM_EQ, VM_NE, VM_LT, VM_LE, VM_GT, VM_GE,  // 比较运算
+    VM_AND, VM_OR, VM_NOT, VM_NEG,  // 逻辑运算
+    VM_JMP, VM_JZ, VM_JNZ,  // 跳转指令
+    VM_POP, VM_DUP,     // 栈操作
+    VM_HALT             // 停机
 } VMOpcode;
 
-/* 虚拟机值类型 */
-typedef struct {
-    DataType type;
-    Value value;
-} VMValue;
+/* 调用栈帧 */
+typedef struct CallFrame {
+    int return_pc;      // 返回地址
+    int frame_pointer;  // 帧指针
+    int local_count;    // 局部变量数量
+    struct CallFrame *prev;  // 前一个栈帧
+} CallFrame;
 
-/* 虚拟机指令结构 */
+/* VM指令结构 */
 typedef struct {
     VMOpcode opcode;
     union {
         int int_operand;
-        int bool_operand;
         double real_operand;
+        int bool_operand;
         char *str_operand;
-        int addr_operand;
     };
 } VMInstruction;
 
-/* 虚拟机变量存储 */
+/* VM值类型 */
+typedef struct {
+    DataType type;
+    union {
+        int int_val;
+        double real_val;
+        int bool_val;
+        char *str_val;
+    } value;
+} VMValue;
+
+/* VM变量 */
 typedef struct VMVariable {
     char *name;
     VMValue value;
     struct VMVariable *next;
 } VMVariable;
 
-/* 虚拟机函数存储 */
+/* VM函数 */
 typedef struct VMFunction {
     char *name;
     int addr;
+    int param_count;
     struct VMFunction *next;
 } VMFunction;
 
-/* 虚拟机状态 */
+/* VM状态 */
 typedef struct {
-    VMInstruction *code;        // 指令代码段
-    int code_size;              // 代码大小
-    int pc;                     // 程序计数器
+    VMInstruction *code;
+    int code_size;
+    int pc;
     
-    VMValue *stack;             // 操作数栈
-    int stack_size;             // 栈大小
-    int sp;                     // 栈指针
+    VMValue *stack;
+    int stack_size;
+    int sp;
     
-    VMVariable *variables;      // 变量存储
-    VMFunction *functions;      // 函数存储
-
-    int running;                // 运行状态
-    char *error_msg;           // 错误信息
+    CallFrame *call_stack;  // 调用栈
+    VMVariable *variables;
+    VMFunction *functions;
+    
+    int running;
+    char *error_msg;
 } VMState;
 
-/* 虚拟机函数声明 */
-
-/* 虚拟机初始化和清理 */
+/* VM函数声明 */
 VMState *vm_create(void);
 void vm_destroy(VMState *vm);
-
-/* 代码生成 */
 void vm_emit(VMState *vm, VMOpcode opcode, ...);
 void vm_compile_ast(VMState *vm, ASTNode *ast);
-
-/* 虚拟机执行 */
+void vm_compile_function_list(VMState *vm, ASTNode *func_list);
+void vm_initialize_global_variables(VMState *vm);
+void vm_setup_function_parameters(VMState *vm, char *func_name, int param_count);
+void vm_cleanup_function_parameters(VMState *vm);
 int vm_run(VMState *vm);
 void vm_reset(VMState *vm);
-
-/* 变量操作 */
-void vm_set_variable(VMState *vm, const char *name, VMValue value);
-void vm_set_function(VMState *vm, const char *name, int addr);
-VMValue vm_get_variable(VMState *vm, const char *name);
 
 /* 栈操作 */
 void vm_push(VMState *vm, VMValue value);
 VMValue vm_pop(VMState *vm);
 
-/* 调试和工具函数 */
-void vm_print_code(VMState *vm);
-void vm_print_stack(VMState *vm);
+/* 变量管理 */
+void vm_set_variable(VMState *vm, const char *name, VMValue value);
+VMValue vm_get_variable(VMState *vm, const char *name);
+
+/* 函数管理 */
+void vm_set_function(VMState *vm, const char *name, int addr);
+
+/* 调试函数 */
 void vm_print_variables(VMState *vm);
 void vm_print_functions(VMState *vm);
+void vm_print_code(VMState *vm);
+void vm_print_value(VMValue value);
 
 /* 错误处理 */
 void vm_set_error(VMState *vm, const char *error);

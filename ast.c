@@ -14,6 +14,21 @@ static VarDecl *variable_table = NULL;
 static ASTNode *function_table = NULL;
 static LocalScope *current_scope = NULL;
 
+/* 获取全局变量表 */
+VarDecl *ast_get_global_var_table() {
+    return variable_table;
+}
+
+/* 获取全局函数表 */
+ASTNode *ast_get_global_function_table() {
+    return function_table;
+}
+
+/* 获取当前作用域 */
+LocalScope *ast_get_current_scope() {
+    return current_scope;
+}
+
 /* 创建程序节点 */
 ASTNode *create_program_node(char *name, ASTNode *statements) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
@@ -454,19 +469,16 @@ int add_global_variable(VarDecl *var) {
 
 /* 查找函数 */
 ASTNode *find_global_function(char *name) {
-    ASTNode *current = function_table;
-    while (current != NULL) {
-        if (strcmp(current->identifier, name) == 0) {
+    if (!name) return NULL;
+
+    ASTNode *current = ast_get_global_function_table();
+    while (current) {
+        if (current->identifier && strcmp(current->identifier, name) == 0) {
             return current;
         }
         current = current->next;
     }
     return NULL;
-}
-
-/* 获取变量表 */
-VarDecl *get_variable_table() {
-    return variable_table;
 }
 
 /* 查找变量 */
@@ -481,6 +493,30 @@ VarDecl *find_variable(char *name) {
     return NULL;
 }
 
+/* 获取所有全局变量 */
+VarDecl *find_all_global_variables(void) {
+    return variable_table;
+}
+
+/* 打印全局变量列表（调试用） */
+void print_all_global_variables(void) {
+    printf("=== AST全局变量列表 ===\n");
+    VarDecl *var = variable_table;
+    int count = 0;
+    
+    while (var) {
+        printf("变量[%d]: %s (类型: %d)\n", count++, var->name, var->type);
+        var = var->next;
+    }
+    
+    if (count == 0) {
+        printf("无全局变量\n");
+    } else {
+        printf("总共 %d 个全局变量\n", count);
+    }
+    printf("======================\n");
+}
+
 /* 打印变量表结构（调试用） */
 void print_var_list(VarDecl *list, int indent) {
     VarDecl *current = list;
@@ -493,20 +529,44 @@ void print_var_list(VarDecl *list, int indent) {
 
 /* 打印AST结构（调试用） */
 void print_ast(ASTNode *node, int indent) {
-    if (node == NULL) return;
+    if (!node) return;
     
     for (int i = 0; i < indent; i++) printf("  ");
     
     switch (node->type) {
         case NODE_COMPILATION_UNIT:
             printf("编译单元\n");
-            if (node->left) {  // 函数列表
-                print_ast(node->left, indent + 1);
+            if (node->left) {
+                for (int i = 0; i < indent + 1; i++) printf("  ");
+                printf("函数列表:\n");
+                print_ast(node->left, indent + 2);
             }
-            if (node->right) {  // 程序
+            if (node->right) {
                 print_ast(node->right, indent + 1);
             }
             break;
+            
+        case NODE_FUNCTION:
+            printf("函数: %s\n", node->identifier);
+            if (node->param_list) {
+                for (int i = 0; i < indent + 1; i++) printf("  ");
+                printf("参数列表:\n");
+                VarDecl *param = node->param_list;
+                while (param) {
+                    for (int i = 0; i < indent + 2; i++) printf("  ");
+                    printf("参数: %s (类型: %d)\n", param->name, param->type);
+                    param = param->next;
+                }
+            }
+            if (node->statements) {
+                print_ast(node->statements, indent + 1);
+            }
+            // 打印下一个函数
+            if (node->next) {
+                print_ast(node->next, indent);
+            }
+            break;
+            
         case NODE_PROGRAM:
             printf("程序: %s\n", node->identifier);
             print_ast(node->statements, indent + 1);
@@ -567,25 +627,6 @@ void print_ast(ASTNode *node, int indent) {
             break;
         case NODE_IDENTIFIER:
             printf("标识符: %s\n", node->identifier);
-            break;
-        case NODE_FUNCTION:
-            printf("函数: %s\n", node->identifier);
-            if (node->param_list) {
-                for (int i = 0; i < indent; i++) printf("  ");
-                printf("参数列表:\n");
-                VarDecl *param = node->param_list;
-                while (param) {
-                    for (int i = 0; i < indent + 1; i++) printf("  ");
-                    printf("参数: %s (类型: %d)\n", param->name, param->type);
-                    param = param->next;
-                }
-            }
-            if (node->statements) {
-                print_ast(node->statements, indent + 1);
-            }
-            if (node->next) {
-                print_ast(node->next, indent);  // 下一个函数
-            }
             break;
         case NODE_FUNCTION_CALL:
             printf("函数调用: %s\n", node->identifier);

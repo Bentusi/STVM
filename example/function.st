@@ -18,11 +18,11 @@ END_FUNCTION
 
 PROGRAM test
 VAR
-    max : INT;
-    min : INT;
+    ma : INT;
+    mi : INT;
 END_VAR
 
-    max := max(1, 5);
-    min := min(1, 5);
+    ma := max(1, 5);
+    mi := min(1, 5);
 
 END_PROGRAM

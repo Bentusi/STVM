@@ -102,8 +102,13 @@ int compile_and_run_file(const char *filename) {
     
     printf("编译成功！\n");
     
+    /* 打印全局变量状态（调试用） */
+    printf("\n=== 编译阶段全局变量 ===\n");
+    print_all_global_variables();
+    printf("\n");
+    
     /* 打印AST结构（调试用） */
-    printf("\n=== 抽象语法树 ===\n");
+    printf("=== 抽象语法树 ===\n");
     print_ast(ast_root, 0);
     printf("==================\n\n");
     

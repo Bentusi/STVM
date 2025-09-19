@@ -124,19 +124,11 @@ ASTNode *create_return_node(ASTNode *return_value);
 VarDecl *create_var_decl(char *name, DataType type);
 VarDecl *create_var_decl_from_identifier(char *name);
 int add_global_variable(VarDecl *var);
-int add_global_function(ASTNode *func);
 VarDecl *find_variable(char *name);
-ASTNode *find_global_function(char *name);
-VarDecl *get_variable_table();
-ASTNode *get_function_table();
-VarDecl *find_local_variable(char *name);
-VarDecl *find_variable_in_scope(char *name);
-int add_local_variable(VarDecl *var);
-void push_local_scope();
-void pop_local_scope();
-LocalScope *get_current_scope();
-int enter_function_scope(ASTNode *func);
-void exit_function_scope();
+VarDecl *find_all_global_variables(void);
+void print_all_global_variables(void);
+void print_global_variables();
+void clear_global_variables();
 
 /* 函数调用验证和作用域管理函数声明 */
 int validate_function_call(char *func_name, VarDecl *args);
@@ -147,11 +139,23 @@ ASTNode *add_argument(ASTNode *list, ASTNode *argument);
 VarDecl *add_parameter(VarDecl *list, VarDecl *param);
 int count_arguments(ASTNode *args);
 int add_function_var_decl(ASTNode *func, VarDecl *var);
+ASTNode *find_global_function(char *name);
+VarDecl *find_local_variable(char *name);
+void push_local_scope(void);
+void pop_local_scope(void);
+int get_function_param_count(ASTNode *func);
+int enter_function_scope(ASTNode *func);
+void exit_function_scope(void);
+VarDecl *ast_get_global_var_table();
+ASTNode *ast_get_global_function_table();
+LocalScope *ast_get_current_scope();
+int add_global_function(ASTNode *func);
 
 /* AST遍历和打印函数 */
 void print_ast(ASTNode *node, int indent);
 void print_var_list(VarDecl *list, int indent);
 void free_ast(ASTNode *node);
 void clear_global_functions(void);
+void print_function_info();
 
 #endif // AST_H
