@@ -11,6 +11,7 @@
 /* 数据类型枚举 */
 typedef enum {
     TYPE_INVALID,
+    TYPE_IDENTIFIER,
     TYPE_VOID,
     TYPE_BOOL,
     TYPE_INT,
@@ -77,22 +78,22 @@ typedef struct LocalScope {
 
 /* AST节点结构 */
 typedef struct ASTNode {
+    char *identifier;
     NodeType type;
     DataType data_type;
     Value value;
-    struct ASTNode *left;
-    struct ASTNode *right;
+    OpType op_type;
+    VarDecl *param_list;
+    DataType return_type;
     struct ASTNode *condition;
     struct ASTNode *statements;
     struct ASTNode *else_statements;
     struct ASTNode *case_value;
     struct ASTNode *case_list;
     struct ASTNode *func_list;
-    VarDecl *param_list;
-    DataType return_type;
+    struct ASTNode *left;
+    struct ASTNode *right;
     struct ASTNode *next;
-    OpType op_type;
-    char *identifier;
 } ASTNode;
 
 /* 函数声明 */

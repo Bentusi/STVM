@@ -527,6 +527,9 @@ void print_arg_list(VarDecl *list, int indent) {
         for (int i = 0; i < indent; i++) printf("  ");
         switch (current->type)
         {
+        case TYPE_IDENTIFIER:
+            printf("%s", current->name);
+            break;
         case TYPE_INT:
             printf("%s:%d", current->name, current->value.int_val);
             break;

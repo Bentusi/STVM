@@ -152,33 +152,48 @@ void vm_compile_function_call(VMState *vm, ASTNode *node) {
     
     // 统计参数个数
     int param_count = 0;
-    ASTNode *arg = node->left;
+    VarDecl *arg = node->param_list;
     
     // 编译参数表达式（从左到右压栈）
     while (arg) {
-        if (arg->type == NODE_ARGUMENT_LIST) {
-            if (arg->left) {
-                vm_compile_ast(vm, arg->left);
-                param_count++;
-                printf("  编译参数 %d\n", param_count);
-            }
-            arg = arg->right;
-        } else {
-            vm_compile_ast(vm, arg);
-            param_count++;
-            printf("  编译参数 %d\n", param_count);
+        // 目前只支持参数是变量或字面量
+        switch (arg->type)
+        {
+        case TYPE_IDENTIFIER:
+            vm_emit(vm, VM_LOAD_VAR, arg->name);
+            printf("  生成指令: LOAD_VAR %s\n", arg->name);
+            break;
+        case TYPE_INT:
+            vm_emit(vm, VM_LOAD_INT, arg->value.int_val);
+            printf("  生成指令: LOAD_INT %d\n", arg->value.int_val);
+            break;
+        case TYPE_REAL:
+            vm_emit(vm, VM_LOAD_REAL, arg->value.real_val);
+            printf("  生成指令: LOAD_REAL %f\n", arg->value.real_val);
+            break;
+        case TYPE_BOOL:
+            vm_emit(vm, VM_LOAD_BOOL, arg->value.bool_val);
+            printf("  生成指令: LOAD_BOOL %s\n", arg->value.bool_val ? "TRUE" : "FALSE");
+            break;
+        case TYPE_STRING:
+            vm_emit(vm, VM_LOAD_STRING, arg->value.str_val);
+            printf("  生成指令: LOAD_STRING \"%s\"\n", arg->value.str_val);
+            break;
+        default:
             break;
         }
+        param_count++;
+        arg = arg->next;
     }
-    
+
     // 压入参数个数
     vm_emit(vm, VM_PUSH_ARGS, param_count);
-    
+
     // 生成函数调用指令
     char func_label[256];
     snprintf(func_label, sizeof(func_label), "__func_%s__", node->identifier);
     vm_emit(vm, VM_CALL, func_label);
-    
+
     printf("  生成调用指令: %s (参数个数: %d)\n", func_label, param_count);
 }
 

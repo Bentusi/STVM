@@ -451,7 +451,7 @@ argument_list: argument_decl
 
 argument_decl: IDENTIFIER
               {
-                  $$ = find_variable($1);
+                  $$ = create_var_decl($1, TYPE_IDENTIFIER);
               }
               | INT_LITERAL
               {
