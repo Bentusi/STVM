@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ast.h"
+#include "common.h"
 #include "st_parser.tab.h"
 
   /* 行号计数 */

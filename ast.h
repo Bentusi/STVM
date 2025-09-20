@@ -7,6 +7,7 @@
 #define AST_H
 
 #include <stddef.h>
+#include "common.h"
 
 /* 数据类型枚举 */
 typedef enum {

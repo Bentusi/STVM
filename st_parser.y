@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ast.h"
+#include "common.h"
 
 extern int yylex();
 extern void yyerror(const char *msg);

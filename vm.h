@@ -7,6 +7,7 @@
 #define VM_H
 
 #include "ast.h"
+#include "common.h"
 
 #define MAX_STACK_SIZE 1024
 #define MAX_CODE_SIZE 1024*1024*4

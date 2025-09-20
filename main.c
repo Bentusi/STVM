@@ -8,6 +8,7 @@
 #include <string.h>
 #include "ast.h"
 #include "vm.h"
+#include "common.h"
 
 /* 外部声明 */
 extern FILE *yyin;
