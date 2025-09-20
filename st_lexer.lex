@@ -22,8 +22,8 @@ int line_num = 1;
 DIGIT      [0-9]
 LETTER     [a-zA-Z]
 ID         {LETTER}({LETTER}|{DIGIT}|_)*
-INTEGER    {DIGIT}+
-REAL       {DIGIT}+\.{DIGIT}+
+INTEGER    [+-]?{DIGIT}+
+REAL       [+-]?{DIGIT}+\.{DIGIT}+
 STRING     \"[^\"]*\"
 COMMENT    \(\*[^*]*\*+([^)*][^*]*\*+)*\)
 
