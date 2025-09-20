@@ -1,5 +1,7 @@
 /*
  * IEC61131 虚拟机 (VM) 实现
+ * 基于stack的虚拟机实现，支持函数调用和局部变量
+ * 使用递归下降编译技术将AST编译为字节码
  * 平台无关的字节码执行引擎实现
  */
 
@@ -36,10 +38,10 @@ VMState *vm_create(void) {
 /* 销毁虚拟机实例 */
 void vm_destroy(VMState *vm) {
     if (!vm) return;
-    
-    free(vm->code);
-    free(vm->stack);
-    
+
+    //if (vm->code) free(vm->code);
+    //if (vm->stack) free(vm->stack);
+
     /* 释放变量存储 */
     VMVariable *var = vm->variables;
     while (var) {
@@ -75,7 +77,8 @@ void vm_emit(VMState *vm, VMOpcode opcode, ...) {
         case VM_JMP:
         case VM_JZ:
         case VM_JNZ:
-        case VM_PUSH_ARGS:  // 添加PUSH_ARGS处理
+        case VM_PUSH_ARGS:
+        case VM_CALL:
             instr->int_operand = va_arg(args, int);
             break;
         case VM_LOAD_REAL:
@@ -83,7 +86,6 @@ void vm_emit(VMState *vm, VMOpcode opcode, ...) {
             break;
         case VM_LOAD_STRING:
         case VM_LOAD_VAR:
-        case VM_CALL:
         case VM_STORE_VAR:
             instr->str_operand = strdup(va_arg(args, char *));
             break;
@@ -192,9 +194,20 @@ void vm_compile_function_call(VMState *vm, ASTNode *node) {
     // 生成函数调用指令
     char func_label[256];
     snprintf(func_label, sizeof(func_label), "__func_%s__", node->identifier);
-    vm_emit(vm, VM_CALL, func_label);
-
-    printf("  生成调用指令: %s (参数个数: %d)\n", func_label, param_count);
+    
+    // 查找函数地址
+    VMFunction *func = vm->functions;
+    while (func && strcmp(func->name, func_label) != 0) {
+        func = func->next;
+    }
+    
+    if (!func) {
+        vm_set_error(vm, "调用未知函数");
+        return;
+    }
+    
+    vm_emit(vm, VM_CALL, func->addr);  // 使用实际地址而不是字符串
+    printf("  生成调用指令: %s@0x%04x (参数个数: %d)\n", func_label, func->addr, param_count);
 }
 
 /* 编译AST到虚拟机字节码 */
@@ -260,8 +273,14 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             vm_compile_ast(vm, ast->statements);
             
             // 如果函数没有显式返回，添加默认返回
-            vm_emit(vm, VM_LOAD_INT, 0);  // 默认返回值0
-            vm_emit(vm, VM_RET);
+            // 检查函数体最后一条指令是否为RET，如果不是，则添加默认返回
+            if (vm->code_size == func_start || vm->code[vm->code_size - 1].opcode != VM_RET) {
+                // 如果函数有返回值类型，则返回默认值；否则不返回值
+                if (ast->return_type != TYPE_VOID) {
+                    vm_emit(vm, VM_LOAD_INT, 0); // 默认返回0
+                }
+                vm_emit(vm, VM_RET);
+            }
             
             // 注册函数
             char func_label[256];
@@ -771,8 +790,8 @@ int vm_run(VMState *vm) {
             
             case VM_JMP: {
                 printf("JMP %d\n", instr->int_operand);
-                printf("  无条件跳转到 PC=%d\n", instr->int_operand);
-                vm->pc = instr->int_operand - 1;  // -1因为循环末尾会+1
+                printf("  跳转到 PC=0x%04x\n", instr->int_operand);
+                vm->pc = instr->int_operand - 1;
                 break;
             }
 
@@ -835,18 +854,30 @@ int vm_run(VMState *vm) {
                     printf("  返回值已压入栈顶\n");
                 } else {
                     // 主程序返回，停止执行
-                    printf("  主程序返回，停止执行\n");
-                    vm->running = 0;
+                    // printf("  主程序返回，停止执行\n");
+                    // vm->running = 0;
                 }
                 break;
             }
 
             case VM_CALL: {
-                printf("CALL %s\n", instr->str_operand);
+                printf("CALL 0x%04x\n", instr->int_operand);
                 
-                // 查找函数
+                // 直接使用指令中的地址
+                int func_addr = instr->int_operand;
+                
+                // 获取参数个数（从前一条PUSH_ARGS指令）
+                int param_count = 0;
+                if (vm->pc > 0 && vm->code[vm->pc - 1].opcode == VM_PUSH_ARGS) {
+                    param_count = vm->code[vm->pc - 1].int_operand;
+                }
+                
+                printf("  调用函数@0x%04x, 参数个数: %d\n", func_addr, param_count);
+                
+                // 设置函数参数（需要函数名来查找参数定义）
+                // 这里需要根据地址查找函数名
                 VMFunction *func = vm->functions;
-                while (func && strcmp(func->name, instr->str_operand) != 0) {
+                while (func && func->addr != func_addr) {
                     func = func->next;
                 }
                 
@@ -855,29 +886,14 @@ int vm_run(VMState *vm) {
                     return -1;
                 }
                 
-                // 获取参数个数（从前一条PUSH_ARGS指令）
-                int param_count = 0;
-                if (vm->pc > 0 && vm->code[vm->pc - 1].opcode == VM_PUSH_ARGS) {
-                    param_count = vm->code[vm->pc - 1].int_operand;
-                }
-                
-                printf("  调用函数: %s, 参数个数: %d\n", func->name, param_count);
-                
-                // 验证参数个数
-                if (param_count != func->param_count) {
-                    printf("  警告: 参数个数不匹配 (期望: %d, 实际: %d)\n", 
-                           func->param_count, param_count);
-                }
-                
-                // 设置函数参数
                 vm_setup_function_parameters(vm, func->name, param_count);
                 
                 // 创建调用栈帧
                 vm_push_frame(vm, param_count);
                 
                 // 跳转到函数地址
-                printf("  跳转到函数地址: 0x%04x\n", func->addr);
-                vm->pc = func->addr - 1;  // -1因为循环末尾会+1
+                printf("  跳转到函数地址: 0x%04x\n", func_addr);
+                vm->pc = func_addr - 1;  // -1因为循环末尾会+1
                 break;
             }
 
@@ -920,11 +936,11 @@ void vm_setup_function_parameters(VMState *vm, char *func_name, int param_count)
     // 查找函数定义获取参数名称
     ASTNode *func_node = find_global_function(clean_func_name);
     if (!func_node) {
-        printf("  警告: 无法找到函数定义 %s (清理后: %s)\n", func_name, clean_func_name);
+        printf("  警告: 无法找到函数定义 %s (%s)\n", clean_func_name, func_name);
         return;
     }
     
-    printf("  设置函数参数 (函数: %s):\n", clean_func_name);
+    printf("  设置函数参数 (函数名: %s):\n", clean_func_name);
     
     // 从栈中获取参数值并设置到参数变量
     VMValue *param_values = (VMValue *)malloc(param_count * sizeof(VMValue));
@@ -1229,10 +1245,10 @@ void vm_print_code(VMState *vm) {
                 printf("GE");
                 break;
             case VM_JMP:
-                printf("JMP %d", instr->int_operand);
+                printf("JMP 0x%04x", instr->int_operand);
                 break;
             case VM_JZ:
-                printf("JZ %d", instr->int_operand);
+                printf("JZ 0x%04x", instr->int_operand);
                 break;
             case VM_HALT:
                 printf("HALT");
@@ -1241,7 +1257,7 @@ void vm_print_code(VMState *vm) {
                 printf("RET");
                 break;
             case VM_CALL:
-                printf("CALL %s", instr->str_operand);
+                printf("CALL 0x%04x", instr->int_operand);
                 break;
             case VM_POP:
                 printf("POP");
@@ -1250,7 +1266,7 @@ void vm_print_code(VMState *vm) {
                 printf("DUP");
                 break;
             default:
-                printf("UNKNOWN 0x%02x", instr->opcode);
+                printf("UNKNOWN 0x%04x", instr->opcode);
                 break;
         }
         printf("\n");
