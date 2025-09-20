@@ -761,8 +761,8 @@ int vm_run(VMState *vm) {
                 printf("JZ %d\n", instr->int_operand);
                 VMValue val = vm_pop(vm);
                 if (!val.value.bool_val) {
-                    printf("  跳转到 PC=%d\n", instr->int_operand);
-                    vm->pc = instr->int_operand - 1;  // -1因为循环末尾会+1
+                    printf("  跳转到 PC=0x%04x\n", instr->int_operand);
+                    vm->pc = instr->int_operand - 1;
                 } else {
                     printf("  条件为真，继续执行\n");
                 }
