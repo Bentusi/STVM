@@ -25,4 +25,4 @@ END_VAR
     ma := max(mi, 5);
     mi := min(1, 5);
 
-END_PROGRAM
+END_PROGRAM 

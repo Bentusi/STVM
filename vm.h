@@ -8,6 +8,9 @@
 
 #include "ast.h"
 
+#define MAX_STACK_SIZE 1024
+#define MAX_CODE_SIZE 1024*1024*4
+
 /* 虚拟机操作码
  * 无操作数指令直接使用opcode
  * 栈操作指令:

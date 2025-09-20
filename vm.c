@@ -11,9 +11,6 @@
 #include <stdarg.h>
 #include "vm.h"
 
-#define MAX_STACK_SIZE 1024
-#define MAX_CODE_SIZE 4096
-
 /* 创建虚拟机实例 */
 VMState *vm_create(void) {
     VMState *vm = (VMState *)malloc(sizeof(VMState));
@@ -385,7 +382,7 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
 
         case NODE_CASE: {
             /* CASE语句编译：计算表达式值，然后与各个CASE项比较 */
-            vm_compile_ast(vm, ast->left);  // 编译CASE表达式
+            vm_compile_ast(vm, ast->condition);  // 编译CASE表达式
             vm_emit(vm, VM_STORE_VAR, "__vm_case_temp__");  // 临时存储CASE值
             
             /* 收集所有需要回填的结束跳转地址 */
@@ -395,12 +392,12 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             case_end_jumps = (int *)malloc(max_jumps * sizeof(int));
             
             /* 处理CASE项列表 */
-            ASTNode *case_item = ast->statements;
+            ASTNode *case_item = ast->case_list;  // CASE_LIST的第一个CASE_ITEM
             while (case_item != NULL) {
                 if (case_item->type == NODE_CASE_ITEM) {
                     /* 比较CASE值 */
                     vm_emit(vm, VM_LOAD_VAR, "__vm_case_temp__");
-                    vm_compile_ast(vm, case_item->left);  // CASE项的值
+                    vm_compile_ast(vm, case_item->case_value);  // CASE项的值
                     vm_emit(vm, VM_EQ);  // 比较
                     
                     int no_match_jump = vm->code_size;
@@ -781,6 +778,18 @@ int vm_run(VMState *vm) {
                 VMValue result = {TYPE_BOOL, {.bool_val = a.value.int_val != b.value.int_val}};
                 vm_push(vm, result);
                 printf("  %d != %d = %s\n", a.value.int_val, b.value.int_val, 
+                       result.value.bool_val ? "TRUE" : "FALSE");
+                break;
+            }
+
+            case VM_OR: {
+                printf("OR\n");
+                VMValue b = vm_pop(vm);
+                VMValue a = vm_pop(vm);
+                VMValue result = {TYPE_BOOL, {.bool_val = a.value.bool_val || b.value.bool_val}};
+                vm_push(vm, result);
+                printf("  %s OR %s = %s\n", a.value.bool_val ? "TRUE" : "FALSE", 
+                       b.value.bool_val ? "TRUE" : "FALSE", 
                        result.value.bool_val ? "TRUE" : "FALSE");
                 break;
             }

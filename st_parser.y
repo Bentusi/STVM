@@ -300,17 +300,17 @@ case_stmt: CASE expression OF case_list END_CASE
 
 case_list: case_item
          {
-             $$ = create_statement_list($1);
+             $$ = $1;
          }
          | case_list case_item
          {
-             $$ = add_statement($1, $2);
+             $$ = create_case_list($1, $2);
          }
          ;
 
-case_item: expression COLON statement_list
+case_item: INT_LITERAL COLON statement_list
          {
-             $$ = create_case_item($1, $3);
+             $$ = create_case_item(create_int_literal_node($1), $3);
          }
          ;
 

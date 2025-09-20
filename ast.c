@@ -199,31 +199,31 @@ ASTNode *create_while_node(ASTNode *condition, ASTNode *statements) {
 ASTNode *create_case_node(ASTNode *expression, ASTNode *case_list) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
     node->type = NODE_CASE;
-    node->left = expression;  // CASE表达式
-    node->statements = case_list;  // CASE项列表
-    node->condition = node->right = node->else_statements = node->next = NULL;
+    node->condition = expression; // CASE表达式
+    node->case_list = case_list;  // CASE项列表
+    node->left = node->right = node->else_statements = node->next = NULL;
     node->identifier = NULL;
     return node;
 }
 
-/* 创建CASE列表节点 */
-ASTNode *create_case_list(ASTNode *case_item, ASTNode *next) {
-    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
-    node->type = NODE_CASE_LIST;
-    node->left = case_item;
-    node->next = next;
-    node->condition = node->right = node->statements = node->else_statements = NULL;
-    node->identifier = NULL;
-    return node;
+/* CASE项加入到CASE列表 */
+ASTNode *create_case_list(ASTNode *case_list, ASTNode *case_item) {
+    ASTNode *current = case_list;
+    while (current->next != NULL) {
+        current = current->next;
+    }
+
+    current->next = case_item; // 添加新项
+    return case_list;
 }
 
 /* 创建CASE项节点 */
 ASTNode *create_case_item(ASTNode *value, ASTNode *statements) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
     node->type = NODE_CASE_ITEM;
-    node->left = value;  // CASE值
-    node->statements = statements;  // 执行语句
-    node->condition = node->right = node->else_statements = NULL;
+    node->case_value = value;
+    node->statements = statements; // 执行语句
+    node->case_list = node->condition = node->right = node->else_statements = NULL;
     node->next = NULL;  // 初始化next指针
     node->identifier = NULL;
     return node;
@@ -622,20 +622,19 @@ void print_ast(ASTNode *node, int indent) {
             printf("CASE语句\n");
             for (int i = 0; i < indent; i++) printf("  ");
             printf("表达式:\n");
-            print_ast(node->left, indent + 1);
+            print_ast(node->condition, indent + 1);
             for (int i = 0; i < indent; i++) printf("  ");
             printf("CASE项:\n");
-            print_ast(node->statements, indent + 1);
+            print_ast(node->case_list, indent + 1);
             break;
         case NODE_CASE_LIST:
             printf("CASE列表\n");
-            print_ast(node->left, indent + 1);
+            print_ast(node->case_list, indent + 1);
             if (node->next) print_ast(node->next, indent);
             break;
         case NODE_CASE_ITEM:
             printf("CASE项: ");
-            print_ast(node->left, 0);  // 值不需要缩进
-            printf(" -> \n");
+            print_ast(node->case_value, 0);  // 值不需要缩进
             print_ast(node->statements, indent + 1);
             if (node->next) print_ast(node->next, indent);
             break;

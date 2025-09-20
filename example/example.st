@@ -23,7 +23,7 @@ VAR
     average : REAL;
     flag : BOOL;
     state:INT;
-    retult:REAL;
+    result:REAL;
 END_VAR
 
 (* 初始化变量 *)
@@ -52,8 +52,8 @@ END_IF
 
 (* WHILE循环示例 *)
 counter := 5;
-WHILE counter > 0 DO
-    counter := counter - 1;
+WHILE counter < 10 DO
+    counter := counter + 1;
 END_WHILE
 
 CASE state OF
