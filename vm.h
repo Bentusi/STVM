@@ -127,6 +127,7 @@ typedef struct {
     VMVariable *variables;
     VMFunction *functions;
     
+    int main_entry;
     int running;
     char *error_msg;
 } VMState;

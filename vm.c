@@ -30,6 +30,7 @@ VMState *vm_create(void) {
     vm->variables = NULL;
     vm->functions = NULL;
     vm->running = 0;
+    vm->main_entry = 0;
     vm->error_msg = NULL;
     
     return vm;
@@ -39,8 +40,8 @@ VMState *vm_create(void) {
 void vm_destroy(VMState *vm) {
     if (!vm) return;
 
-    //if (vm->code) free(vm->code);
-    //if (vm->stack) free(vm->stack);
+    if (vm->code) free(vm->code);
+    if (vm->stack) free(vm->stack);
 
     /* 释放变量存储 */
     VMVariable *var = vm->variables;
@@ -126,7 +127,7 @@ void vm_push_frame(VMState *vm, int param_count) {
     frame->prev = vm->call_stack;
     vm->call_stack = frame;
     
-    printf("  创建栈帧: 返回地址=%d, 帧指针=%d, 参数个数=%d\n", 
+    printf("  创建栈帧: 返回地址=0x%04x, 帧指针=%d, 参数个数=%d\n", 
            frame->return_pc, frame->frame_pointer, param_count);
 }
 
@@ -138,9 +139,9 @@ void vm_pop_frame(VMState *vm) {
     }
     
     CallFrame *frame = vm->call_stack;
-    vm->pc = frame->return_pc;  // 恢复返回地址
+    vm->pc = frame->return_pc - 1;  // 恢复返回地址
     
-    printf("  销毁栈帧: 返回地址=%d\n", frame->return_pc);
+    printf("  销毁栈帧: 返回地址=0x%04x\n", frame->return_pc);
     
     vm->call_stack = frame->prev;
     free(frame);
@@ -220,16 +221,24 @@ void vm_compile_ast(VMState *vm, ASTNode *ast) {
             printf("初始化全局变量...\n");
             vm_initialize_global_variables(vm);
             
-            // 编译函数列表
+            // 编译函数列表到代码段前部
             if (ast->left) {
                 printf("编译函数列表...\n");
                 vm_compile_function_list(vm, ast->left);
             }
-            // 编译程序
+            
+            // 记录主程序入口点
+            int main_entry = vm->code_size;
+            printf("主程序入口点: 0x%04x\n", main_entry);
+            
+            // 编译程序主体
             if (ast->right) {
-                printf("编译程序...\n");
+                printf("编译主程序...\n");
                 vm_compile_ast(vm, ast->right);
             }
+            
+            // 设置主程序入口点
+            vm->main_entry = main_entry;
             break;
         }
         
@@ -559,14 +568,14 @@ void vm_reset(VMState *vm) {
 /* 执行虚拟机 */
 int vm_run(VMState *vm) {
     vm->running = 1;
-    vm->pc = 0;
+    vm->pc = vm->main_entry;
     vm->sp = 0;
     vm->call_stack = NULL;
     
     while (vm->running && vm->pc < vm->code_size) {
         VMInstruction *instr = &vm->code[vm->pc];
         
-        printf("PC=%d: ", vm->pc);
+        printf("PC=0x%04x: ", vm->pc);
         
         switch (instr->opcode) {
             case VM_LOAD_INT: {
@@ -841,7 +850,7 @@ int vm_run(VMState *vm) {
                 
                 // 清理参数（恢复栈指针到调用前状态）
                 if (vm->call_stack) {
-                    vm->sp = vm->call_stack->frame_pointer;
+                    vm->sp = 0;
                     printf("  清理参数, 恢复栈指针到: %d\n", vm->sp);
                 }
                 
