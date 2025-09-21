@@ -8,7 +8,7 @@ FLEX = flex
 BISON = bison
 
 # 目标文件
-TARGET = st_compiler
+TARGET = stvm
 OBJS = main.o ast.o vm.o st_lexer.o st_parser.tab.o
 
 # 生成的文件

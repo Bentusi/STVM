@@ -4,3 +4,4 @@ st_compiler
 st_lexer.c
 st_parser.tab.c
 st_parser.tab.h
+stvm
