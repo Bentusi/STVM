@@ -26,18 +26,8 @@ int main(int argc, char *argv[]) {
     printf("IEC61131 结构化文本编译器和虚拟机 v1.0\n");
     printf("支持：变量声明、赋值、IF/FOR/WHILE/CASE控制结构、表达式运算\n\n");
     
-    if (argc < 2) {
-        print_usage(argv[0]);
-        return 1;
-    }
-    
     /* 处理命令行参数 */
-    if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
-        print_usage(argv[0]);
-        return 0;
-    }
-    
-    if (strcmp(argv[1], "-i") == 0 || strcmp(argv[1], "--interactive") == 0) {
+    if (argc < 2) {
         /* 交互模式 */
         printf("进入交互模式（输入 'exit' 退出）:\n");
         char buffer[1024];
@@ -54,7 +44,12 @@ int main(int argc, char *argv[]) {
         printf("再见！\n");
         return 0;
     }
-    
+        
+    if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+        print_usage(argv[0]);
+        return 0;
+    }
+
     /* 文件模式 */
     return compile_and_run_file(argv[1]);
 }
