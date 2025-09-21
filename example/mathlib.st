@@ -748,8 +748,8 @@ END_VAR
     test_counter := test_counter + 1;
     test_real1 := 3.0;
     test_int1 := 4;
-    power_result := POWER_INT(test_real1, test_int1);
-    temp1 := ABS_REAL(power_result - 81.0);
+    power_result := POWER_INT(test_real1, test_int1) - 81.0;
+    temp1 := ABS_REAL(power_result);
     IF temp1 < 0.01 THEN
         pass_counter := pass_counter + 1;
     ELSE
@@ -759,8 +759,8 @@ END_VAR
     test_counter := test_counter + 1;
     test_real1 := 2.0;
     test_int1 := 0;
-    power_result := POWER_INT(test_real1, test_int1);
-    temp1 := ABS_REAL(power_result - 1.0);
+    power_result := POWER_INT(test_real1, test_int1) - 1.0;
+    temp1 := ABS_REAL(power_result);
     IF temp1 < 0.01 THEN
         pass_counter := pass_counter + 1;
     ELSE
@@ -770,18 +770,18 @@ END_VAR
     (* 测试平方根函数 *)
     test_counter := test_counter + 1;
     test_real1 := 49.0;
-    sqrt_result := SQRT(test_real1);
-    temp1 := ABS_REAL(sqrt_result - 7.0);
+    sqrt_result := SQRT(test_real1) - 7.0;
+    temp1 := ABS_REAL(sqrt_result);
     IF temp1 < 0.01 THEN
         pass_counter := pass_counter + 1;
     ELSE
         fail_counter := fail_counter + 1;
-    END_IF;
+    END_IF
 
     test_counter := test_counter + 1;
     test_real1 := 2.0;
-    sqrt_result := SQRT(test_real1);
-    temp1 := ABS_REAL(sqrt_result - 1.414213);
+    sqrt_result := SQRT(test_real1) - 1.414213;
+    temp1 := ABS_REAL(sqrt_result);
     IF temp1 < 0.01 THEN
         pass_counter := pass_counter + 1;
     ELSE
@@ -791,8 +791,8 @@ END_VAR
     (* 测试立方根函数 *)
     test_counter := test_counter + 1;
     test_real1 := 125.0;
-    cbrt_result := CBRT(test_real1);
-    temp1 := ABS_REAL(cbrt_result - 5.0);
+    cbrt_result := CBRT(test_real1) - 5.0;
+    temp1 := ABS_REAL(cbrt_result);
     IF temp1 < 0.01 THEN
         pass_counter := pass_counter + 1;
     ELSE
@@ -801,8 +801,8 @@ END_VAR
 
     test_counter := test_counter + 1;
     test_real1 := -27.0;
-    cbrt_result := CBRT(test_real1);
-    temp1 := ABS_REAL(cbrt_result - (-3.0));
+    cbrt_result := CBRT(test_real1) - (-3.0);
+    temp1 := ABS_REAL(cbrt_result);
     IF temp1 < 0.01 THEN
         pass_counter := pass_counter + 1;
     ELSE
@@ -816,8 +816,8 @@ END_VAR
     (* 测试自然指数函数 *)
     test_counter := test_counter + 1;
     test_real1 := 0.0;
-    exp_result := EXP(test_real1);
-    temp1 := ABS_REAL(exp_result - 1.0);
+    exp_result := EXP(test_real1) - 1.0;
+    temp1 := ABS_REAL(exp_result);
     IF temp1 < 0.01 THEN
         pass_counter := pass_counter + 1;
     ELSE
@@ -826,8 +826,8 @@ END_VAR
     
     test_counter := test_counter + 1;
     test_real1 := 1.0;
-    exp_result := EXP(test_real1);
-    temp1 := ABS_REAL(exp_result - E_CONST);
+    exp_result := EXP(test_real1) - E_CONST;
+    temp1 := ABS_REAL(exp_result);
     IF temp1 < 0.01 THEN
         pass_counter := pass_counter + 1;
     ELSE
@@ -835,87 +835,87 @@ END_VAR
     END_IF
     
     (* 测试自然对数函数 *)
-    test_counter := test_counter + 1
-    test_real1 := 1.0
-    ln_result := LN(test_real1)
-    temp1 := ABS_REAL(ln_result)
+    test_counter := test_counter + 1;
+    test_real1 := 1.0;
+    ln_result := LN(test_real1);
+    temp1 := ABS_REAL(ln_result);
     IF temp1 < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := E_CONST
-    ln_result := LN(test_real1)
-    temp1 := ABS_REAL(ln_result - 1.0)
+    test_counter := test_counter + 1;
+    test_real1 := E_CONST;
+    ln_result := LN(test_real1) - 1.0;
+    temp1 := ABS_REAL(ln_result);
     IF temp1 < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试常用对数函数 *)
-    test_counter := test_counter + 1
-    test_real1 := 10.0
-    log10_result := LOG10(test_real1)
-    temp1 := ABS_REAL(log10_result - 1.0)
+    test_counter := test_counter + 1;
+    test_real1 := 10.0;
+    log10_result := LOG10(test_real1) - 1.0;
+    temp1 := ABS_REAL(log10_result);
     IF temp1 < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := 100.0
-    log10_result := LOG10(test_real1)
-    temp1 := ABS_REAL(log10_result - 2.0)
+    test_counter := test_counter + 1;
+    test_real1 := 100.0;
+    log10_result := LOG10(test_real1) - 2.0;
+    temp1 := ABS_REAL(log10_result);
     IF temp1 < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试以2为底的对数函数 *)
-    test_counter := test_counter + 1
-    test_real1 := 2.0
-    log2_result := LOG2(test_real1)
-    temp1 := ABS_REAL(log2_result - 1.0)
+    test_counter := test_counter + 1;
+    test_real1 := 2.0;
+    log2_result := LOG2(test_real1) - 1.0;
+    temp1 := ABS_REAL(log2_result);
     IF temp1 < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := 16.0
-    log2_result := LOG2(test_real1)
-    temp1 := ABS_REAL(log2_result - 4.0)
+    test_counter := test_counter + 1;
+    test_real1 := 16.0;
+    log2_result := LOG2(test_real1) - 4.0;
+    temp1 := ABS_REAL(log2_result);
     IF temp1 < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试实数幂函数 *)
-    test_counter := test_counter + 1
-    test_real1 := 4.0
-    test_real2 := 0.5
-    power_result := POWER(test_real1, test_real2)
-    temp1 := ABS_REAL(power_result - 2.0)
+    test_counter := test_counter + 1;
+    test_real1 := 4.0;
+    test_real2 := 0.5;
+    power_result := POWER(test_real1, test_real2) - 2.0;
+    temp1 := ABS_REAL(power_result);
     IF temp1 < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := 8.0
-    test_real2 := 3.0
-    power_result := POWER(test_real1, test_real2)
-    temp1 := ABS_REAL(power_result - 512.0)
+    test_counter := test_counter + 1;
+    test_real1 := 8.0;
+    test_real2 := 3.0;
+    power_result := POWER(test_real1, test_real2) - 512.0;
+    temp1 := ABS_REAL(power_result);
     IF temp1 < 0.1 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
         fail_counter := fail_counter + 1;
     END_IF
@@ -925,131 +925,131 @@ END_VAR
     (* ============================================================ *)
     
     (* 测试RS触发器 *)
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := FALSE
-    temp_bool := FALSE
-    rs_output := RS_FLIP_FLOP(test_bool1, test_bool2, temp_bool)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := FALSE;
+    temp_bool := FALSE;
+    rs_output := RS_FLIP_FLOP(test_bool1, test_bool2, temp_bool);
     IF rs_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_bool1 := FALSE
-    test_bool2 := TRUE
-    temp_bool := TRUE
-    rs_output := RS_FLIP_FLOP(test_bool1, test_bool2, temp_bool)
+    test_counter := test_counter + 1;
+    test_bool1 := FALSE;
+    test_bool2 := TRUE;
+    temp_bool := TRUE;
+    rs_output := RS_FLIP_FLOP(test_bool1, test_bool2, temp_bool);
     IF rs_output = FALSE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_bool1 := FALSE
-    test_bool2 := FALSE
-    temp_bool := TRUE
-    rs_output := RS_FLIP_FLOP(test_bool1, test_bool2, temp_bool)
+    test_counter := test_counter + 1;
+    test_bool1 := FALSE;
+    test_bool2 := FALSE;
+    temp_bool := TRUE;
+    rs_output := RS_FLIP_FLOP(test_bool1, test_bool2, temp_bool);
     IF rs_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试SR触发器 *)
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := FALSE
-    temp_bool := FALSE
-    sr_output := SR_FLIP_FLOP(test_bool1, test_bool2, temp_bool)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := FALSE;
+    temp_bool := FALSE;
+    sr_output := SR_FLIP_FLOP(test_bool1, test_bool2, temp_bool);
     IF sr_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_bool1 := FALSE
-    test_bool2 := TRUE
-    temp_bool := TRUE
-    sr_output := SR_FLIP_FLOP(test_bool1, test_bool2, temp_bool)
+    test_counter := test_counter + 1;
+    test_bool1 := FALSE;
+    test_bool2 := TRUE;
+    temp_bool := TRUE;
+    sr_output := SR_FLIP_FLOP(test_bool1, test_bool2, temp_bool);
     IF sr_output = FALSE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试2oo3表决逻辑 *)
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := TRUE
-    test_bool3 := FALSE
-    vote_2oo3_output := VOTE_2oo3(test_bool1, test_bool2, test_bool3)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := TRUE;
+    test_bool3 := FALSE;
+    vote_2oo3_output := VOTE_2oo3(test_bool1, test_bool2, test_bool3);
     IF vote_2oo3_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := FALSE
-    test_bool3 := FALSE
-    vote_2oo3_output := VOTE_2oo3(test_bool1, test_bool2, test_bool3)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := FALSE;
+    test_bool3 := FALSE;
+    vote_2oo3_output := VOTE_2oo3(test_bool1, test_bool2, test_bool3);
     IF vote_2oo3_output = FALSE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := TRUE
-    test_bool3 := TRUE
-    vote_2oo3_output := VOTE_2oo3(test_bool1, test_bool2, test_bool3)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := TRUE;
+    test_bool3 := TRUE;
+    vote_2oo3_output := VOTE_2oo3(test_bool1, test_bool2, test_bool3);
     IF vote_2oo3_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试2oo4表决逻辑 *)
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := TRUE
-    test_bool3 := FALSE
-    test_bool4 := FALSE
-    vote_2oo4_output := VOTE_2oo4(test_bool1, test_bool2, test_bool3, test_bool4)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := TRUE;
+    test_bool3 := FALSE;
+    test_bool4 := FALSE;
+    vote_2oo4_output := VOTE_2oo4(test_bool1, test_bool2, test_bool3, test_bool4);
     IF vote_2oo4_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := FALSE
-    test_bool3 := FALSE
-    test_bool4 := FALSE
-    vote_2oo4_output := VOTE_2oo4(test_bool1, test_bool2, test_bool3, test_bool4)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := FALSE;
+    test_bool3 := FALSE;
+    test_bool4 := FALSE;
+    vote_2oo4_output := VOTE_2oo4(test_bool1, test_bool2, test_bool3, test_bool4);
     IF vote_2oo4_output = FALSE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := TRUE
-    test_bool3 := TRUE
-    test_bool4 := TRUE
-    vote_2oo4_output := VOTE_2oo4(test_bool1, test_bool2, test_bool3, test_bool4)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := TRUE;
+    test_bool3 := TRUE;
+    test_bool4 := TRUE;
+    vote_2oo4_output := VOTE_2oo4(test_bool1, test_bool2, test_bool3, test_bool4);
     IF vote_2oo4_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* ============================================================ *)
@@ -1057,147 +1057,147 @@ END_VAR
     (* ============================================================ *)
     
     (* 测试低通滤波器 *)
-    test_counter := test_counter + 1
-    test_real1 := 10.0
-    test_real2 := 0.3
-    filter_last := 5.0
-    filter_output := LOW_PASS_FILTER(test_real1, test_real2, filter_last)
-    temp1 := ABS_REAL(filter_output - 6.5)
+    test_counter := test_counter + 1;
+    test_real1 := 10.0;
+    test_real2 := 0.3;
+    filter_last := 5.0;
+    filter_output := LOW_PASS_FILTER(test_real1, test_real2, filter_last) - 6.5;
+    temp1 := ABS_REAL(filter_output);
     IF temp1 < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试滑动平均滤波器 *)
-    test_counter := test_counter + 1
-    temp1 := 1.0
-    temp2 := 2.0
-    temp3 := 3.0
-    temp4 := 4.0
-    temp5 := 5.0
-    avg_output := MOVING_AVG_5(temp1, temp2, temp3, temp4, temp5)
-    temp_val := ABS_REAL(avg_output - 3.0)
+    test_counter := test_counter + 1;
+    temp1 := 1.0;
+    temp2 := 2.0;
+    temp3 := 3.0;
+    temp4 := 4.0;
+    temp5 := 5.0;
+    avg_output := MOVING_AVG_5(temp1, temp2, temp3, temp4, temp5) - 3.0;
+    temp_val := ABS_REAL(avg_output);
     IF temp_val < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    temp1 := 10.0
-    temp2 := 20.0
-    temp3 := 30.0
-    temp4 := 40.0
-    temp5 := 50.0
-    avg_output := MOVING_AVG_5(temp1, temp2, temp3, temp4, temp5)
-    temp_val := ABS_REAL(avg_output - 30.0)
+    test_counter := test_counter + 1;
+    temp1 := 10.0;
+    temp2 := 20.0;
+    temp3 := 30.0;
+    temp4 := 40.0;
+    temp5 := 50.0;
+    avg_output := MOVING_AVG_5(temp1, temp2, temp3, temp4, temp5)- 30.0;
+    temp_val := ABS_REAL(avg_output );
     IF temp_val < 0.01 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试限幅器 *)
-    test_counter := test_counter + 1
-    test_real1 := 15.0
-    temp1 := 0.0
-    temp2 := 10.0
-    limit_output := LIMITER(test_real1, temp1, temp2)
+    test_counter := test_counter + 1;
+    test_real1 := 15.0;
+    temp1 := 0.0;
+    temp2 := 10.0;
+    limit_output := LIMITER(test_real1, temp1, temp2);
     IF limit_output = 10.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := -5.0
-    temp1 := 0.0
-    temp2 := 10.0
-    limit_output := LIMITER(test_real1, temp1, temp2)
+    test_counter := test_counter + 1;
+    test_real1 := -5.0;
+    temp1 := 0.0;
+    temp2 := 10.0;
+    limit_output := LIMITER(test_real1, temp1, temp2);
     IF limit_output = 0.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := 7.5
-    temp1 := 0.0
-    temp2 := 10.0
-    limit_output := LIMITER(test_real1, temp1, temp2)
+    test_counter := test_counter + 1;
+    test_real1 := 7.5;
+    temp1 := 0.0;
+    temp2 := 10.0;
+    limit_output := LIMITER(test_real1, temp1, temp2);
     IF limit_output = 7.5 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试死区函数 *)
-    test_counter := test_counter + 1
-    test_real1 := 5.0
-    test_real2 := 2.0
-    dead_output := DEAD_ZONE(test_real1, test_real2)
+    test_counter := test_counter + 1;
+    test_real1 := 5.0;
+    test_real2 := 2.0;
+    dead_output := DEAD_ZONE(test_real1, test_real2);
     IF dead_output = 3.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := -7.0
-    test_real2 := 2.0
-    dead_output := DEAD_ZONE(test_real1, test_real2)
+    test_counter := test_counter + 1;
+    test_real1 := -7.0;
+    test_real2 := 2.0;
+    dead_output := DEAD_ZONE(test_real1, test_real2);
     IF dead_output = -5.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := 1.5
-    test_real2 := 2.0
-    dead_output := DEAD_ZONE(test_real1, test_real2)
+    test_counter := test_counter + 1;
+    test_real1 := 1.5;
+    test_real2 := 2.0;
+    dead_output := DEAD_ZONE(test_real1, test_real2);
     IF dead_output = 0.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 测试滞回比较器 *)
-    test_counter := test_counter + 1
-    test_real1 := 12.0
-    temp1 := 10.0
-    temp2 := 5.0
-    hyst_last := FALSE
-    hyst_output := HYSTERESIS(test_real1, temp1, temp2, hyst_last)
+    test_counter := test_counter + 1;
+    test_real1 := 12.0;
+    temp1 := 10.0;
+    temp2 := 5.0;
+    hyst_last := FALSE;
+    hyst_output := HYSTERESIS(test_real1, temp1, temp2, hyst_last);
     IF hyst_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := 7.0
-    temp1 := 10.0
-    temp2 := 5.0
-    hyst_last := TRUE
-    hyst_output := HYSTERESIS(test_real1, temp1, temp2, hyst_last)
+    test_counter := test_counter + 1;
+    test_real1 := 7.0;
+    temp1 := 10.0;
+    temp2 := 5.0;
+    hyst_last := TRUE;
+    hyst_output := HYSTERESIS(test_real1, temp1, temp2, hyst_last);
     IF hyst_output = TRUE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := 3.0
-    temp1 := 10.0
-    temp2 := 5.0
-    hyst_last := TRUE
-    hyst_output := HYSTERESIS(test_real1, temp1, temp2, hyst_last)
+    test_counter := test_counter + 1;
+    test_real1 := 3.0;
+    temp1 := 10.0;
+    temp2 := 5.0;
+    hyst_last := TRUE;
+    hyst_output := HYSTERESIS(test_real1, temp1, temp2, hyst_last);
     IF hyst_output = FALSE THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* ============================================================ *)
@@ -1205,53 +1205,53 @@ END_VAR
     (* ============================================================ *)
     
     (* 组合逻辑测试1：滤波+限幅 *)
-    test_counter := test_counter + 1
-    test_real1 := 25.0
-    test_real2 := 0.4
-    filter_last := 10.0
-    temp_val := LOW_PASS_FILTER(test_real1, test_real2, filter_last)
-    temp1 := 0.0
-    temp2 := 20.0
-    limit_output := LIMITER(temp_val, temp1, temp2)
-    temp3 := ABS_REAL(limit_output - 16.0)
+    test_counter := test_counter + 1;
+    test_real1 := 25.0;
+    test_real2 := 0.4;
+    filter_last := 10.0;
+    temp_val := LOW_PASS_FILTER(test_real1, test_real2, filter_last);
+    temp1 := 0.0;
+    temp2 := 20.0;
+    limit_output := LIMITER(temp_val, temp1, temp2) - 16.0;
+    temp3 := ABS_REAL(limit_output);
     IF temp3 < 0.1 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 组合逻辑测试2：数学函数组合 *)
-    test_counter := test_counter + 1
-    test_real1 := 4.0
-    sqrt_result := SQRT(test_real1)
-    test_int1 := 3
-    power_result := POWER_INT(sqrt_result, test_int1)
-    temp1 := ABS_REAL(power_result - 8.0)
+    test_counter := test_counter + 1;
+    test_real1 := 4.0;
+    sqrt_result := SQRT(test_real1);
+    test_int1 := 3;
+    power_result := POWER_INT(sqrt_result, test_int1) - 8.0;
+    temp1 := ABS_REAL(power_result);
     IF temp1 < 0.1 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 组合逻辑测试3：表决+滤波 *)
-    test_counter := test_counter + 1
-    test_bool1 := TRUE
-    test_bool2 := TRUE
-    test_bool3 := FALSE
-    vote_2oo3_output := VOTE_2oo3(test_bool1, test_bool2, test_bool3)
+    test_counter := test_counter + 1;
+    test_bool1 := TRUE;
+    test_bool2 := TRUE;
+    test_bool3 := FALSE;
+    vote_2oo3_output := VOTE_2oo3(test_bool1, test_bool2, test_bool3);
     IF vote_2oo3_output = TRUE THEN
-        temp_val := 10.0
+        temp_val := 10.0;
     ELSE
-        temp_val := 0.0
+        temp_val := 0.0;
     END_IF
-    temp1 := 5.0
-    temp2 := 0.5
-    filter_output := LOW_PASS_FILTER(temp_val, temp2, temp1)
-    temp3 := ABS_REAL(filter_output - 7.5)
+    temp1 := 5.0;
+    temp2 := 0.5;
+    filter_output := LOW_PASS_FILTER(temp_val, temp2, temp1) - 7.5;
+    temp3 := ABS_REAL(filter_output);
     IF temp3 < 0.1 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* ============================================================ *)
@@ -1259,43 +1259,43 @@ END_VAR
     (* ============================================================ *)
     
     (* FOR循环测试 *)
-    test_counter := test_counter + 1
-    temp_val := 0.0
+    test_counter := test_counter + 1;
+    temp_val := 0.0;
     FOR i := 1 TO 10 DO
-        temp_val := temp_val + i
+        temp_val := temp_val + i;
     END_FOR
     IF temp_val = 55.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* WHILE循环测试 *)
-    test_counter := test_counter + 1
-    temp_int := 1
-    temp_val := 1.0
+    test_counter := test_counter + 1;
+    temp_int := 1;
+    temp_val := 1.0;
     WHILE temp_int <= 5 DO
-        temp_val := temp_val * temp_int
-        temp_int := temp_int + 1
+        temp_val := temp_val * temp_int;
+        temp_int := temp_int + 1;
     END_WHILE
     IF temp_val = 120.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 嵌套循环测试 *)
-    test_counter := test_counter + 1
-    temp_val := 0.0
+    test_counter := test_counter + 1;
+    temp_val := 0.0;
     FOR i := 1 TO 5 DO
         FOR j := 1 TO 3 DO
-            temp_val := temp_val + 1.0
+            temp_val := temp_val + 1.0;
         END_FOR
     END_FOR
     IF temp_val = 15.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* ============================================================ *)
@@ -1303,43 +1303,43 @@ END_VAR
     (* ============================================================ *)
     
     (* 零值测试 *)
-    test_counter := test_counter + 1
-    test_real1 := 0.0
-    sqrt_result := SQRT(test_real1)
+    test_counter := test_counter + 1;
+    test_real1 := 0.0;
+    sqrt_result := SQRT(test_real1);
     IF sqrt_result = 0.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
-    test_counter := test_counter + 1
-    test_real1 := 0.0
-    cbrt_result := CBRT(test_real1)
+    test_counter := test_counter + 1;
+    test_real1 := 0.0;
+    cbrt_result := CBRT(test_real1);
     IF cbrt_result = 0.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 大数值测试 *)
-    test_counter := test_counter + 1
-    test_real1 := 1000.0
-    test_real2 := 10.0
-    max_result := MAX_REAL(test_real1, test_real2)
+    test_counter := test_counter + 1;
+    test_real1 := 1000.0;
+    test_real2 := 10.0;
+    max_result := MAX_REAL(test_real1, test_real2);
     IF max_result = 1000.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 负数处理测试 *)
-    test_counter := test_counter + 1
-    test_real1 := -100.0
-    abs_result := ABS_REAL(test_real1)
+    test_counter := test_counter + 1;
+    test_real1 := -100.0;
+    abs_result := ABS_REAL(test_real1);
     IF abs_result = 100.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* ============================================================ *)
@@ -1347,32 +1347,33 @@ END_VAR
     (* ============================================================ *)
     
     (* 重复计算测试 *)
-    test_counter := test_counter + 1
-    temp_val := 0.0
+    test_counter := test_counter + 1;
+    temp_val := 0.0;
     FOR i := 1 TO 50 DO
-        test_real1 := i
-        sqrt_result := SQRT(test_real1)
-        temp_val := temp_val + sqrt_result
+        test_real1 := i;
+        sqrt_result := SQRT(test_real1);
+        temp_val := temp_val + sqrt_result;
     END_FOR
     IF temp_val > 200.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* 滤波器稳定性测试 *)
-    test_counter := test_counter + 1
-    filter_last := 0.0
+    test_counter := test_counter + 1;
+    filter_last := 0.0;
     FOR i := 1 TO 20 DO
-        test_real1 := 10.0
-        test_real2 := 0.1
-        filter_last := LOW_PASS_FILTER(test_real1, test_real2, filter_last)
+        test_real1 := 10.0;
+        test_real2 := 0.1;
+        filter_last := LOW_PASS_FILTER(test_real1, test_real2, filter_last);
     END_FOR
-    temp1 := ABS_REAL(filter_last - 10.0)
+    filter_last := filter_last - 10.0;
+    temp1 := ABS_REAL(filter_last);
     IF temp1 < 1.0 THEN
-        pass_counter := pass_counter + 1
+        pass_counter := pass_counter + 1;
     ELSE
-        fail_counter := fail_counter + 1
+        fail_counter := fail_counter + 1;
     END_IF
     
     (* ============================================================ *)
@@ -1380,13 +1381,13 @@ END_VAR
     (* ============================================================ *)
     
     (* 计算成功率 *)
-    temp_val := pass_counter
-    temp1 := test_counter
-    success_rate := temp_val / temp1 * 100.0
+    temp_val := pass_counter;
+    temp1 := test_counter;
+    success_rate := temp_val / temp1 * 100.0;
     
     (* 输出测试结果摘要 *)
-    test_real1 := pass_counter
-    test_real2 := fail_counter
-    temp_val := success_rate
+    test_real1 := pass_counter;
+    test_real2 := fail_counter;
+    temp_val := success_rate;
     
 END_PROGRAM

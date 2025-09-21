@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/st_compiler",
-            "args": ["${workspaceFolder}/example/function.st"],
+            "args": ["${workspaceFolder}/example/mathlib.st"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],
