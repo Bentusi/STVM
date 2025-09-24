@@ -1399,12 +1399,12 @@ int vm_process_sync_messages(st_vm_t *vm);
 ├── st_parser.y              # 语法规则定义（支持库导入）
 ├── ast.h/ast.c              # 抽象语法树（支持导入节点）
 ├── symbol_table.h/c         # 符号表管理（支持库符号）
-├── library_manager.h/c      # 库管理器
+├── libmgr.h/c               # 库管理器
 ├── builtin_math.c           # 内置数学库
 ├── builtin_string.c         # 内置字符串库
 ├── builtin_io.c             # 内置I/O库
-├── master_slave_sync.h/c    # 主从同步系统
-├── memory_mgr.h/c           # 静态内存管理
+├── ms_sync.h/c              # 主从同步系统
+├── mmgr.h/c                 # 静态内存管理
 ├── bytecode.h/c             # 字节码定义
 ├── codegen.h/c              # 代码生成器（支持库调用）
 ├── vm.h/vm.c                # 虚拟机实现（支持同步）
