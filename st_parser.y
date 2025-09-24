@@ -36,13 +36,13 @@ ASTNode *ast_root = NULL;
 %token <bool_val> BOOL_LITERAL
 
 /* 关键字 */
-%token PROGRAM END_PROGRAM VAR END_VAR VAR_INPUT VAR_OUTPUT VAR_IN_OUT FUNCTION END_FUNCTION FUNCTION_BLOCK END_FUNCTION_BLOCK
-%token BOOL_TYPE INT_TYPE REAL_TYPE STRING_TYPE
-%token IF THEN ELSE ELSIF END_IF FOR TO BY DO END_FOR WHILE END_WHILE
+%token PROGRAM END_PROGRAM VAR END_VAR VAR_LOCAL FUNCTION END_FUNCTION
+%token BOOL_TYPE INT_TYPE REAL_TYPE STRING_TYPE ARRAY_TYPE
+%token IF THEN ELSE ELSIF END_IF FOR TO DO BY END_FOR WHILE END_WHILE
 %token CASE OF END_CASE RETURN
 
 /* 运算符 */
-%token ASSIGN EQ NE LT LE GT GE PLUS MINUS MUL DIV MOD AND OR NOT
+%token ASSIGN EQ NE LT LE GT GE PLUS MINUS MUL DIV MOD AND OR NOT RANGE
 
 /* 分隔符 */
 %token SEMICOLON COLON COMMA DOT LPAREN RPAREN LBRACKET RBRACKET
@@ -55,7 +55,7 @@ ASTNode *ast_root = NULL;
 %type <node> statement_list statement assignment_stmt function_call_stmt
 %type <node> if_stmt for_stmt while_stmt case_stmt case_item case_list return_stmt
 %type <node> expression logical_expr comparison term factor function_call 
-%type <var_decl> var_section var_decl_list var_declaration parameter_list parameter_decl
+%type <var_decl> var_section var_global var_local var_decl_list var_declaration parameter_list parameter_decl
 %type <var_decl> argument_list argument_decl
 %type <data_type> data_type
 
@@ -107,6 +107,14 @@ program_decl: PROGRAM IDENTIFIER var_section statement_list END_PROGRAM
             }
             ;
 
+/* 程序变量声明段 */
+var_section: /* empty */ { $$ = NULL; }
+           | VAR var_decl_list END_VAR 
+           { 
+               $$ = $2; 
+           }
+           ;
+
 /* 函数列表 - 支持多个函数声明 */
 function_list: function_decl
              {
@@ -126,15 +134,33 @@ function_list: function_decl
              }
              ;
 
-/* 函数声明 */
-function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type var_section statement_list END_FUNCTION
+/* 函数声明 - 支持全局变量和局部变量的组合 */
+function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type var_global var_local statement_list END_FUNCTION
              {
                  /* 验证函数是否重复定义 */
                  if (find_global_function($2) != NULL) {
                      yyerror("函数重复定义");
                      YYERROR;
                  }
-                 $$ = create_function_node($2, $7, $4, $9);
+                 $$ = create_function_node($2, $7, $4, $8, $9, $10);
+             }
+             | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type var_global statement_list END_FUNCTION
+             {
+                /* 验证函数是否重复定义 */
+                 if (find_global_function($2) != NULL) {
+                     yyerror("函数重复定义");
+                     YYERROR;
+                 }
+                 $$ = create_function_node($2, $7, $4, $8, NULL, $9);
+             }
+             | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type var_local statement_list END_FUNCTION
+             {
+                /* 验证函数是否重复定义 */
+                 if (find_global_function($2) != NULL) {
+                     yyerror("函数重复定义");
+                     YYERROR;
+                 }
+                 $$ = create_function_node($2, $7, $4, NULL, $8, $9);
              }
              | FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type statement_list END_FUNCTION
              {
@@ -143,16 +169,34 @@ function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type 
                      yyerror("函数重复定义");
                      YYERROR;
                  }
-                 $$ = create_function_node($2, $7, $4, $8);
+                 $$ = create_function_node($2, $7, $4, NULL, NULL, $8);
              }
-             | FUNCTION IDENTIFIER COLON data_type var_section statement_list END_FUNCTION
+             | FUNCTION IDENTIFIER COLON data_type var_global var_local statement_list END_FUNCTION
              {
                 /* 验证函数是否重复定义 */
                  if (find_global_function($2) != NULL) {
                      yyerror("函数重复定义");
                      YYERROR;
                  }
-                 $$ = create_function_node($2, $4, NULL, $6);
+                 $$ = create_function_node($2, $4, NULL, $5, $6, $7);
+             }
+             | FUNCTION IDENTIFIER COLON data_type var_global statement_list END_FUNCTION
+             {
+                /* 验证函数是否重复定义 */
+                 if (find_global_function($2) != NULL) {
+                     yyerror("函数重复定义");
+                     YYERROR;
+                 }
+                 $$ = create_function_node($2, $4, NULL, $5, NULL, $6);
+             }
+             | FUNCTION IDENTIFIER COLON data_type var_local statement_list END_FUNCTION
+             {
+                /* 验证函数是否重复定义 */
+                 if (find_global_function($2) != NULL) {
+                     yyerror("函数重复定义");
+                     YYERROR;
+                 }
+                 $$ = create_function_node($2, $4, NULL, NULL, $5, $6);
              }
              | FUNCTION IDENTIFIER COLON data_type statement_list END_FUNCTION
              {
@@ -161,28 +205,45 @@ function_decl: FUNCTION IDENTIFIER LPAREN parameter_list RPAREN COLON data_type 
                      yyerror("函数重复定义");
                      YYERROR;
                  }
-                 $$ = create_function_node($2, $4, NULL, $5);
+                 $$ = create_function_node($2, $4, NULL, NULL, NULL, $5);
              }
              ;
 
-/* 变量声明段 */
-var_section: /* empty */ { $$ = NULL; }
+/* 全局变量声明段 */
+var_global: /* empty */ { $$ = NULL; }
             | VAR var_decl_list END_VAR 
             { 
                 $$ = $2; 
-                /* 确保变量声明被正确处理 */
+                /* 将全局变量添加到全局变量表 */
                 if ($2) {
-                    printf("Debug: 解析到变量声明段\n");
+                    printf("Debug: 解析到函数全局变量声明段\n");
+                    VarDecl *current = $2;
+                    while (current != NULL) {
+                        add_global_variable(current);
+                        printf("Debug: 添加全局变量 %s\n", current->name);
+                        current = current->next;
+                    }
                 }
             }
             ;
+
+/* 局部变量声明段 */
+var_local: /* empty */ { $$ = NULL; }
+         | VAR_LOCAL var_decl_list END_VAR 
+         { 
+             $$ = $2; 
+             /* 局部变量将在函数上下文中处理 */
+             if ($2) {
+                 printf("Debug: 解析到函数局部变量声明段\n");
+             }
+         }
+         ;
 
 var_decl_list: var_declaration
                 {
                     $$ = $1;
                     if ($1) {
-                        printf("Debug: 添加变量 %s\n", $1->name);
-                        add_global_variable($1);
+                        printf("Debug: 创建变量声明 %s\n", $1->name);
                     }
                 }
                 | var_decl_list var_declaration
@@ -196,7 +257,6 @@ var_decl_list: var_declaration
                         current->next = $2;
                         $$ = $1;
                         printf("Debug: 添加变量 %s 到列表\n", $2->name);
-                        add_global_variable($2);
                     }
                 }
                 ;

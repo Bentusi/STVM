@@ -17,7 +17,8 @@ typedef enum {
     TYPE_BOOL,
     TYPE_INT,
     TYPE_REAL,
-    TYPE_STRING
+    TYPE_STRING,
+    TYPE_ARRAY
 } DataType;
 
 /* 操作符类型 */
@@ -33,7 +34,6 @@ typedef enum {
     NODE_INVALID,
     NODE_PROGRAM,
     NODE_FUNCTION,
-    NODE_FUNCTION_BLOCK,
     NODE_STATEMENT_LIST,
     NODE_ASSIGN,
     NODE_IF,
@@ -84,7 +84,10 @@ typedef struct ASTNode {
     DataType data_type;
     Value value;
     OpType op_type;
-    VarDecl *param_list;
+    // 函数相关
+    VarDecl *param_list;        // 参数列表
+    VarDecl *local_vars;        // 函数内局部变量列表
+    VarDecl *global_vars;       // 函数内使用的全局变量
     DataType return_type;
     struct ASTNode *condition;
     struct ASTNode *statements;
@@ -118,7 +121,7 @@ ASTNode *create_real_literal_node(double value);
 ASTNode *create_bool_literal_node(int value);
 ASTNode *create_string_literal_node(char *value);
 ASTNode *create_compilation_unit_node(ASTNode *func_list, ASTNode *program);
-ASTNode *create_function_node(char *func_name, DataType return_type, VarDecl *param_list, ASTNode *statements);
+ASTNode *create_function_node(char *func_name, DataType return_type, VarDecl *param_list, VarDecl *global_var, VarDecl *local_vars, ASTNode *statements);
 ASTNode *create_function_block_node(char *fb_name, VarDecl *param_list, ASTNode *statements);
 ASTNode *create_return_node(ASTNode *return_value);
 

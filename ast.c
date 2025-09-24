@@ -113,8 +113,8 @@ ASTNode *create_compilation_unit_node(ASTNode *func_list, ASTNode *program) {
     return node;
 }
 
-/* 创建函数节点 */
-ASTNode *create_function_node(char *func_name, DataType return_type, VarDecl *param_list, ASTNode *statements) {
+/* 创建带变量的函数节点 */
+ASTNode *create_function_node(char *func_name, DataType return_type, VarDecl *param_list, VarDecl *global_var, VarDecl *local_vars, ASTNode *statements) {
     ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
     node->type = NODE_FUNCTION;
     node->identifier = strdup(func_name);
@@ -123,21 +123,191 @@ ASTNode *create_function_node(char *func_name, DataType return_type, VarDecl *pa
     node->statements = statements; // 函数体语句
     node->left = node->right = NULL;
     node->condition = node->else_statements = node->next = NULL;
+    
+    node->global_vars = global_var; // 全局变量列表
+    node->local_vars = local_vars;  // 局部变量列表
+
+    // 设置函数作用域
+    if (setup_function_scope(node) != 0) {
+        printf("错误: 无法为函数 '%s' 设置作用域\n", func_name);
+        free(node->identifier);
+        free(node);
+        return NULL;
+    }
+
     return node;
 }
 
+/* 为函数创建独立作用域 */
+/* 调用时机: 函数定义时 */
+int setup_function_scope(ASTNode *func) {
+    if (!func || func->type != NODE_FUNCTION) {
+        return -1;
+    }
+    
+    // 创建函数作用域
+    push_local_scope();
+    
+    // 添加参数到作用域
+    VarDecl *param = func->param_list;
+    while (param) {
+        VarDecl *local_param = create_var_decl(param->name, param->type);
+        if (add_local_variable(local_param) != 0) {
+            free(local_param->name);
+            free(local_param);
+            return -1;
+        }
+        param = param->next;
+    }
+    
+    // 添加局部变量到作用域
+    VarDecl *local_var = func->local_vars;
+    while (local_var) {
+        VarDecl *scope_var = create_var_decl(local_var->name, local_var->type);
+        if (add_local_variable(scope_var) != 0) {
+            free(scope_var->name);
+            free(scope_var);
+            return -1;
+        }
+        local_var = local_var->next;
+    }
+    
+    return 0;
+}
 
+/* 向函数添加局部变量 */
+int add_function_local_var(ASTNode *func, VarDecl *var) {
+    if (!func || func->type != NODE_FUNCTION || !var) {
+        return -1;
+    }
+    
+    // 检查是否与参数重名
+    VarDecl *param = func->param_list;
+    while (param) {
+        if (strcmp(param->name, var->name) == 0) {
+            printf("错误: 变量 '%s' 与参数重名\n", var->name);
+            return -2; // 与参数重名
+        }
+        param = param->next;
+    }
+    
+    // 检查是否与现有局部变量重名
+    VarDecl *local = func->local_vars;
+    while (local) {
+        if (strcmp(local->name, var->name) == 0) {
+            printf("错误: 变量 '%s' 与现有局部变量重名\n", var->name);
+            return -3; // 局部变量重名
+        }
+        local = local->next;
+    }
+    
+    // 添加到局部变量链表
+    var->next = func->local_vars;
+    func->local_vars = var;
+    
+    return 0;
+}
 
-/* 创建函数块节点 */
-ASTNode *create_function_block_node(char *fb_name, VarDecl *param_list, ASTNode *statements) {
-    ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
-    node->type = NODE_FUNCTION_BLOCK;
-    node->identifier = strdup(fb_name);
-    node->param_list = param_list;      // 参数列表
-    node->statements = statements; // 函数块体语句
-    node->left = node->right = NULL;
-    node->condition = node->else_statements = node->next = NULL;
-    return node;
+/* 查找函数内的局部变量 */
+VarDecl *find_function_local_var(ASTNode *func, char *name) {
+    if (!func || func->type != NODE_FUNCTION || !name) {
+        return NULL;
+    }
+    
+    // 先查找参数
+    VarDecl *param = func->param_list;
+    while (param) {
+        if (strcmp(param->name, name) == 0) {
+            return param;
+        }
+        param = param->next;
+    }
+    
+    // 再查找局部变量
+    VarDecl *local = func->local_vars;
+    while (local) {
+        if (strcmp(local->name, name) == 0) {
+            return local;
+        }
+        local = local->next;
+    }
+    
+    return NULL;
+}
+
+/* 获取函数所有变量数量 */
+int get_function_var_count(ASTNode *func) {
+    if (!func || func->type != NODE_FUNCTION) {
+        return 0;
+    }
+    
+    int count = 0;
+    
+    // 计算参数数量
+    VarDecl *param = func->param_list;
+    while (param) {
+        count++;
+        param = param->next;
+    }
+    
+    // 计算局部变量数量
+    VarDecl *local = func->local_vars;
+    while (local) {
+        count++;
+        local = local->next;
+    }
+    
+    return count;
+}
+
+/* 打印函数详细信息 */
+void print_function_details(ASTNode *func) {
+    if (!func || func->type != NODE_FUNCTION) {
+        return;
+    }
+    
+    printf("=== 函数详情: %s ===\n", func->identifier);
+    printf("返回类型: %d\n", func->return_type);
+    
+    // 打印参数
+    printf("参数列表:\n");
+    VarDecl *param = func->param_list;
+    int param_count = 0;
+    while (param) {
+        printf("  [%d] %s: %d\n", param_count++, param->name, param->type);
+        param = param->next;
+    }
+    
+    // 打印局部变量
+    printf("局部变量:\n");
+    VarDecl *local = func->local_vars;
+    int local_count = 0;
+    while (local) {
+        printf("  [%d] %s: %d\n", local_count++, local->name, local->type);
+        local = local->next;
+    }
+    
+    printf("总变量数量: %d\n", param_count + local_count);
+    printf("========================\n");
+}
+
+/* 释放函数变量 */
+void free_function_vars(ASTNode *func) {
+    if (!func || func->type != NODE_FUNCTION) {
+        return;
+    }
+    
+    // 释放参数列表
+    free_param_list(func->param_list);
+    func->param_list = NULL;
+    
+    // 释放局部变量列表
+    free_param_list(func->local_vars);
+    func->local_vars = NULL;
+    
+    // 释放全局变量引用列表
+    free_param_list(func->global_vars);
+    func->global_vars = NULL;
 }
 
 /* 创建返回值节点 */
@@ -309,7 +479,7 @@ ASTNode *create_string_literal_node(char *value) {
 /* 创建变量声明 */
 VarDecl *create_var_decl(char *name, DataType type) {
     VarDecl *var = (VarDecl *)malloc(sizeof(VarDecl));
-    var->name = strdup(name ? name : "NO_NAME"); // 处理NULL名称
+    var->name = strdup(name ? name : "Anonymous"); // 处理NULL名称
     var->type = type;
     var->next = NULL;
     return var;

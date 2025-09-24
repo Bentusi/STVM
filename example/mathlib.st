@@ -16,98 +16,71 @@
 (* ============================================================ *)
 
 (* 绝对值函数 - 整数版本 *)
-FUNCTION ABS_INT : INT
-VAR
-    input_val : INT;
-END_VAR
+FUNCTION ABS_INT (input_val : INT) : INT
     IF input_val >= 0 THEN
-        ABS_INT := input_val;
+        RETURN input_val;
     ELSE
-        ABS_INT := -input_val;
+        RETURN -input_val;
     END_IF
 END_FUNCTION
 
 (* 绝对值函数 - 实数版本 *)
-FUNCTION ABS_REAL : REAL
-VAR
-    input_val : REAL;
-END_VAR
+FUNCTION ABS_REAL (input_val : REAL) : REAL
     IF input_val >= 0.0 THEN
-        ABS_REAL := input_val;
+        RETURN input_val;
     ELSE
-        ABS_REAL := -input_val;
+        RETURN -input_val;
     END_IF
 END_FUNCTION
 
 (* 最大值函数 - 整数版本 *)
-FUNCTION MAX_INT : INT
-VAR
-    val1 : INT;
-    val2 : INT;
-END_VAR
+FUNCTION MAX_INT (val1 : INT, val2 : INT) : INT
     IF val1 > val2 THEN
-        MAX_INT := val1;
+        RETURN val1;
     ELSE
-        MAX_INT := val2;
+        RETURN val2;
     END_IF
 END_FUNCTION
 
 (* 最小值函数 - 整数版本 *)
-FUNCTION MIN_INT : INT
-VAR
-    val1 : INT;
-    val2 : INT;
-END_VAR
+FUNCTION MIN_INT (val1 : INT, val2 : INT) : INT
     IF val1 < val2 THEN
-        MIN_INT := val1;
+        RETURN val1;
     ELSE
-        MIN_INT := val2;
+        RETURN val2;
     END_IF
 END_FUNCTION
 
 (* 最大值函数 - 实数版本 *)
-FUNCTION MAX_REAL : REAL
-VAR
-    val1 : REAL;
-    val2 : REAL;
-END_VAR
+FUNCTION MAX_REAL (val1 : REAL, val2 : REAL) : REAL
     IF val1 > val2 THEN
-        MAX_REAL := val1;
+        RETURN val1;
     ELSE
-        MAX_REAL := val2;
+        RETURN val2;
     END_IF
 END_FUNCTION
 
 (* 最小值函数 - 实数版本 *)
-FUNCTION MIN_REAL : REAL
-VAR
-    val1 : REAL;
-    val2 : REAL;
-END_VAR
+FUNCTION MIN_REAL (val1 : REAL, val2 : REAL) : REAL
     IF val1 < val2 THEN
-        MIN_REAL := val1;
+        RETURN val1;
     ELSE
-        MIN_REAL := val2;
+        RETURN val2;
     END_IF
 END_FUNCTION
 
 (* 符号函数 *)
-FUNCTION SIGN : INT
-VAR
-    input_val : REAL;
-END_VAR
+FUNCTION SIGN (input_val : REAL) : INT
     IF input_val > 0.0 THEN
-        SIGN := 1;
+        RETURN 1;
     ELSE
-        SIGN := 0;
+        RETURN 0;
     END_IF
 END_FUNCTION
 
 (* 幂函数 - 整数指数版本 *)
-FUNCTION POWER_INT : REAL
+FUNCTION POWER_INT (base : REAL, exponent : INT) : REAL
 VAR
-    base : REAL;
-    exponent : INT;
     result : REAL;
     temp_exp : INT;
     i : INT;
@@ -123,13 +96,12 @@ END_VAR
         result := 1.0 / result;
     END_IF
     
-    POWER_INT := result;
+    RETURN result;
 END_FUNCTION
 
 (* 平方根函数 - 牛顿迭代法 *)
-FUNCTION SQRT : REAL
+FUNCTION SQRT (input_val : REAL) : REAL
 VAR
-    input_val : REAL;
     result : REAL;
     precision : REAL;
     old_result : REAL;
@@ -137,13 +109,11 @@ VAR
     diff_val : REAL;
 END_VAR
     IF input_val < 0.0 THEN
-        SQRT := 0.0;
-        RETURN;
+        RETURN 0.0;
     END_IF
     
     IF input_val = 0.0 THEN
-        SQRT := 0.0;
-        RETURN;
+        RETURN 0.0;
     END_IF
     
     result := input_val / 2.0;
@@ -159,20 +129,18 @@ END_VAR
         diff_val := ABS_REAL(diff_val);
         
         IF diff_val < precision THEN
-            SQRT := result;
-            RETURN;
+            RETURN result;
         END_IF
         
         iteration_count := iteration_count + 1;
     END_WHILE
     
-    SQRT := result;
+    RETURN result;
 END_FUNCTION
 
 (* 立方根函数 *)
-FUNCTION CBRT : REAL
+FUNCTION CBRT (input_val : REAL) : REAL
 VAR
-    input_val : REAL;
     result : REAL;
     precision : REAL;
     old_result : REAL;
@@ -187,8 +155,7 @@ END_VAR
     abs_input := ABS_REAL(input_val);
     
     IF abs_input = 0.0 THEN
-        CBRT := 0.0;
-        RETURN;
+        RETURN 0.0;
     END_IF
     
     result := abs_input / 3.0;
@@ -206,20 +173,18 @@ END_VAR
         diff_val := ABS_REAL(diff_val);
         
         IF diff_val < precision THEN
-            CBRT := result * sign_val;
-            RETURN;
+            RETURN result * sign_val;
         END_IF
         
         iteration_count := iteration_count + 1;
     END_WHILE
     
-    CBRT := result * sign_val;
+    RETURN result * sign_val;
 END_FUNCTION
 
 (* 自然指数函数 - 泰勒级数 *)
-FUNCTION EXP : REAL
+FUNCTION EXP (x : REAL) : REAL
 VAR
-    x : REAL;
     result : REAL;
     term : REAL;
     factorial_val : REAL;
@@ -235,13 +200,12 @@ END_VAR
         result := result + term / factorial_val;
     END_FOR
     
-    EXP := result;
+    RETURN result;
 END_FUNCTION
 
 (* 自然对数函数 - 级数展开 *)
-FUNCTION LN : REAL
+FUNCTION LN (x : REAL) : REAL
 VAR
-    x : REAL;
     result : REAL;
     y : REAL;
     term : REAL;
@@ -251,13 +215,11 @@ VAR
     temp2 : REAL;
 END_VAR
     IF x <= 0.0 THEN
-        LN := 0.0;
-        RETURN;
+        RETURN 0.0;
     END_IF
     
     IF x = 1.0 THEN
-        LN := 0.0;
-        RETURN;
+        RETURN 0.0;
     END_IF
     
     temp1 := x - 1.0;
@@ -274,47 +236,43 @@ END_VAR
         term := power;
     END_FOR
     
-    LN := 2.0 * result;
+    RETURN 2.0 * result;
 END_FUNCTION
 
 (* 常用对数函数 *)
-FUNCTION LOG10 : REAL
+FUNCTION LOG10 (x : REAL) : REAL
 VAR
-    x : REAL;
     ln_10 : REAL;
     ln_x : REAL;
 END_VAR
     ln_10 := 2.302585092994046;
     ln_x := LN(x);
-    LOG10 := ln_x / ln_10;
+    RETURN ln_x / ln_10;
 END_FUNCTION
 
 (* 以2为底的对数函数 *)
-FUNCTION LOG2 : REAL
+FUNCTION LOG2 (x : REAL) : REAL
 VAR
-    x : REAL;
     ln_2 : REAL;
     ln_x : REAL;
 END_VAR
     ln_2 := 0.6931471805599453;
     ln_x := LN(x);
-    LOG2 := ln_x / ln_2;
+    RETURN ln_x / ln_2;
 END_FUNCTION
 
 (* 实数幂函数 *)
-FUNCTION POWER : REAL
+FUNCTION POWER (base : REAL, exponent : REAL) : REAL
 VAR
-    base : REAL;
-    exponent : REAL;
     ln_base : REAL;
     exp_val : REAL;
 END_VAR
     IF base <= 0.0 THEN
-        POWER := 0.0;
+        RETURN 0.0;
     ELSE
         ln_base := LN(base);
         exp_val := exponent * ln_base;
-        POWER := EXP(exp_val);
+        RETURN EXP(exp_val);
     END_IF
 END_FUNCTION
 
@@ -323,11 +281,8 @@ END_FUNCTION
 (* ============================================================ *)
 
 (* RS触发器实现 *)
-FUNCTION RS_FLIP_FLOP : BOOL
+FUNCTION RS_FLIP_FLOP (set_input : BOOL, reset_input : BOOL, last_output : BOOL) : BOOL
 VAR
-    set_input : BOOL;
-    reset_input : BOOL;
-    last_output : BOOL;
     output : BOOL;
 END_VAR
     IF set_input = TRUE THEN
@@ -340,15 +295,12 @@ END_VAR
         output := last_output;
     END_IF
     
-    RS_FLIP_FLOP := output;
+    RETURN output;
 END_FUNCTION
 
 (* SR触发器实现（与RS相反逻辑） *)
-FUNCTION SR_FLIP_FLOP : BOOL
+FUNCTION SR_FLIP_FLOP (set_input : BOOL, reset_input : BOOL, last_output : BOOL) : BOOL
 VAR
-    set_input : BOOL;
-    reset_input : BOOL;
-    last_output : BOOL;
     output : BOOL;
 END_VAR
     IF reset_input = TRUE THEN
@@ -361,15 +313,12 @@ END_VAR
         output := last_output;
     END_IF
     
-    SR_FLIP_FLOP := output;
+    RETURN output;
 END_FUNCTION
 
 (* 2oo3逻辑（3选2表决逻辑） *)
-FUNCTION VOTE_2oo3 : BOOL
+FUNCTION VOTE_2oo3 (input1 : BOOL, input2 : BOOL, input3 : BOOL) : BOOL
 VAR
-    input1 : BOOL;
-    input2 : BOOL;
-    input3 : BOOL;
     count : INT;
     result : BOOL;
 END_VAR
@@ -393,16 +342,12 @@ END_VAR
         result := FALSE;
     END_IF
     
-    VOTE_2oo3 := result;
+    RETURN result;
 END_FUNCTION
 
 (* 2oo4逻辑（4选2表决逻辑） *)
-FUNCTION VOTE_2oo4 : BOOL
+FUNCTION VOTE_2oo4 (input1 : BOOL, input2 : BOOL, input3 : BOOL, input4 : BOOL) : BOOL
 VAR
-    input1 : BOOL;
-    input2 : BOOL;
-    input3 : BOOL;
-    input4 : BOOL;
     count : INT;
     result : BOOL;
 END_VAR
@@ -430,15 +375,12 @@ END_VAR
         result := FALSE;
     END_IF
     
-    VOTE_2oo4 := result;
+    RETURN result;
 END_FUNCTION
 
 (* 一阶低通滤波器 *)
-FUNCTION LOW_PASS_FILTER : REAL
+FUNCTION LOW_PASS_FILTER (input_val : REAL, filter_const : REAL, last_output : REAL) : REAL
 VAR
-    input_val : REAL;
-    filter_const : REAL;
-    last_output : REAL;
     output : REAL;
     temp1 : REAL;
     temp2 : REAL;
@@ -447,17 +389,12 @@ END_VAR
     temp2 := temp1 * last_output;
     output := filter_const * input_val + temp2;
     
-    LOW_PASS_FILTER := output;
+    RETURN output;
 END_FUNCTION
 
 (* 滑动平均滤波器（5点） *)
-FUNCTION MOVING_AVG_5 : REAL
+FUNCTION MOVING_AVG_5 (val1 : REAL, val2 : REAL, val3 : REAL, val4 : REAL, val5 : REAL) : REAL
 VAR
-    val1 : REAL;
-    val2 : REAL;
-    val3 : REAL;
-    val4 : REAL;
-    val5 : REAL;
     sum : REAL;
     result : REAL;
 END_VAR
@@ -467,15 +404,12 @@ END_VAR
     sum := sum + val5;
     result := sum / 5.0;
     
-    MOVING_AVG_5 := result;
+    RETURN result;
 END_FUNCTION
 
 (* 限幅器函数 *)
-FUNCTION LIMITER : REAL
+FUNCTION LIMITER (input_val : REAL, min_limit : REAL, max_limit : REAL) : REAL
 VAR
-    input_val : REAL;
-    min_limit : REAL;
-    max_limit : REAL;
     output : REAL;
 END_VAR
     IF input_val < min_limit THEN
@@ -484,14 +418,12 @@ END_VAR
         output := input_val;
     END_IF
 
-    LIMITER := output;
+    RETURN output;
 END_FUNCTION
 
 (* 死区函数 *)
-FUNCTION DEAD_ZONE : REAL
+FUNCTION DEAD_ZONE (input_val : REAL, dead_band : REAL) : REAL
 VAR
-    input_val : REAL;
-    dead_band : REAL;
     output : REAL;
     abs_input : REAL;
 END_VAR
@@ -507,16 +439,12 @@ END_VAR
         END_IF
     END_IF
     
-    DEAD_ZONE := output;
+    RETURN output;
 END_FUNCTION
 
 (* 滞回比较器 *)
-FUNCTION HYSTERESIS : BOOL
+FUNCTION HYSTERESIS (input_val : REAL, upper_limit : REAL, lower_limit : REAL, last_output : BOOL) : BOOL
 VAR
-    input_val : REAL;
-    upper_limit : REAL;
-    lower_limit : REAL;
-    last_output : BOOL;
     output : BOOL;
 END_VAR
     IF last_output = FALSE THEN
@@ -533,20 +461,12 @@ END_VAR
         END_IF
     END_IF
     
-    HYSTERESIS := output;
+    RETURN output;
 END_FUNCTION
 
 (* PID控制器简化版本 *)
-FUNCTION PID_SIMPLE : REAL
+FUNCTION PID_SIMPLE (setpoint : REAL, process_var : REAL, kp : REAL, ki : REAL, kd : REAL, last_error : REAL, integral : REAL, dt : REAL) : REAL
 VAR
-    setpoint : REAL;
-    process_var : REAL;
-    kp : REAL;
-    ki : REAL;
-    kd : REAL;
-    last_error : REAL;
-    integral : REAL;
-    dt : REAL;
     error : REAL;
     derivative : REAL;
     output : REAL;

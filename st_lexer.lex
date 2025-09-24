@@ -1,7 +1,7 @@
 /*
  * filepath: /home/jiang/src/lexer/st_lexer.lex
  * IEC61131 结构化文本语言词法分析器
- * 支持：变量声明、基本数据类型、控制结构、表达式
+ * 支持：变量声明、基本数据类型、控制结构、表达式、数组
  */
 
 %{
@@ -34,20 +34,17 @@ COMMENT    \(\*[^*]*\*+([^)*][^*]*\*+)*\)
 "PROGRAM"            { return PROGRAM; }
 "END_PROGRAM"        { return END_PROGRAM; }
 "VAR"                { return VAR; }
+"VAR_LOCAL"          { return VAR_LOCAL; }
 "END_VAR"            { return END_VAR; }
-"VAR_INPUT"          { return VAR_INPUT; }
-"VAR_OUTPUT"         { return VAR_OUTPUT; }
-"VAR_IN_OUT"         { return VAR_IN_OUT; }
 "FUNCTION"           { return FUNCTION; }
 "END_FUNCTION"       { return END_FUNCTION; }
-"FUNCTION_BLOCK"     { return FUNCTION_BLOCK; }
-"END_FUNCTION_BLOCK" { return END_FUNCTION_BLOCK; }
 
   /* 数据类型关键字 */
 "BOOL"          { return BOOL_TYPE; }
 "INT"           { return INT_TYPE; }
 "REAL"          { return REAL_TYPE; }
 "STRING"        { return STRING_TYPE; }
+"ARRAY"         { return ARRAY_TYPE; }
 
   /* 控制结构关键字 */
 "IF"            { return IF; }
@@ -97,6 +94,7 @@ COMMENT    \(\*[^*]*\*+([^)*][^*]*\*+)*\)
 "AND"           { return AND; }
 "OR"            { return OR; }
 "NOT"           { return NOT; }
+".."            { return RANGE; }
 
   /* 分隔符 */
 ";"             { return SEMICOLON; }
