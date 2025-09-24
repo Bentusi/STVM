@@ -1,1315 +1,1343 @@
 /*
- * IEC61131 虚拟机 (VM) 实现
- * 基于stack的虚拟机实现，支持函数调用和局部变量
- * 使用递归下降编译技术将AST编译为字节码
- * 平台无关的字节码执行引擎实现
+ * IEC61131 ST语言虚拟机实现
+ * 支持栈式执行、库函数调用和主从同步
  */
 
+#include "symbol_table.h"
+#include "vm.h"
+#include "mmgr.h"
+#include "libmgr.h"
+#include "ms_sync.h"
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
-#include "vm.h"
+#include <math.h>
+#include <time.h>
+
+/* 内部辅助函数声明 */
+static int vm_load_bytecode_from_file(st_vm_t *vm, const bytecode_file_t *bc_file);
+static int vm_execute_main_loop(st_vm_t *vm);
+static int vm_handle_sync_operations(st_vm_t *vm);
+static void vm_update_statistics(st_vm_t *vm, opcode_t opcode);
+static bool vm_check_execution_limits(st_vm_t *vm);
+
+/* ========== 虚拟机生命周期管理 ========== */
 
 /* 创建虚拟机实例 */
-VMState *vm_create(void) {
-    VMState *vm = (VMState *)malloc(sizeof(VMState));
-    if (!vm) return NULL;
+st_vm_t* vm_create(void) {
+    st_vm_t *vm = (st_vm_t*)mmgr_alloc_general(sizeof(st_vm_t));
+    if (!vm) {
+        return NULL;
+    }
     
-    vm->code = (VMInstruction *)malloc(MAX_CODE_SIZE * sizeof(VMInstruction));
-    vm->stack = (VMValue *)malloc(MAX_STACK_SIZE * sizeof(VMValue));
+    memset(vm, 0, sizeof(st_vm_t));
     
-    vm->code_size = 0;
+    /* 初始化栈 */
+    vm->operand_stack.top = -1;
+    vm->operand_stack.capacity = MAX_STACK_SIZE;
+    vm->call_stack_top = -1;
+    
+    /* 初始化状态 */
+    vm->state = VM_STATE_INIT;
     vm->pc = 0;
-    vm->stack_size = MAX_STACK_SIZE;
-    vm->sp = 0;
-    vm->call_stack = NULL;  // 确保调用栈初始化为NULL
-    vm->variables = NULL;
-    vm->functions = NULL;
-    vm->running = 0;
-    vm->main_entry = 0;
-    vm->error_msg = NULL;
+    vm->sync_mode = VM_SYNC_NONE;
+    vm->sync_enabled = false;
+    
+    /* 初始化调试信息 */
+    vm->debug_info.debug_enabled = false;
+    vm->debug_info.step_mode = false;
+    vm->debug_info.breakpoint_count = 0;
+    vm->debug_info.breakpoints = (uint32_t*)mmgr_alloc_general(sizeof(uint32_t) * 100);
+    
+    /* 初始化同步变量数组 */
+    vm->sync_var_indices = (uint32_t*)mmgr_alloc_general(sizeof(uint32_t) * MAX_SYNC_VARIABLES);
+    
+    if (!vm->debug_info.breakpoints || !vm->sync_var_indices) {
+        return NULL;
+    }
     
     return vm;
 }
 
 /* 销毁虚拟机实例 */
-void vm_destroy(VMState *vm) {
+void vm_destroy(st_vm_t *vm) {
     if (!vm) return;
-
-    if (vm->code) free(vm->code);
-    if (vm->stack) free(vm->stack);
-
-    /* 释放变量存储 */
-    VMVariable *var = vm->variables;
-    while (var) {
-        VMVariable *next = var->next;
-        free(var->name);
-        if (var->value.type == TYPE_STRING && var->value.value.str_val) {
-            free(var->value.value.str_val);
-        }
-        free(var);
-        var = next;
-    }
     
-    if (vm->error_msg) free(vm->error_msg);
-    free(vm);
+    vm_cleanup(vm);
+    /* 内存由MMGR管理，不需要显式释放 */
 }
 
-/* 生成虚拟机指令 */
-void vm_emit(VMState *vm, VMOpcode opcode, ...) {
-    if (vm->code_size >= MAX_CODE_SIZE) {
-        vm_set_error(vm, "代码段溢出");
-        return;
+/* 初始化虚拟机 */
+int vm_init(st_vm_t *vm, const vm_config_t *config) {
+    if (!vm) {
+        return -1;
     }
     
-    va_list args;
-    va_start(args, opcode);
-    
-    VMInstruction *instr = &vm->code[vm->code_size++];
-    instr->opcode = opcode;
-    
-    switch (opcode) {
-        case VM_LOAD_INT:
-        case VM_LOAD_BOOL:
-        case VM_JMP:
-        case VM_JZ:
-        case VM_JNZ:
-        case VM_PUSH_ARGS:
-        case VM_CALL:
-            instr->int_operand = va_arg(args, int);
-            break;
-        case VM_LOAD_REAL:
-            instr->real_operand = va_arg(args, double);
-            break;
-        case VM_LOAD_STRING:
-        case VM_LOAD_VAR:
-        case VM_STORE_VAR:
-            instr->str_operand = strdup(va_arg(args, char *));
-            break;
-        case VM_POP:
-        case VM_DUP:
-        case VM_ADD:
-        case VM_SUB:
-        case VM_MUL:
-        case VM_DIV:
-        case VM_NEG:
-        case VM_EQ:
-        case VM_NE:
-        case VM_LT:
-        case VM_LE:
-        case VM_GT:
-        case VM_GE:
-        case VM_AND:
-        case VM_OR:
-        case VM_NOT:
-        case VM_RET:
-        case VM_HALT:
-            /* 无操作数指令 */
-            break;
-        default:
-            /* 其他指令无操作数 */
-            break;
+    /* 应用配置 */
+    if (config) {
+        vm->debug_info.debug_enabled = config->enable_debug;
+        vm->sync_enabled = config->enable_sync;
+        vm->sync_mode = config->sync_mode;
     }
     
-    va_end(args);
+    /* 重置统计信息 */
+    vm_reset_statistics(vm);
+    
+    /* 初始化全局变量区 */
+    vm_init_global_vars(vm, MAX_GLOBAL_VARS);
+    
+    vm->state = VM_STATE_INIT;
+    
+    return 0;
 }
 
-/* 压入调用栈帧 */
-void vm_push_frame(VMState *vm, int param_count) {
-    CallFrame *frame = (CallFrame *)malloc(sizeof(CallFrame));
-    frame->return_pc = vm->pc + 1;  // 保存返回地址
-    frame->frame_pointer = vm->sp - param_count;  // 帧指针指向参数起始位置
-    frame->local_count = param_count;
-    frame->prev = vm->call_stack;
-    vm->call_stack = frame;
-    
-    printf("  创建栈帧: 返回地址=0x%04x, 帧指针=%d, 参数个数=%d\n", 
-           frame->return_pc, frame->frame_pointer, param_count);
-}
-
-/* 弹出调用栈帧 */
-void vm_pop_frame(VMState *vm) {
-    if (!vm->call_stack) {
-        vm_set_error(vm, "调用栈为空");
-        return;
-    }
-    
-    CallFrame *frame = vm->call_stack;
-    vm->pc = frame->return_pc - 1;  // 恢复返回地址
-    
-    printf("  销毁栈帧: 返回地址=0x%04x\n", frame->return_pc);
-    
-    vm->call_stack = frame->prev;
-    free(frame);
-}
-
-/* 编译函数调用 */
-void vm_compile_function_call(VMState *vm, ASTNode *node) {
-    if (node->type != NODE_FUNCTION_CALL) return;
-    
-    printf("编译函数调用: %s\n", node->identifier);
-    
-    // 统计参数个数
-    int param_count = 0;
-    VarDecl *arg = node->param_list;
-    
-    // 编译参数表达式（从左到右压栈）
-    while (arg) {
-        // 目前只支持参数是变量或字面量
-        switch (arg->type)
-        {
-        case TYPE_IDENTIFIER:
-            vm_emit(vm, VM_LOAD_VAR, arg->name);
-            printf("  生成指令: LOAD_VAR %s\n", arg->name);
-            break;
-        case TYPE_INT:
-            vm_emit(vm, VM_LOAD_INT, arg->value.int_val);
-            printf("  生成指令: LOAD_INT %d\n", arg->value.int_val);
-            break;
-        case TYPE_REAL:
-            vm_emit(vm, VM_LOAD_REAL, arg->value.real_val);
-            printf("  生成指令: LOAD_REAL %f\n", arg->value.real_val);
-            break;
-        case TYPE_BOOL:
-            vm_emit(vm, VM_LOAD_BOOL, arg->value.bool_val);
-            printf("  生成指令: LOAD_BOOL %s\n", arg->value.bool_val ? "TRUE" : "FALSE");
-            break;
-        case TYPE_STRING:
-            vm_emit(vm, VM_LOAD_STRING, arg->value.str_val);
-            printf("  生成指令: LOAD_STRING \"%s\"\n", arg->value.str_val);
-            break;
-        default:
-            break;
-        }
-        param_count++;
-        arg = arg->next;
-    }
-
-    // 压入参数个数
-    vm_emit(vm, VM_PUSH_ARGS, param_count);
-
-    // 生成函数调用指令
-    char func_label[256];
-    snprintf(func_label, sizeof(func_label), "__func_%s__", node->identifier);
-    
-    // 查找函数地址
-    VMFunction *func = vm->functions;
-    while (func && strcmp(func->name, func_label) != 0) {
-        func = func->next;
-    }
-    
-    if (!func) {
-        vm_set_error(vm, "调用未知函数");
-        return;
-    }
-    
-    vm_emit(vm, VM_CALL, func->addr);  // 使用实际地址而不是字符串
-    printf("  生成调用指令: %s@0x%04x (参数个数: %d)\n", func_label, func->addr, param_count);
-}
-
-/* 编译AST到虚拟机字节码 */
-void vm_compile_ast(VMState *vm, ASTNode *ast) {
-    if (!ast) return;
-    
-    switch (ast->type) {
-        case NODE_COMPILATION_UNIT: {
-            // 首先初始化全局变量
-            printf("初始化全局变量...\n");
-            vm_initialize_global_variables(vm);
-            
-            // 编译函数列表到代码段前部
-            if (ast->left) {
-                printf("编译函数列表...\n");
-                vm_compile_function_list(vm, ast->left);
-            }
-            
-            // 记录主程序入口点
-            int main_entry = vm->code_size;
-            printf("主程序入口点: 0x%04x\n", main_entry);
-            
-            // 编译程序主体
-            if (ast->right) {
-                printf("编译主程序...\n");
-                vm_compile_ast(vm, ast->right);
-            }
-            
-            // 设置主程序入口点
-            vm->main_entry = main_entry;
-            break;
-        }
-        
-        case NODE_PROGRAM: {
-            // 确保程序开始时全局变量已初始化
-            vm_compile_ast(vm, ast->statements);
-            vm_emit(vm, VM_HALT);
-            break;
-        }
-        
-        case NODE_STATEMENT_LIST: {
-            vm_compile_ast(vm, ast->left);
-            if (ast->next) {
-                vm_compile_ast(vm, ast->next);
-            }
-            break;
-        }
-        
-        case NODE_ASSIGN: {
-            vm_compile_ast(vm, ast->right);  // 计算右侧表达式
-            vm_emit(vm, VM_STORE_VAR, ast->identifier);
-            break;
-        }
-
-        case NODE_FUNCTION: {
-            /* 函数定义处理 */
-            int func_start = vm->code_size;
-            
-            // 统计参数个数
-            int param_count = 0;
-            VarDecl *param = ast->param_list;
-            while (param) {
-                param_count++;
-                param = param->next;
-            }
-            
-            printf("编译函数: %s (参数个数: %d, 地址: 0x%04x)\n", 
-                   ast->identifier, param_count, func_start);
-            
-            // 编译函数体
-            vm_compile_ast(vm, ast->statements);
-            
-            // 如果函数没有显式返回，添加默认返回
-            // 检查函数体最后一条指令是否为RET，如果不是，则添加默认返回
-            if (vm->code_size == func_start || vm->code[vm->code_size - 1].opcode != VM_RET) {
-                // 如果函数有返回值类型，则返回默认值；否则不返回值
-                if (ast->return_type != TYPE_VOID) {
-                    vm_emit(vm, VM_LOAD_INT, 0); // 默认返回0
-                }
-                vm_emit(vm, VM_RET);
-            }
-            
-            // 注册函数
-            char func_label[256];
-            snprintf(func_label, sizeof(func_label), "__func_%s__", ast->identifier);
-            vm_set_function(vm, func_label, func_start);
-            
-            // 设置函数参数个数
-            VMFunction *func = vm->functions;
-            while (func && strcmp(func->name, func_label) != 0) {
-                func = func->next;
-            }
-            if (func) {
-                func->param_count = param_count;
-                printf("  函数 %s 注册完成\n", func_label);
-            }
-            break;
-        }
-        
-        case NODE_FUNCTION_CALL: {
-            vm_compile_function_call(vm, ast);
-            break;
-        }
-        
-        case NODE_RETURN: {
-            if (ast->left) {
-                // 编译返回值表达式
-                vm_compile_ast(vm, ast->left);
-            } else {
-                // 默认返回值0
-                vm_emit(vm, VM_LOAD_INT, 0);
-            }
-            vm_emit(vm, VM_RET);
-            break;
-        }
-        
-        case NODE_IF: {
-            vm_compile_ast(vm, ast->condition);
-            int jz_addr = vm->code_size;
-            vm_emit(vm, VM_JZ, 0);  // 占位符，稍后回填
-            
-            vm_compile_ast(vm, ast->statements);
-            
-            if (ast->else_statements) {
-                int jmp_addr = vm->code_size;
-                vm_emit(vm, VM_JMP, 0);  // 跳过else分支
-                
-                vm->code[jz_addr].int_operand = vm->code_size;  // 回填条件跳转地址
-                vm_compile_ast(vm, ast->else_statements);
-                vm->code[jmp_addr].int_operand = vm->code_size;  // 回填无条件跳转地址
-            } else {
-                vm->code[jz_addr].int_operand = vm->code_size;  // 回填条件跳转地址
-            }
-            break;
-        }
-
-        case NODE_FOR: {
-            // FOR循环实现：初始化 -> 条件检查 -> 循环体 -> 增量 -> 跳转
-            vm_compile_ast(vm, ast->left);  // 初始值
-            vm_emit(vm, VM_STORE_VAR, ast->identifier);
-            
-            int loop_start = vm->code_size;
-            vm_emit(vm, VM_LOAD_VAR, ast->identifier);
-            vm_compile_ast(vm, ast->right);  // 结束值
-            vm_emit(vm, VM_LE);
-            
-            int loop_exit = vm->code_size;
-            vm_emit(vm, VM_JZ, 0);  // 条件为假时退出循环
-            
-            vm_compile_ast(vm, ast->statements);  // 循环体
-            
-            // 增量操作
-            vm_emit(vm, VM_LOAD_VAR, ast->identifier);
-            vm_emit(vm, VM_LOAD_INT, 1);
-            vm_emit(vm, VM_ADD);
-            vm_emit(vm, VM_STORE_VAR, ast->identifier);
-            
-            vm_emit(vm, VM_JMP, loop_start);  // 跳回循环开始
-            vm->code[loop_exit].int_operand = vm->code_size;  // 回填退出地址
-            break;
-        }
-        case NODE_WHILE: {
-            int while_start = vm->code_size;
-            vm_compile_ast(vm, ast->condition);
-            
-            int while_exit = vm->code_size;
-            vm_emit(vm, VM_JZ, 0);
-            
-            vm_compile_ast(vm, ast->statements);
-            vm_emit(vm, VM_JMP, while_start);
-            vm->code[while_exit].int_operand = vm->code_size;
-            break;
-        }
-
-        case NODE_CASE: {
-            /* CASE语句编译：计算表达式值，然后与各个CASE项比较 */
-            vm_compile_ast(vm, ast->condition);  // 编译CASE表达式
-            vm_emit(vm, VM_STORE_VAR, "__vm_case_temp__");  // 临时存储CASE值
-            
-            /* 收集所有需要回填的结束跳转地址 */
-            int *case_end_jumps = NULL;
-            int end_jump_count = 0;
-            int max_jumps = 100;  // 假设最多100个CASE项
-            case_end_jumps = (int *)malloc(max_jumps * sizeof(int));
-            
-            /* 处理CASE项列表 */
-            ASTNode *case_item = ast->case_list;  // CASE_LIST的第一个CASE_ITEM
-            while (case_item != NULL) {
-                if (case_item->type == NODE_CASE_ITEM) {
-                    /* 比较CASE值 */
-                    vm_emit(vm, VM_LOAD_VAR, "__vm_case_temp__");
-                    vm_compile_ast(vm, case_item->case_value);  // CASE项的值
-                    vm_emit(vm, VM_EQ);  // 比较
-                    
-                    int no_match_jump = vm->code_size;
-                    vm_emit(vm, VM_JZ, 0);  // 不匹配则跳到下一项
-                    
-                    /* 执行匹配的语句 */
-                    vm_compile_ast(vm, case_item->statements);
-                    
-                    /* 记录需要跳转到结束的地址 */
-                    if (end_jump_count < max_jumps) {
-                        case_end_jumps[end_jump_count] = vm->code_size;
-                        vm_emit(vm, VM_JMP, 0);  // 跳转到CASE结束，稍后回填
-                        end_jump_count++;
-                    }
-                    
-                    /* 回填不匹配的跳转地址到下一个比较 */
-                    vm->code[no_match_jump].int_operand = vm->code_size;
-                }
-                case_item = case_item->next;
-            }
-            
-            /* 回填所有结束跳转地址 */
-            for (int i = 0; i < end_jump_count; i++) {
-                vm->code[case_end_jumps[i]].int_operand = vm->code_size;
-            }
-            
-            free(case_end_jumps);
-            break;
-        }
-        
-        case NODE_CASE_LIST:
-        case NODE_CASE_ITEM:
-            /* 这些节点在NODE_CASE中处理 */
-            break;
-            
-        case NODE_BINARY_OP:
-            vm_compile_ast(vm, ast->left);
-            vm_compile_ast(vm, ast->right);
-            
-            switch (ast->op_type) {
-                case OP_ADD: vm_emit(vm, VM_ADD); break;
-                case OP_SUB: vm_emit(vm, VM_SUB); break;
-                case OP_MUL: vm_emit(vm, VM_MUL); break;
-                case OP_DIV: vm_emit(vm, VM_DIV); break;
-                case OP_EQ:  vm_emit(vm, VM_EQ); break;
-                case OP_NE:  vm_emit(vm, VM_NE); break;
-                case OP_LT:  vm_emit(vm, VM_LT); break;
-                case OP_LE:  vm_emit(vm, VM_LE); break;
-                case OP_GT:  vm_emit(vm, VM_GT); break;
-                case OP_GE:  vm_emit(vm, VM_GE); break;
-                case OP_AND: vm_emit(vm, VM_AND); break;
-                case OP_OR:  vm_emit(vm, VM_OR); break;
-                default: vm_set_error(vm, "未知二元操作符"); break;
-            }
-            break;
-            
-        case NODE_UNARY_OP:
-            vm_compile_ast(vm, ast->left);
-            switch (ast->op_type) {
-                case OP_NEG: vm_emit(vm, VM_NEG); break;
-                case OP_NOT: vm_emit(vm, VM_NOT); break;
-                default: vm_set_error(vm, "未知一元操作符"); break;
-            }
-            break;
-            
-        case NODE_IDENTIFIER:
-            vm_emit(vm, VM_LOAD_VAR, ast->identifier);
-            break;
-            
-        case NODE_INT_LITERAL:
-            vm_emit(vm, VM_LOAD_INT, ast->value.int_val);
-            break;
-            
-        case NODE_REAL_LITERAL:
-            vm_emit(vm, VM_LOAD_REAL, ast->value.real_val);
-            break;
-            
-        case NODE_BOOL_LITERAL:
-            vm_emit(vm, VM_LOAD_BOOL, ast->value.bool_val);
-            break;
-            
-        case NODE_STRING_LITERAL:
-            vm_emit(vm, VM_LOAD_STRING, ast->value.str_val);
-            break;
-            
-        case NODE_ARGUMENT_LIST:
-            /* 参数列表在函数调用中处理 */
-            break;
-        default:
-            vm_set_error(vm, "未知AST节点类型");
-            break;
-    }
-}
-
-/* 专门编译函数列表的函数 */
-void vm_compile_function_list(VMState *vm, ASTNode *func_list) {
-    if (!func_list) return;
-    
-    ASTNode *current = func_list;
-    int func_count = 0;
-    
-    while (current) {
-        if (current->type == NODE_FUNCTION) {
-            func_count++;
-            printf("处理第 %d 个函数: %s\n", func_count, current->identifier);
-            vm_compile_ast(vm, current);
-        }
-        current = current->next;
-    }
-    
-    printf("总共处理了 %d 个函数\n", func_count);
-}
-
-/* 初始化全局变量到VM */
-void vm_initialize_global_variables(VMState *vm) {
+/* 重置虚拟机状态 */
+void vm_reset(st_vm_t *vm) {
     if (!vm) return;
-
-    VarDecl *var = ast_get_global_var_table();
-    while (var) {
-        VMValue default_val;
-        
-        // 根据变量类型设置默认值
-        switch (var->type) {
-            case TYPE_INT:
-                default_val.type = TYPE_INT;
-                default_val.value.int_val = 0;
-                break;
-            case TYPE_REAL:
-                default_val.type = TYPE_REAL;
-                default_val.value.real_val = 0.0;
-                break;
-            case TYPE_BOOL:
-                default_val.type = TYPE_BOOL;
-                default_val.value.bool_val = 0;
-                break;
-            case TYPE_STRING:
-                default_val.type = TYPE_STRING;
-                default_val.value.str_val = strdup("");
-                break;
-            default:
-                default_val.type = TYPE_INT;
-                default_val.value.int_val = 0;
-                break;
-        }
-        
-        // 添加到VM变量列表
-        vm_set_variable(vm, var->name, default_val);
-        printf("  初始化全局变量: %s (类型: %d)\n", var->name, var->type);
-        
-        var = var->next;
-    }
-}
-
-/* 重置虚拟机 */
-void vm_reset(VMState *vm) {
+    
+    /* 重置程序计数器和栈 */
     vm->pc = 0;
-    vm->sp = 0;
-    vm->running = 0;
-    if (vm->error_msg) {
-        free(vm->error_msg);
-        vm->error_msg = NULL;
-    }
+    vm_stack_clear(vm);
+    vm->call_stack_top = -1;
+    
+    /* 重置状态 */
+    vm->state = VM_STATE_INIT;
+    vm_clear_error(vm);
+    
+    /* 重置调试状态 */
+    vm->debug_info.current_line = 0;
+    vm->debug_info.current_column = 0;
+    vm->debug_info.step_mode = false;
+    
+    /* 清理变量区 */
+    memset(vm->global_vars, 0, sizeof(vm_value_t) * MAX_GLOBAL_VARS);
+    memset(vm->local_vars, 0, sizeof(vm_value_t) * MAX_LOCAL_VARS);
 }
 
-/* 执行虚拟机 */
-int vm_run(VMState *vm) {
-    vm->running = 1;
-    vm->pc = vm->main_entry;
-    vm->sp = 0;
-    vm->call_stack = NULL;
+/* 清理虚拟机资源 */
+void vm_cleanup(st_vm_t *vm) {
+    if (!vm) return;
     
-    while (vm->running && vm->pc < vm->code_size) {
-        VMInstruction *instr = &vm->code[vm->pc];
-        
-        printf("PC=0x%04x: ", vm->pc);
+    /* 清理字符串值 */
+    for (uint32_t i = 0; i < vm->global_var_count; i++) {
+        vm_value_free(&vm->global_vars[i]);
+    }
+    
+    for (uint32_t i = 0; i < vm->local_var_count; i++) {
+        vm_value_free(&vm->local_vars[i]);
+    }
+    
+    /* 清理栈中的字符串值 */
+    vm_stack_clear(vm);
+    
+    vm->state = VM_STATE_STOPPED;
+}
+
+/* ========== 字节码加载和执行 ========== */
+
+/* 从文件加载字节码 */
+int vm_load_bytecode_file(st_vm_t *vm, const char *filename) {
+    if (!vm || !filename) {
+        vm_set_error(vm, "Invalid parameters for bytecode loading");
+        return -1;
+    }
+    
+    bytecode_file_t bc_file;
+    if (bytecode_load_file(&bc_file, filename) != 0) {
+        vm_set_error(vm, "Failed to load bytecode file");
+        return -1;
+    }
+    
+    if (!bytecode_verify_file(&bc_file)) {
+        vm_set_error(vm, "Invalid bytecode file format");
+        return -1;
+    }
+    
+    return vm_load_bytecode_from_file(vm, &bc_file);
+}
+
+/* 加载字节码数据 */
+int vm_load_bytecode(st_vm_t *vm, const bytecode_file_t *bc_file) {
+    if (!vm || !bc_file) {
+        vm_set_error(vm, "Invalid parameters for bytecode loading");
+        return -1;
+    }
+    
+    return vm_load_bytecode_from_file(vm, bc_file);
+}
+
+/* 内部字节码加载函数 */
+static int vm_load_bytecode_from_file(st_vm_t *vm, const bytecode_file_t *bc_file) {
+    /* 复制指令序列 */
+    vm->instr_count = bc_file->header.instr_count;
+    vm->instructions = bc_file->instructions;
+    
+    /* 复制常量池 */
+    vm->const_pool = bc_file->const_pool;
+    vm->const_pool_size = bc_file->header.const_pool_size;
+    
+    /* 设置程序计数器到入口点 */
+    vm->pc = bc_file->header.entry_point;
+    
+    /* 初始化全局变量区 */
+    vm->global_var_count = bc_file->header.var_count;
+    if (vm->global_var_count > MAX_GLOBAL_VARS) {
+        vm_set_error(vm, "Too many global variables");
+        return -1;
+    }
+    
+    /* 从变量表初始化全局变量 */
+    for (uint32_t i = 0; i < vm->global_var_count && i < MAX_GLOBAL_VARS; i++) {
+        if (bc_file->var_table) {
+            const var_descriptor_t *var_desc = &bc_file->var_table[i];
+            vm->global_vars[i] = vm_create_undefined_value();
+            
+            /* 根据类型设置默认值 */
+            switch (var_desc->type) {
+                case TYPE_BOOL_ID:
+                    vm->global_vars[i] = vm_create_bool_value(false);
+                    break;
+                case TYPE_INT_ID:
+                case TYPE_DINT_ID:
+                    vm->global_vars[i] = vm_create_int_value(0);
+                    break;
+                case TYPE_REAL_ID:
+                    vm->global_vars[i] = vm_create_real_value(0.0);
+                    break;
+                case TYPE_STRING_ID:
+                    vm->global_vars[i] = vm_create_string_value("");
+                    break;
+            }
+        }
+    }
+    
+    vm->state = VM_STATE_STOPPED;
+    return 0;
+}
+
+/* 验证字节码 */
+int vm_verify_bytecode(st_vm_t *vm) {
+    if (!vm || !vm->instructions) {
+        return -1;
+    }
+    
+    /* 简单验证：检查所有跳转指令的目标地址 */
+    for (uint32_t i = 0; i < vm->instr_count; i++) {
+        const bytecode_instr_t *instr = &vm->instructions[i];
         
         switch (instr->opcode) {
-            case VM_LOAD_INT: {
-                printf("LOAD_INT %d\n", instr->int_operand);
-                VMValue val = {TYPE_INT, {.int_val = instr->int_operand}};
-                vm_push(vm, val);
-                break;
-            }
-            
-            case VM_LOAD_REAL: {
-                printf("LOAD_REAL %f\n", instr->real_operand);
-                VMValue val = {TYPE_REAL, {.real_val = instr->real_operand}};
-                vm_push(vm, val);
-                break;
-            }
-            
-            case VM_LOAD_BOOL: {
-                printf("LOAD_BOOL %s\n", instr->bool_operand ? "TRUE" : "FALSE");
-                VMValue val = {TYPE_BOOL, {.bool_val = instr->bool_operand}};
-                vm_push(vm, val);
-                break;
-            }
-            
-            case VM_LOAD_STRING: {
-                printf("LOAD_STRING \"%s\"\n", instr->str_operand);
-                VMValue val = {TYPE_STRING, {.str_val = strdup(instr->str_operand)}};
-                vm_push(vm, val);
-                break;
-            }
-            
-            case VM_LOAD_VAR: {
-                printf("LOAD_VAR %s\n", instr->str_operand);
-                VMValue val = vm_get_variable(vm, instr->str_operand);
-                vm_push(vm, val);
-                printf("  变量值: ");
-                vm_print_value(val);
-                printf("\n");
-                break;
-            }
-            
-            case VM_STORE_VAR: {
-                printf("STORE_VAR %s\n", instr->str_operand);
-                VMValue val = vm_pop(vm);
-                vm_set_variable(vm, instr->str_operand, val);
-                printf("  存储值: ");
-                vm_print_value(val);
-                printf("\n");
-                break;
-            }
-
-            case VM_NEG: {
-                printf("NEG\n");
-                VMValue val = vm_pop(vm);
-                if (val.type == TYPE_INT) {
-                    val.value.int_val = -val.value.int_val;
-                } else if (val.type == TYPE_REAL) {
-                    val.value.real_val = -val.value.real_val;
-                } else {
-                    vm_set_error(vm, "NEG操作数类型错误");
+            case OP_JMP:
+            case OP_JMP_TRUE:
+            case OP_JMP_FALSE:
+            case OP_CALL:
+                if (instr->operand.addr_operand >= vm->instr_count) {
+                    vm_set_error(vm, "Invalid jump target address");
                     return -1;
                 }
-                vm_push(vm, val);
                 break;
-            }
-            
-            case VM_ADD: {
-                printf("ADD\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
-                    double aval = (a.type == TYPE_REAL) ? a.value.real_val : (double)a.value.int_val;
-                    double bval = (b.type == TYPE_REAL) ? b.value.real_val : (double)b.value.int_val;
-                    VMValue result = {TYPE_REAL, {.real_val = aval + bval}};
-                    vm_push(vm, result);
-                    printf("  %f + %f = %f\n", aval, bval, result.value.real_val);
-                } else {
-                    VMValue result = {TYPE_INT, {.int_val = a.value.int_val + b.value.int_val}};
-                    vm_push(vm, result);
-                    printf("  %d + %d = %d\n", a.value.int_val, b.value.int_val, result.value.int_val);
-                }
-                break;
-            }
-            
-            case VM_SUB: {
-                printf("SUB\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
-                    double aval = (a.type == TYPE_REAL) ? a.value.real_val : (double)a.value.int_val;
-                    double bval = (b.type == TYPE_REAL) ? b.value.real_val : (double)b.value.int_val;
-                    VMValue result = {TYPE_REAL, {.real_val = aval - bval}};
-                    vm_push(vm, result);
-                    printf("  %f - %f = %f\n", aval, bval, result.value.real_val);
-                } else {
-                    VMValue result = {TYPE_INT, {.int_val = a.value.int_val - b.value.int_val}};
-                    vm_push(vm, result);
-                    printf("  %d - %d = %d\n", a.value.int_val, b.value.int_val, result.value.int_val);
-                }
-                break;
-            }
-            
-            case VM_MUL: {
-                printf("MUL\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
-                    double aval = (a.type == TYPE_REAL) ? a.value.real_val : (double)a.value.int_val;
-                    double bval = (b.type == TYPE_REAL) ? b.value.real_val : (double)b.value.int_val;
-                    VMValue result = {TYPE_REAL, {.real_val = aval * bval}};
-                    vm_push(vm, result);
-                    printf("  %f * %f = %f\n", aval, bval, result.value.real_val);
-                } else {
-                    VMValue result = {TYPE_INT, {.int_val = a.value.int_val * b.value.int_val}};
-                    vm_push(vm, result);
-                    printf("  %d * %d = %d\n", a.value.int_val, b.value.int_val, result.value.int_val);
-                }
-                break;
-            }
-
-            case VM_DIV: {
-                printf("DIV\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
                 
-                if (b.type == TYPE_INT && b.value.int_val == 0) {
-                    vm_set_error(vm, "除以零错误");
-                    return -1;
-                }
-
-                if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
-                    double aval = (a.type == TYPE_REAL) ? a.value.real_val : (double)a.value.int_val;
-                    double bval = (b.type == TYPE_REAL) ? b.value.real_val : (double)b.value.int_val;
-                    VMValue result = {TYPE_REAL, {.real_val = aval / bval}};
-                    vm_push(vm, result);
-                    printf("  %f / %f = %f\n", aval, bval, result.value.real_val);
-                } else {
-                    VMValue result = {TYPE_INT, {.int_val = a.value.int_val / b.value.int_val}};
-                    vm_push(vm, result);
-                    printf("  %d / %d = %d\n", a.value.int_val, b.value.int_val, result.value.int_val);
-                }
-                break;
-            }
-            
-            case VM_GE: {
-                printf("GE\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_BOOL, {.bool_val = a.value.int_val >= b.value.int_val}};
-                vm_push(vm, result);
-                printf("  %d >= %d = %s\n", a.value.int_val, b.value.int_val, 
-                       result.value.bool_val ? "TRUE" : "FALSE");
-                break;
-            }
-
-            case VM_LE: {
-                printf("LE\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_BOOL, {.bool_val = a.value.int_val <= b.value.int_val}};
-                vm_push(vm, result);
-                printf("  %d <= %d = %s\n", a.value.int_val, b.value.int_val, 
-                       result.value.bool_val ? "TRUE" : "FALSE");
-                break;
-            }
-
-            case VM_GT: {
-                printf("GT\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_BOOL, {.bool_val = a.value.int_val > b.value.int_val}};
-                vm_push(vm, result);
-                printf("  %d > %d = %s\n", a.value.int_val, b.value.int_val, 
-                       result.value.bool_val ? "TRUE" : "FALSE");
-                break;
-            }
-
-            case VM_LT: {
-                printf("LT\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_BOOL, {.bool_val = a.value.int_val < b.value.int_val}};
-                vm_push(vm, result);
-                printf("  %d < %d = %s\n", a.value.int_val, b.value.int_val, 
-                       result.value.bool_val ? "TRUE" : "FALSE");
-                break;
-            }
-
-            case VM_EQ: {
-                printf("EQ\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_BOOL, {.bool_val = a.value.int_val == b.value.int_val}};
-                vm_push(vm, result);
-                printf("  %d == %d = %s\n", a.value.int_val, b.value.int_val, 
-                       result.value.bool_val ? "TRUE" : "FALSE");
-                break;
-            }
-            
-            case VM_NE: {
-                printf("NE\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_BOOL, {.bool_val = a.value.int_val != b.value.int_val}};
-                vm_push(vm, result);
-                printf("  %d != %d = %s\n", a.value.int_val, b.value.int_val, 
-                       result.value.bool_val ? "TRUE" : "FALSE");
-                break;
-            }
-
-            case VM_OR: {
-                printf("OR\n");
-                VMValue b = vm_pop(vm);
-                VMValue a = vm_pop(vm);
-                VMValue result = {TYPE_BOOL, {.bool_val = a.value.bool_val || b.value.bool_val}};
-                vm_push(vm, result);
-                printf("  %s OR %s = %s\n", a.value.bool_val ? "TRUE" : "FALSE", 
-                       b.value.bool_val ? "TRUE" : "FALSE", 
-                       result.value.bool_val ? "TRUE" : "FALSE");
-                break;
-            }
-
-            case VM_JZ: {
-                printf("JZ %d\n", instr->int_operand);
-                VMValue val = vm_pop(vm);
-                if (!val.value.bool_val) {
-                    printf("  跳转到 PC=0x%04x\n", instr->int_operand);
-                    vm->pc = instr->int_operand - 1;
-                } else {
-                    printf("  条件为真，继续执行\n");
-                }
-                break;
-            }
-            
-            case VM_JMP: {
-                printf("JMP %d\n", instr->int_operand);
-                printf("  跳转到 PC=0x%04x\n", instr->int_operand);
-                vm->pc = instr->int_operand - 1;
-                break;
-            }
-
-            case VM_POP: {
-                printf("POP\n");
-                VMValue val = vm_pop(vm);
-                printf("  弹出值: ");
-                vm_print_value(val);
-                printf("\n");
-                break;
-            }
-
-            case VM_DUP: {
-                printf("DUP\n");
-                if (vm->sp <= 0) {
-                    vm_set_error(vm, "栈下溢");
-                    return -1;
-                }
-                VMValue val = vm->stack[vm->sp - 1];
-                vm_push(vm, val);
-                printf("  复制栈顶值: ");
-                vm_print_value(val);
-                printf("\n");
-                break;
-            }
-
-            case VM_PUSH_ARGS: {
-                printf("PUSH_ARGS %d\n", instr->int_operand);
-                // 参数个数信息存储在指令中，实际压栈在CALL指令中处理
-                break;
-            }
-
-            case VM_RET: {
-                printf("RET\n");
-                
-                // 获取返回值（应该在栈顶）
-                VMValue return_value = {TYPE_INT, {.int_val = 0}};
-                if (vm->sp > 0) {
-                    return_value = vm_pop(vm);
-                    printf("  返回值: ");
-                    vm_print_value(return_value);
-                    printf("\n");
-                }
-                
-                // 清理函数参数变量
-                vm_cleanup_function_parameters(vm);
-                
-                // 清理参数（恢复栈指针到调用前状态）
-                if (vm->call_stack) {
-                    vm->sp = 0;
-                    printf("  清理参数, 恢复栈指针到: %d\n", vm->sp);
-                }
-                
-                // 弹出调用栈帧（这会恢复PC）
-                if (vm->call_stack) {
-                    vm_pop_frame(vm);
-                    
-                    // 将返回值压回栈顶
-                    vm_push(vm, return_value);
-                    printf("  返回值已压入栈顶\n");
-                } else {
-                    // 主程序返回，停止执行
-                    // printf("  主程序返回，停止执行\n");
-                    // vm->running = 0;
-                }
-                break;
-            }
-
-            case VM_CALL: {
-                printf("CALL 0x%04x\n", instr->int_operand);
-                
-                // 直接使用指令中的地址
-                int func_addr = instr->int_operand;
-                
-                // 获取参数个数（从前一条PUSH_ARGS指令）
-                int param_count = 0;
-                if (vm->pc > 0 && vm->code[vm->pc - 1].opcode == VM_PUSH_ARGS) {
-                    param_count = vm->code[vm->pc - 1].int_operand;
-                }
-                
-                printf("  调用函数@0x%04x, 参数个数: %d\n", func_addr, param_count);
-                
-                // 设置函数参数（需要函数名来查找参数定义）
-                // 这里需要根据地址查找函数名
-                VMFunction *func = vm->functions;
-                while (func && func->addr != func_addr) {
-                    func = func->next;
-                }
-                
-                if (!func) {
-                    vm_set_error(vm, "调用未知函数");
-                    return -1;
-                }
-                
-                vm_setup_function_parameters(vm, func->name, param_count);
-                
-                // 创建调用栈帧
-                vm_push_frame(vm, param_count);
-                
-                // 跳转到函数地址
-                printf("  跳转到函数地址: 0x%04x\n", func_addr);
-                vm->pc = func_addr - 1;  // -1因为循环末尾会+1
-                break;
-            }
-
-            case VM_HALT: {
-                printf("HALT\n");
-                printf("  程序正常结束\n");
-                vm->running = 0;
-                break;
-            }
-
             default:
-                printf("UNKNOWN 0x%02x\n", instr->opcode);
-                vm_set_error(vm, "未知指令");
-                return -1;
+                break;
         }
-        
-        vm->pc++;
     }
     
     return 0;
 }
 
-/* 设置函数参数 */
-void vm_setup_function_parameters(VMState *vm, char *func_name, int param_count) {
-    if (!vm || !func_name || param_count <= 0) return;
-    
-    // 修复函数名匹配：正确去掉"__func_"前缀并添加"__"后缀
-    char clean_func_name[256];
-    if (strncmp(func_name, "__func_", 7) == 0 && 
-        strlen(func_name) > 9 && 
-        strcmp(func_name + strlen(func_name) - 2, "__") == 0) {
-        // 去掉前缀"__func_"和后缀"__"
-        int len = strlen(func_name) - 9; // 7 + 2
-        strncpy(clean_func_name, func_name + 7, len);
-        clean_func_name[len] = '\0';
-    } else {
-        strcpy(clean_func_name, func_name);
+/* 执行字节码 */
+int vm_execute(st_vm_t *vm) {
+    if (!vm || vm->state == VM_STATE_ERROR) {
+        return -1;
     }
     
-    // 查找函数定义获取参数名称
-    ASTNode *func_node = find_global_function(clean_func_name);
-    if (!func_node) {
-        printf("  警告: 无法找到函数定义 %s (%s)\n", clean_func_name, func_name);
-        return;
+    if (!vm->instructions) {
+        vm_set_error(vm, "No bytecode loaded");
+        return -1;
     }
     
-    printf("  设置函数参数 (函数名: %s):\n", clean_func_name);
+    vm->state = VM_STATE_RUNNING;
+    vm->statistics.execution_time_ms = clock();
     
-    // 从栈中获取参数值并设置到参数变量
-    VMValue *param_values = (VMValue *)malloc(param_count * sizeof(VMValue));
+    int result = vm_execute_main_loop(vm);
     
-    // 逆序弹出参数（因为栈是后进先出）
-    for (int i = param_count - 1; i >= 0; i--) {
-        param_values[i] = vm_pop(vm);
-    }
+    vm->statistics.execution_time_ms = clock() - vm->statistics.execution_time_ms;
+    vm->statistics.execution_time_ms = (vm->statistics.execution_time_ms * 1000) / CLOCKS_PER_SEC;
     
-    // 设置参数变量，使用特殊前缀避免与全局变量冲突
-    VarDecl *param = func_node->param_list;
-    for (int i = 0; i < param_count && param; i++) {
-        char param_var_name[512];
-        snprintf(param_var_name, sizeof(param_var_name), "__param_%s_%s", clean_func_name, param->name);
-        
-        vm_set_variable(vm, param_var_name, param_values[i]);
-        printf("    参数 %s (%s) = ", param->name, param_var_name);
-        vm_print_value(param_values[i]);
-        printf("\n");
-        param = param->next;
-    }
-    
-    free(param_values);
+    return result;
 }
 
-/* 清理函数参数变量 */
-void vm_cleanup_function_parameters(VMState *vm) {
+/* 主执行循环 */
+static int vm_execute_main_loop(st_vm_t *vm) {
+    while (vm->state == VM_STATE_RUNNING && vm->pc < vm->instr_count) {
+        /* 检查执行限制 */
+        if (!vm_check_execution_limits(vm)) {
+            vm_set_error(vm, "Execution limit exceeded");
+            vm->state = VM_STATE_ERROR;
+            return -1;
+        }
+        
+        /* 处理同步操作 */
+        if (vm->sync_enabled) {
+            vm_handle_sync_operations(vm);
+        }
+        
+        /* 检查断点 */
+        if (vm_is_breakpoint(vm, vm->pc)) {
+            vm->state = VM_STATE_PAUSED;
+            break;
+        }
+        
+        /* 执行单条指令 */
+        if (vm_execute_single_step(vm) != 0) {
+            return -1;
+        }
+        
+        /* 单步模式检查 */
+        if (vm->debug_info.step_mode) {
+            vm->state = VM_STATE_PAUSED;
+            break;
+        }
+    }
+    
+    if (vm->pc >= vm->instr_count && vm->state == VM_STATE_RUNNING) {
+        vm->state = VM_STATE_STOPPED;
+    }
+    
+    return 0;
+}
+
+/* 执行单步 */
+int vm_execute_single_step(st_vm_t *vm) {
+    if (!vm || vm->pc >= vm->instr_count) {
+        return -1;
+    }
+    
+    const bytecode_instr_t *instr = &vm->instructions[vm->pc];
+    
+    /* 更新调试信息 */
+    vm->debug_info.current_line = instr->source_line;
+    vm->debug_info.current_column = instr->source_column;
+    
+    /* 执行指令 */
+    int result = vm_execute_instruction(vm, instr);
+    
+    /* 更新统计信息 */
+    if (result == 0) {
+        vm_update_statistics(vm, instr->opcode);
+    } else {
+        vm->statistics.runtime_errors++;
+    }
+    
+    return result;
+}
+
+/* ========== 栈操作函数 ========== */
+
+/* 压栈 */
+int vm_stack_push(st_vm_t *vm, const vm_value_t *value) {
+    if (!vm || !value || vm->operand_stack.top >= MAX_STACK_SIZE - 1) {
+        return -1;
+    }
+    
+    vm->operand_stack.top++;
+    vm_value_copy(value, &vm->operand_stack.data[vm->operand_stack.top]);
+    
+    return 0;
+}
+
+/* 弹栈 */
+vm_value_t* vm_stack_pop(st_vm_t *vm) {
+    if (!vm || vm->operand_stack.top < 0) {
+        return NULL;
+    }
+    
+    vm_value_t *value = &vm->operand_stack.data[vm->operand_stack.top];
+    vm->operand_stack.top--;
+    
+    return value;
+}
+
+/* 获取栈顶 */
+vm_value_t* vm_stack_top(st_vm_t *vm) {
+    if (!vm || vm->operand_stack.top < 0) {
+        return NULL;
+    }
+    
+    return &vm->operand_stack.data[vm->operand_stack.top];
+}
+
+/* 清空栈 */
+void vm_stack_clear(st_vm_t *vm) {
     if (!vm) return;
     
-    printf("  清理函数参数变量\n");
+    /* 释放栈中的字符串值 */
+    for (int32_t i = 0; i <= vm->operand_stack.top; i++) {
+        vm_value_free(&vm->operand_stack.data[i]);
+    }
     
-    // 清理所有参数变量
-    VMVariable **var_ptr = &vm->variables;
-    while (*var_ptr) {
-        if (strncmp((*var_ptr)->name, "__param_", 8) == 0) {
-            VMVariable *to_delete = *var_ptr;
-            *var_ptr = (*var_ptr)->next;
+    vm->operand_stack.top = -1;
+}
+
+/* 检查栈是否为空 */
+bool vm_stack_is_empty(const st_vm_t *vm) {
+    return vm ? (vm->operand_stack.top < 0) : true;
+}
+
+/* 获取栈大小 */
+int32_t vm_stack_size(const st_vm_t *vm) {
+    return vm ? (vm->operand_stack.top + 1) : 0;
+}
+
+/* ========== 调用栈操作（补充完整） ========== */
+
+/* 压入调用帧 */
+int vm_call_stack_push(st_vm_t *vm, uint32_t return_addr, const char *func_name) {
+    if (!vm || vm->call_stack_top >= MAX_CALL_FRAMES - 1) {
+        return -1;
+    }
+    
+    vm->call_stack_top++;
+    call_frame_t *frame = &vm->call_stack[vm->call_stack_top];
+    
+    frame->return_address = return_addr;
+    frame->local_var_base = vm->operand_stack.top + 1;
+    frame->param_base = vm->operand_stack.top;
+    frame->param_count = 0;
+    frame->function_name = func_name ? mmgr_alloc_string(func_name) : NULL;
+    
+    return 0;
+}
+
+/* 弹出调用帧 */
+call_frame_t* vm_call_stack_pop(st_vm_t *vm) {
+    if (!vm || vm->call_stack_top < 0) {
+        return NULL;
+    }
+    
+    call_frame_t *frame = &vm->call_stack[vm->call_stack_top];
+    vm->call_stack_top--;
+    
+    return frame;
+}
+
+/* 获取当前调用帧 */
+call_frame_t* vm_call_stack_top(st_vm_t *vm) {
+    if (!vm || vm->call_stack_top < 0) {
+        return NULL;
+    }
+    
+    return &vm->call_stack[vm->call_stack_top];
+}
+
+/* 获取调用栈深度 */
+int32_t vm_call_stack_depth(const st_vm_t *vm) {
+    return vm ? (vm->call_stack_top + 1) : 0;
+}
+
+/* ========== 变量操作（补充完整） ========== */
+
+/* 设置局部变量 */
+int vm_set_local_var(st_vm_t *vm, uint32_t index, const vm_value_t *value) {
+    if (!vm || !value || index >= MAX_LOCAL_VARS) {
+        return -1;
+    }
+    
+    vm_value_free(&vm->local_vars[index]);
+    vm_value_copy(value, &vm->local_vars[index]);
+    
+    return 0;
+}
+
+/* 获取局部变量 */
+vm_value_t* vm_get_local_var(st_vm_t *vm, uint32_t index) {
+    if (!vm || index >= MAX_LOCAL_VARS) {
+        return NULL;
+    }
+    
+    return &vm->local_vars[index];
+}
+
+/* 初始化局部变量区 */
+int vm_init_local_vars(st_vm_t *vm, uint32_t count) {
+    if (!vm || count > MAX_LOCAL_VARS) {
+        return -1;
+    }
+    
+    vm->local_var_count = count;
+    
+    for (uint32_t i = 0; i < count; i++) {
+        vm->local_vars[i] = vm_create_undefined_value();
+    }
+    
+    return 0;
+}
+
+/* 设置参数 */
+int vm_set_param(st_vm_t *vm, uint32_t index, const vm_value_t *value) {
+    if (!vm || !value) {
+        return -1;
+    }
+    
+    call_frame_t *frame = vm_call_stack_top(vm);
+    if (!frame || index >= frame->param_count) {
+        return -1;
+    }
+    
+    /* 参数存储在栈中 */
+    int32_t param_index = frame->param_base - frame->param_count + index + 1;
+    if (param_index < 0 || param_index > vm->operand_stack.top) {
+        return -1;
+    }
+    
+    vm_value_copy(value, &vm->operand_stack.data[param_index]);
+    
+    return 0;
+}
+
+/* 获取参数 */
+vm_value_t* vm_get_param(st_vm_t *vm, uint32_t index) {
+    if (!vm) return NULL;
+    
+    call_frame_t *frame = vm_call_stack_top(vm);
+    if (!frame || index >= frame->param_count) {
+        return NULL;
+    }
+    
+    int32_t param_index = frame->param_base - frame->param_count + index + 1;
+    if (param_index < 0 || param_index > vm->operand_stack.top) {
+        return NULL;
+    }
+    
+    return &vm->operand_stack.data[param_index];
+}
+
+/* ========== 值类型操作 ========== */
+
+/* 创建各种类型的值 */
+vm_value_t vm_create_bool_value(bool value) {
+    vm_value_t val;
+    val.type = VAL_BOOL;
+    val.data.bool_val = value;
+    return val;
+}
+
+vm_value_t vm_create_int_value(int32_t value) {
+    vm_value_t val;
+    val.type = VAL_INT;
+    val.data.int_val = value;
+    return val;
+}
+
+vm_value_t vm_create_real_value(double value) {
+    vm_value_t val;
+    val.type = VAL_REAL;
+    val.data.real_val = value;
+    return val;
+}
+
+vm_value_t vm_create_string_value(const char *value) {
+    vm_value_t val;
+    val.type = VAL_STRING;
+    val.data.string_val = value ? mmgr_alloc_string(value) : NULL;
+    return val;
+}
+
+vm_value_t vm_create_undefined_value(void) {
+    vm_value_t val;
+    val.type = VAL_UNDEFINED;
+    memset(&val.data, 0, sizeof(val.data));
+    return val;
+}
+
+/* 值复制 */
+void vm_value_copy(const vm_value_t *src, vm_value_t *dst) {
+    if (!src || !dst) return;
+    
+    /* 先释放目标的资源 */
+    vm_value_free(dst);
+    
+    dst->type = src->type;
+    
+    switch (src->type) {
+        case VAL_BOOL:
+            dst->data.bool_val = src->data.bool_val;
+            break;
+        case VAL_INT:
+            dst->data.int_val = src->data.int_val;
+            break;
+        case VAL_REAL:
+            dst->data.real_val = src->data.real_val;
+            break;
+        case VAL_STRING:
+            dst->data.string_val = src->data.string_val ? mmgr_alloc_string(src->data.string_val) : NULL;
+            break;
+        default:
+            memset(&dst->data, 0, sizeof(dst->data));
+            break;
+    }
+}
+
+/* 释放值资源 */
+void vm_value_free(vm_value_t *value) {
+    if (!value) return;
+    
+    if (value->type == VAL_STRING && value->data.string_val) {
+        /* 字符串由MMGR管理，不需要显式释放 */
+        value->data.string_val = NULL;
+    }
+    
+    value->type = VAL_UNDEFINED;
+    memset(&value->data, 0, sizeof(value->data));
+}
+
+/* ========== 指令执行 ========== */
+
+/* 执行单条指令 */
+int vm_execute_instruction(st_vm_t *vm, const bytecode_instr_t *instr) {
+    if (!vm || !instr) {
+        return -1;
+    }
+    
+    switch (instr->opcode) {
+        case OP_NOP:
+            break;
             
-            printf("    清理参数变量: %s\n", to_delete->name);
+        case OP_HALT:
+            vm->state = VM_STATE_STOPPED;
+            return 0;
             
-            // 释放字符串值
-            if (to_delete->value.type == TYPE_STRING && to_delete->value.value.str_val) {
-                free(to_delete->value.value.str_val);
-            }
-            free(to_delete->name);
-            free(to_delete);
-        } else {
-            var_ptr = &(*var_ptr)->next;
+        case OP_LOAD_CONST_INT: {
+            vm_value_t value = vm_create_int_value(instr->operand.int_operand);
+            return vm_stack_push(vm, &value);
         }
-    }
-}
-
-/* 修复函数设置逻辑 */
-void vm_set_function(VMState *vm, const char *name, int addr) {
-    // 首先检查函数是否已存在
-    VMFunction *existing = vm->functions;
-    while (existing) {
-        if (strcmp(existing->name, name) == 0) {
-            printf("  更新现有函数: %s, 地址: 0x%04x\n", name, addr);
-            existing->addr = addr;
-            return;
-        }
-        existing = existing->next;
-    }
-
-    /* 创建新函数 */
-    VMFunction *func = (VMFunction *)malloc(sizeof(VMFunction));
-    func->name = strdup(name);
-    func->addr = addr;
-    func->param_count = 0;  // 默认参数个数，后续设置
-    func->next = vm->functions;
-    vm->functions = func;
-    
-    printf("  注册新函数: %s, 地址: 0x%04x\n", name, addr);
-}
-
-/* 设置变量值 */
-void vm_set_variable(VMState *vm, const char *name, VMValue value) {
-    if (!vm || !name) return;
-    
-    VMVariable *var = vm->variables;
-    
-    /* 查找现有变量 */
-    while (var) {
-        if (strcmp(var->name, name) == 0) {
-            // 释放旧的字符串值
-            if (var->value.type == TYPE_STRING && var->value.value.str_val) {
-                free(var->value.value.str_val);
-            }
-            var->value = value;
-            printf("  更新变量: %s\n", name);
-            return;
-        }
-        var = var->next;
-    }
-    
-    /* 创建新变量 */
-    var = (VMVariable *)malloc(sizeof(VMVariable));
-    var->name = strdup(name);
-    var->value = value;
-    var->next = vm->variables;
-    vm->variables = var;
-    
-    printf("  创建新变量: %s\n", name);
-}
-
-/* 获取变量值 */
-VMValue vm_get_variable(VMState *vm, const char *name) {
-    if (!vm || !name) {
-        VMValue default_val = {TYPE_INT, {.int_val = 0}};
-        return default_val;
-    }
-    
-    // 首先查找当前函数的参数变量
-    if (vm->call_stack) {
-        // 构造参数变量名 - 需要知道当前函数名
-        VMVariable *var = vm->variables;
-        while (var) {
-            // 检查是否是参数变量且匹配参数名
-            if (strncmp(var->name, "__param_", 8) == 0) {
-                // 从参数变量名中提取实际参数名
-                char *last_underscore = strrchr(var->name, '_');
-                if (last_underscore && strcmp(last_underscore + 1, name) == 0) {
-                    printf("  找到参数变量: %s -> %s\n", name, var->name);
-                    return var->value;
-                }
-            }
-            var = var->next;
-        }
-    }
-    
-    // 然后查找普通变量
-    VMVariable *var = vm->variables;
-    while (var) {
-        if (strcmp(var->name, name) == 0) {
-            return var->value;
-        }
-        var = var->next;
-    }
-    
-    /* 变量不存在，返回默认值并报告 */
-    printf("  警告: 变量 '%s' 不存在，返回默认值0\n", name);
-    VMValue default_val = {TYPE_INT, {.int_val = 0}};
-    return default_val;
-}
-
-/* 压入栈 */
-void vm_push(VMState *vm, VMValue value) {
-    if (vm->sp >= vm->stack_size) {
-        vm_set_error(vm, "栈溢出");
-        return;
-    }
-    vm->stack[vm->sp++] = value;
-}
-
-/* 弹出栈 */
-VMValue vm_pop(VMState *vm) {
-    if (vm->sp <= 0) {
-        vm_set_error(vm, "栈下溢");
-        VMValue empty = {TYPE_INT, {.int_val = 0}};
-        return empty;
-    }
-    return vm->stack[--vm->sp];
-}
-
-/* 设置错误信息 */
-void vm_set_error(VMState *vm, const char *error) {
-    if (vm->error_msg) free(vm->error_msg);
-    vm->error_msg = strdup(error);
-}
-
-/* 获取错误信息 */
-const char *vm_get_error(VMState *vm) {
-    return vm->error_msg;
-}
-
-/* 打印函数列表状态（调试用） */
-void vm_print_functions(VMState *vm) {
-    printf("=== 函数列表 ===\n");
-    VMFunction *func = vm->functions;
-    int count = 0;
-    
-    while (func) {
-        printf("0x%04x %s (参数: %d)\n", func->addr, func->name, func->param_count);
-        func = func->next;
-        count++;
-    }
-    
-    if (count == 0) {
-        printf("无函数定义\n");
-    } else {
-        printf("总共 %d 个函数\n", count);
-    }
-    printf("================\n");
-}
-
-/* 打印变量状态（调试用） */
-void vm_print_variables(VMState *vm) {
-    if (!vm) {
-        printf("=== 变量状态 ===\n");
-        printf("VM状态为空\n");
-        printf("================\n");
-        return;
-    }
-    
-    printf("=== 变量状态 ===\n");
-    
-    if (!vm->variables) {
-        printf("无变量定义\n");
-        printf("================\n");
-        return;
-    }
-    
-    VMVariable *var = vm->variables;
-    int index = 0;
-    
-    while (var) {
-        index++;
-        switch (var->value.type) {
-            case TYPE_INT:
-                printf("0x%04x %s = %d (INT)\n", index, var->name, var->value.value.int_val);
-                break;
-            case TYPE_REAL:
-                printf("0x%04x %s = %f (REAL)\n", index, var->name, var->value.value.real_val);
-                break;
-            case TYPE_BOOL:
-                printf("0x%04x %s = %s (BOOL)\n", index, var->name, 
-                       var->value.value.bool_val ? "TRUE" : "FALSE");
-                break;
-            case TYPE_STRING:
-                printf("0x%04x %s = \"%s\" (STRING)\n", index, var->name, 
-                       var->value.value.str_val ? var->value.value.str_val : "");
-                break;
-            default:
-                printf("0x%04x %s = <未知类型 %d>\n", index, var->name, var->value.type);
-                break;
-        }
-        var = var->next;
-    }
-    
-    printf("总共 %d 个变量\n", index);
-    printf("================\n");
-}
-
-/* 打印字节码（调试用） */
-void vm_print_code(VMState *vm) {
-    printf("=== 字节码 ===\n");
-    for (int i = 0; i < vm->code_size; i++) {
-        VMInstruction *instr = &vm->code[i];
-        printf("0x%04x: ", i);
         
-        switch (instr->opcode) {
-            case VM_LOAD_INT:
-                printf("LOAD_INT %d", instr->int_operand);
-                break;
-            case VM_LOAD_REAL:
-                printf("LOAD_REAL %f", instr->real_operand);
-                break;
-            case VM_LOAD_BOOL:
-                printf("LOAD_BOOL %s", instr->bool_operand ? "TRUE" : "FALSE");
-                break;
-            case VM_LOAD_VAR:
-                printf("LOAD_VAR %s", instr->str_operand);
-                break;
-            case VM_STORE_VAR:
-                printf("STORE_VAR %s", instr->str_operand);
-                break;
-            case VM_PUSH_ARGS:
-                printf("PUSH_ARGS %d", instr->int_operand);
-                break;
-            case VM_ADD:
-                printf("ADD");
-                break;
-            case VM_SUB:
-                printf("SUB");
-                break;
-            case VM_MUL:
-                printf("MUL");
-                break;
-            case VM_NEG:
-                printf("NEG");
-                break;
-            case VM_DIV:
-                printf("DIV");
-                break;
-            case VM_EQ:
-                printf("EQ");
-                break;
-            case VM_NE:
-                printf("NE");
-                break;
-            case VM_LT:
-                printf("LT");
-                break;
-            case VM_LE:
-                printf("LE");
-                break;
-            case VM_GT:
-                printf("GT");
-                break;
-            case VM_GE:
-                printf("GE");
-                break;
-            case VM_JMP:
-                printf("JMP 0x%04x", instr->int_operand);
-                break;
-            case VM_JZ:
-                printf("JZ 0x%04x", instr->int_operand);
-                break;
-            case VM_HALT:
-                printf("HALT");
-                break;
-            case VM_RET:
-                printf("RET");
-                break;
-            case VM_CALL:
-                printf("CALL 0x%04x", instr->int_operand);
-                break;
-            case VM_POP:
-                printf("POP");
-                break;
-            case VM_DUP:
-                printf("DUP");
-                break;
-            default:
-                printf("UNKNOWN 0x%04x", instr->opcode);
-                break;
+        case OP_LOAD_CONST_REAL: {
+            vm_value_t value = vm_create_real_value(instr->operand.real_operand);
+            return vm_stack_push(vm, &value);
         }
+        
+        case OP_LOAD_CONST_BOOL: {
+            vm_value_t value = vm_create_bool_value(instr->operand.int_operand != 0);
+            return vm_stack_push(vm, &value);
+        }
+        
+        case OP_LOAD_GLOBAL: {
+            vm_value_t *var = vm_get_global_var(vm, instr->operand.int_operand);
+            if (!var) {
+                vm_set_error(vm, "Invalid global variable index");
+                return -1;
+            }
+            return vm_stack_push(vm, var);
+        }
+        
+        case OP_STORE_GLOBAL: {
+            vm_value_t *value = vm_stack_pop(vm);
+            if (!value) {
+                vm_set_error(vm, "Stack underflow");
+                return -1;
+            }
+            return vm_set_global_var(vm, instr->operand.int_operand, value);
+        }
+        
+        /* 算术运算指令 */
+        case OP_ADD_INT:
+        case OP_ADD_REAL:
+            return vm_exec_add(vm, (instr->opcode == OP_ADD_INT) ? VAL_INT : VAL_REAL);
+            
+        case OP_SUB_INT:
+        case OP_SUB_REAL:
+            return vm_exec_sub(vm, (instr->opcode == OP_SUB_INT) ? VAL_INT : VAL_REAL);
+            
+        case OP_MUL_INT:
+        case OP_MUL_REAL:
+            return vm_exec_mul(vm, (instr->opcode == OP_MUL_INT) ? VAL_INT : VAL_REAL);
+            
+        case OP_DIV_INT:
+        case OP_DIV_REAL:
+            return vm_exec_div(vm, (instr->opcode == OP_DIV_INT) ? VAL_INT : VAL_REAL);
+            
+        case OP_MOD_INT:
+            return vm_exec_mod(vm);
+            
+        case OP_NEG_INT:
+        case OP_NEG_REAL:
+            return vm_exec_neg(vm, (instr->opcode == OP_NEG_INT) ? VAL_INT : VAL_REAL);
+            
+        /* 控制流指令 */
+        case OP_JMP:
+            return vm_exec_jump(vm, instr->operand.addr_operand);
+            
+        case OP_JMP_TRUE: {
+            vm_value_t *cond = vm_stack_pop(vm);
+            if (!cond) {
+                vm_set_error(vm, "Stack underflow");
+                return -1;
+            }
+            
+            bool condition = false;
+            if (cond->type == VAL_BOOL) {
+                condition = cond->data.bool_val;
+            }
+            
+            return vm_exec_jump_conditional(vm, instr->operand.addr_operand, condition);
+        }
+        
+        case OP_JMP_FALSE: {
+            vm_value_t *cond = vm_stack_pop(vm);
+            if (!cond) {
+                vm_set_error(vm, "Stack underflow");
+                return -1;
+            }
+            
+            bool condition = true;
+            if (cond->type == VAL_BOOL) {
+                condition = !cond->data.bool_val;
+            }
+            
+            return vm_exec_jump_conditional(vm, instr->operand.addr_operand, condition);
+        }
+        
+        /* 同步指令 */
+        case OP_SYNC_VAR:
+            if (vm->sync_enabled) {
+                return vm_sync_variable(vm, instr->operand.int_operand);
+            }
+            break;
+            
+        case OP_SYNC_CHECKPOINT:
+            if (vm->sync_enabled) {
+                return vm_send_sync_checkpoint(vm);
+            }
+            break;
+            
+        default:
+            vm_set_error(vm, "Unknown instruction");
+            return -1;
+    }
+    
+    /* 移动到下一条指令 */
+    vm->pc++;
+    
+    return 0;
+}
+
+/* ========== 算术运算指令实现 ========== */
+
+int vm_exec_add(st_vm_t *vm, value_type_t type) {
+    vm_value_t *b = vm_stack_pop(vm);
+    vm_value_t *a = vm_stack_pop(vm);
+    
+    if (!a || !b) {
+        vm_set_error(vm, "Stack underflow in ADD");
+        return -1;
+    }
+    
+    vm_value_t result;
+    
+    if (type == VAL_INT) {
+        if (a->type != VAL_INT || b->type != VAL_INT) {
+            vm_set_error(vm, "Type mismatch in ADD_INT");
+            return -1;
+        }
+        result = vm_create_int_value(a->data.int_val + b->data.int_val);
+    } else {
+        if (a->type != VAL_REAL || b->type != VAL_REAL) {
+            vm_set_error(vm, "Type mismatch in ADD_REAL");
+            return -1;
+        }
+        result = vm_create_real_value(a->data.real_val + b->data.real_val);
+    }
+    
+    return vm_stack_push(vm, &result);
+}
+
+int vm_exec_sub(st_vm_t *vm, value_type_t type) {
+    vm_value_t *b = vm_stack_pop(vm);
+    vm_value_t *a = vm_stack_pop(vm);
+    
+    if (!a || !b) {
+        vm_set_error(vm, "Stack underflow in SUB");
+        return -1;
+    }
+    
+    vm_value_t result;
+    
+    if (type == VAL_INT) {
+        result = vm_create_int_value(a->data.int_val - b->data.int_val);
+    } else {
+        result = vm_create_real_value(a->data.real_val - b->data.real_val);
+    }
+    
+    return vm_stack_push(vm, &result);
+}
+
+int vm_exec_mul(st_vm_t *vm, value_type_t type) {
+    vm_value_t *b = vm_stack_pop(vm);
+    vm_value_t *a = vm_stack_pop(vm);
+    
+    if (!a || !b) {
+        vm_set_error(vm, "Stack underflow in MUL");
+        return -1;
+    }
+    
+    vm_value_t result;
+    
+    if (type == VAL_INT) {
+        result = vm_create_int_value(a->data.int_val * b->data.int_val);
+    } else {
+        result = vm_create_real_value(a->data.real_val * b->data.real_val);
+    }
+    
+    return vm_stack_push(vm, &result);
+}
+
+int vm_exec_div(st_vm_t *vm, value_type_t type) {
+    vm_value_t *b = vm_stack_pop(vm);
+    vm_value_t *a = vm_stack_pop(vm);
+    
+    if (!a || !b) {
+        vm_set_error(vm, "Stack underflow in DIV");
+        return -1;
+    }
+    
+    vm_value_t result;
+    
+    if (type == VAL_INT) {
+        if (b->data.int_val == 0) {
+            vm_set_error(vm, "Division by zero");
+            return -1;
+        }
+        result = vm_create_int_value(a->data.int_val / b->data.int_val);
+    } else {
+        if (b->data.real_val == 0.0) {
+            vm_set_error(vm, "Division by zero");
+            return -1;
+        }
+        result = vm_create_real_value(a->data.real_val / b->data.real_val);
+    }
+    
+    return vm_stack_push(vm, &result);
+}
+
+int vm_exec_mod(st_vm_t *vm) {
+    vm_value_t *b = vm_stack_pop(vm);
+    vm_value_t *a = vm_stack_pop(vm);
+    
+    if (!a || !b || a->type != VAL_INT || b->type != VAL_INT) {
+        vm_set_error(vm, "Invalid operands for MOD");
+        return -1;
+    }
+    
+    if (b->data.int_val == 0) {
+        vm_set_error(vm, "Division by zero in MOD");
+        return -1;
+    }
+    
+    vm_value_t result = vm_create_int_value(a->data.int_val % b->data.int_val);
+    return vm_stack_push(vm, &result);
+}
+
+int vm_exec_neg(st_vm_t *vm, value_type_t type) {
+    vm_value_t *a = vm_stack_pop(vm);
+    
+    if (!a) {
+        vm_set_error(vm, "Stack underflow in NEG");
+        return -1;
+    }
+    
+    vm_value_t result;
+    
+    if (type == VAL_INT) {
+        result = vm_create_int_value(-a->data.int_val);
+    } else {
+        result = vm_create_real_value(-a->data.real_val);
+    }
+    
+    return vm_stack_push(vm, &result);
+}
+
+/* ========== 控制流指令实现 ========== */
+
+int vm_exec_jump(st_vm_t *vm, uint32_t address) {
+    if (!vm_is_valid_pc(vm, address)) {
+        vm_set_error(vm, "Invalid jump address");
+        return -1;
+    }
+    
+    vm->pc = address;
+    return 0;
+}
+
+int vm_exec_jump_conditional(st_vm_t *vm, uint32_t address, bool condition) {
+    if (condition) {
+        return vm_exec_jump(vm, address);
+    } else {
+        vm->pc++;  // 继续执行下一条指令
+        return 0;
+    }
+}
+
+/* ========== 主从同步接口实现 ========== */
+
+int vm_enable_sync(st_vm_t *vm, const sync_config_t *config, vm_sync_mode_t mode) {
+    if (!vm || !config) {
+        return -1;
+    }
+    
+    /* 创建同步管理器 */
+    vm->sync_mgr = ms_sync_create();
+    if (!vm->sync_mgr) {
+        return -1;
+    }
+    
+    /* 初始化同步管理器 */
+    node_role_t role = (mode == VM_SYNC_PRIMARY) ? NODE_ROLE_PRIMARY : NODE_ROLE_SECONDARY;
+    if (ms_sync_init(vm->sync_mgr, config, role, vm) != 0) {
+        ms_sync_destroy(vm->sync_mgr);
+        vm->sync_mgr = NULL;
+        return -1;
+    }
+    
+    /* 启动网络连接 */
+    if (ms_sync_start_network(vm->sync_mgr) != 0) {
+        ms_sync_destroy(vm->sync_mgr);
+        vm->sync_mgr = NULL;
+        return -1;
+    }
+    
+    vm->sync_enabled = true;
+    vm->sync_mode = mode;
+    
+    return 0;
+}
+
+int vm_disable_sync(st_vm_t *vm) {
+    if (!vm) return -1;
+    
+    if (vm->sync_mgr) {
+        ms_sync_stop_network(vm->sync_mgr);
+        ms_sync_destroy(vm->sync_mgr);
+        vm->sync_mgr = NULL;
+    }
+    
+    vm->sync_enabled = false;
+    vm->sync_mode = VM_SYNC_NONE;
+    
+    return 0;
+}
+
+int vm_sync_variable(st_vm_t *vm, uint32_t var_index) {
+    if (!vm || !vm->sync_enabled || !vm->sync_mgr) {
+        return -1;
+    }
+    
+    return ms_sync_send_variable_update(vm->sync_mgr, var_index);
+}
+
+int vm_process_sync_messages(st_vm_t *vm) {
+    if (!vm || !vm->sync_enabled || !vm->sync_mgr) {
+        return -1;
+    }
+    
+    return ms_sync_process_messages(vm->sync_mgr);
+}
+
+bool vm_is_sync_variable(const st_vm_t *vm, uint32_t var_index) {
+    if (!vm || !vm->sync_enabled) {
+        return false;
+    }
+    
+    for (uint32_t i = 0; i < vm->sync_var_count; i++) {
+        if (vm->sync_var_indices[i] == var_index) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/* ========== 调试支持 ========== */
+
+bool vm_is_breakpoint(const st_vm_t *vm, uint32_t address) {
+    if (!vm || !vm->debug_info.debug_enabled) {
+        return false;
+    }
+    
+    for (uint32_t i = 0; i < vm->debug_info.breakpoint_count; i++) {
+        if (vm->debug_info.breakpoints[i] == address) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+/* ========== 错误处理 ========== */
+
+void vm_set_error(st_vm_t *vm, const char *error_msg) {
+    if (!vm || !error_msg) return;
+    
+    strncpy(vm->last_error, error_msg, sizeof(vm->last_error) - 1);
+    vm->last_error[sizeof(vm->last_error) - 1] = '\0';
+    vm->has_error = true;
+    vm->state = VM_STATE_ERROR;
+}
+
+const char* vm_get_last_error(const st_vm_t *vm) {
+    return vm ? vm->last_error : "Invalid VM instance";
+}
+
+void vm_clear_error(st_vm_t *vm) {
+    if (!vm) return;
+    
+    vm->has_error = false;
+    vm->last_error[0] = '\0';
+}
+
+/* ========== 辅助函数 ========== */
+
+static int vm_handle_sync_operations(st_vm_t *vm) {
+    if (!vm || !vm->sync_enabled) {
+        return 0;
+    }
+    
+    /* 处理同步消息 */
+    vm_process_sync_messages(vm);
+    
+    return 0;
+}
+
+static void vm_update_statistics(st_vm_t *vm, opcode_t opcode) {
+    if (!vm) return;
+    
+    vm->statistics.instructions_executed++;
+    
+    switch (opcode) {
+        case OP_CALL:
+        case OP_CALL_BUILTIN:
+        case OP_CALL_LIBRARY:
+            vm->statistics.function_calls++;
+            break;
+        case OP_SYNC_VAR:
+        case OP_SYNC_CHECKPOINT:
+            vm->statistics.sync_operations++;
+            break;
+        default:
+            break;
+    }
+}
+
+static bool vm_check_execution_limits(st_vm_t *vm) {
+    if (!vm) return false;
+    
+    /* 简单的执行限制检查 */
+    return vm->statistics.instructions_executed < 1000000; /* 100万指令限制 */
+}
+
+bool vm_is_valid_pc(const st_vm_t *vm, uint32_t pc) {
+    return vm && pc < vm->instr_count;
+}
+
+void vm_reset_statistics(st_vm_t *vm) {
+    if (!vm) return;
+    
+    memset(&vm->statistics, 0, sizeof(vm_statistics_t));
+}
+
+vm_state_t vm_get_state(const st_vm_t *vm) {
+    return vm ? vm->state : VM_STATE_ERROR;
+}
+
+const char* vm_state_to_string(vm_state_t state) {
+    switch (state) {
+        case VM_STATE_INIT: return "INIT";
+        case VM_STATE_RUNNING: return "RUNNING";
+        case VM_STATE_PAUSED: return "PAUSED";
+        case VM_STATE_STOPPED: return "STOPPED";
+        case VM_STATE_ERROR: return "ERROR";
+        case VM_STATE_SYNC_WAIT: return "SYNC_WAIT";
+        default: return "UNKNOWN";
+    }
+}
+
+/* ========== 库函数支持 ========== */
+
+int vm_set_library_manager(st_vm_t *vm, struct library_manager *lib_mgr) {
+    if (!vm) return -1;
+    
+    vm->lib_mgr = lib_mgr;
+    return 0;
+}
+
+struct library_manager* vm_get_library_manager(const st_vm_t *vm) {
+    return vm ? vm->lib_mgr : NULL;
+}
+
+int vm_call_library_function(st_vm_t *vm, const char *lib_name, 
+                             const char *func_name, uint32_t param_count) {
+    if (!vm || !lib_name || !func_name || !vm->lib_mgr) {
+        return -1;
+    }
+    
+    /* 通过库管理器调用函数 */
+    /* 这里需要与libmgr.h中的接口配合 */
+    return 0; /* 简化实现 */
+}
+
+int vm_call_builtin_function(st_vm_t *vm, const char *func_name, uint32_t param_count) {
+    if (!vm || !func_name) {
+        return -1;
+    }
+    
+    /* 调用内置函数 */
+    return 0; /* 简化实现 */
+}
+
+/* ========== 诊断输出（补充完整） ========== */
+
+void vm_print_stack(const st_vm_t *vm) {
+    if (!vm) return;
+    
+    printf("=== VM Stack (top = %d) ===\n", vm->operand_stack.top);
+    for (int32_t i = vm->operand_stack.top; i >= 0; i--) {
+        printf("[%d] ", i);
+        vm_print_value(&vm->operand_stack.data[i]);
         printf("\n");
     }
-    printf("总共 %d 条指令\n", vm->code_size);
-    printf("==============\n");
+    printf("========================\n");
+}
+
+void vm_print_call_stack(const st_vm_t *vm) {
+    if (!vm) return;
+    
+    printf("=== Call Stack (depth = %d) ===\n", vm->call_stack_top + 1);
+    for (int32_t i = vm->call_stack_top; i >= 0; i--) {
+        const call_frame_t *frame = &vm->call_stack[i];
+        printf("[%d] %s (ret_addr: %u)\n", i, 
+               frame->function_name ? frame->function_name : "<anonymous>",
+               frame->return_address);
+    }
+    printf("=============================\n");
+}
+
+void vm_print_variables(const st_vm_t *vm) {
+    if (!vm) return;
+    
+    printf("=== Global Variables ===\n");
+    for (uint32_t i = 0; i < vm->global_var_count && i < 20; i++) {
+        printf("G[%u] ", i);
+        vm_print_value(&vm->global_vars[i]);
+        printf("\n");
+    }
+    
+    printf("=== Local Variables ===\n");
+    for (uint32_t i = 0; i < vm->local_var_count && i < 10; i++) {
+        printf("L[%u] ", i);
+        vm_print_value(&vm->local_vars[i]);
+        printf("\n");
+    }
+    printf("=======================\n");
+}
+
+void vm_print_sync_status(const st_vm_t *vm) {
+    if (!vm) return;
+    
+    printf("=== Sync Status ===\n");
+    printf("Sync enabled: %s\n", vm->sync_enabled ? "YES" : "NO");
+    printf("Sync mode: %s\n", 
+           (vm->sync_mode == VM_SYNC_PRIMARY) ? "PRIMARY" :
+           (vm->sync_mode == VM_SYNC_SECONDARY) ? "SECONDARY" : "NONE");
+    printf("Sync variables: %u\n", vm->sync_var_count);
+    
+    if (vm->sync_mgr) {
+        printf("Peer alive: %s\n", ms_sync_is_peer_alive(vm->sync_mgr) ? "YES" : "NO");
+        printf("Connected: %s\n", ms_sync_is_connected(vm->sync_mgr) ? "YES" : "NO");
+    }
+    printf("==================\n");
+}
+
+const vm_statistics_t* vm_get_statistics(const st_vm_t *vm) {
+    return vm ? &vm->statistics : NULL;
+}
+
+void vm_print_statistics(const st_vm_t *vm) {
+    if (!vm) return;
+    
+    printf("=== VM Statistics ===\n");
+    printf("Instructions executed: %lu\n", vm->statistics.instructions_executed);
+    printf("Function calls: %lu\n", vm->statistics.function_calls);
+    printf("Library calls: %lu\n", vm->statistics.library_calls);
+    printf("Sync operations: %lu\n", vm->statistics.sync_operations);
+    printf("Runtime errors: %lu\n", vm->statistics.runtime_errors);
+    printf("Execution time: %lu ms\n", vm->statistics.execution_time_ms);
+    printf("====================\n");
+}
+
+size_t vm_get_memory_usage(const st_vm_t *vm) {
+    if (!vm) return 0;
+    
+    size_t usage = sizeof(st_vm_t);
+    usage += vm->instr_count * sizeof(bytecode_instr_t);
+    /* 其他内存使用统计 */
+    
+    return usage;
+}
+
+void vm_print_memory_info(const st_vm_t *vm) {
+    if (!vm) return;
+    
+    printf("=== Memory Usage ===\n");
+    printf("VM instance: %zu bytes\n", sizeof(st_vm_t));
+    printf("Instructions: %zu bytes\n", vm->instr_count * sizeof(bytecode_instr_t));
+    printf("Global vars: %zu bytes\n", vm->global_var_count * sizeof(vm_value_t));
+    printf("Stack usage: %d/%d\n", vm->operand_stack.top + 1, MAX_STACK_SIZE);
+    printf("Call stack: %d/%d\n", vm->call_stack_top + 1, MAX_CALL_FRAMES);
+    printf("Total usage: %zu bytes\n", vm_get_memory_usage(vm));
+    printf("===================\n");
+}
+
+/* ========== 工具函数（补充完整） ========== */
+
+const char* vm_value_type_to_string(value_type_t type) {
+    switch (type) {
+        case VAL_BOOL: return "BOOL";
+        case VAL_INT: return "INT";
+        case VAL_DINT: return "DINT";
+        case VAL_REAL: return "REAL";
+        case VAL_STRING: return "STRING";
+        case VAL_TIME: return "TIME";
+        case VAL_UNDEFINED: return "UNDEFINED";
+        default: return "UNKNOWN";
+    }
+}
+
+bool vm_is_numeric_type(value_type_t type) {
+    return type == VAL_INT || type == VAL_DINT || type == VAL_REAL;
+}
+
+bool vm_is_compatible_types(value_type_t a, value_type_t b) {
+    if (a == b) return true;
+    
+    /* 数值类型之间可以转换 */
+    return vm_is_numeric_type(a) && vm_is_numeric_type(b);
+}
+
+const char* vm_opcode_to_string(opcode_t opcode) {
+    return bytecode_get_opcode_name(opcode);
+}
+
+bool vm_is_jump_instruction(opcode_t opcode) {
+    return opcode == OP_JMP || opcode == OP_JMP_TRUE || opcode == OP_JMP_FALSE;
+}
+
+bool vm_is_call_instruction(opcode_t opcode) {
+    return opcode == OP_CALL || opcode == OP_CALL_BUILTIN || opcode == OP_CALL_LIBRARY;
+}
+
+bool vm_is_valid_global_var_index(const st_vm_t *vm, uint32_t index) {
+    return vm && index < vm->global_var_count;
+}
+
+bool vm_is_valid_local_var_index(const st_vm_t *vm, uint32_t index) {
+    return vm && index < vm->local_var_count;
 }
 
 /* 打印值的辅助函数 */
-void vm_print_value(VMValue value) {
-    switch (value.type) {
-        case TYPE_INT:
-            printf("%d", value.value.int_val);
+void vm_print_value(const vm_value_t *value) {
+    if (!value) {
+        printf("(null)");
+        return;
+    }
+    
+    switch (value->type) {
+        case VAL_BOOL:
+            printf("BOOL: %s", value->data.bool_val ? "TRUE" : "FALSE");
             break;
-        case TYPE_REAL:
-            printf("%f", value.value.real_val);
+        case VAL_INT:
+            printf("INT: %d", value->data.int_val);
             break;
-        case TYPE_BOOL:
-            printf("%s", value.value.bool_val ? "TRUE" : "FALSE");
+        case VAL_DINT:
+            printf("DINT: %ld", value->data.dint_val);
             break;
-        case TYPE_STRING:
-            printf("\"%s\"", value.value.str_val ? value.value.str_val : "");
+        case VAL_REAL:
+            printf("REAL: %.6f", value->data.real_val);
+            break;
+        case VAL_STRING:
+            printf("STRING: \"%s\"", value->data.string_val ? value->data.string_val : "(null)");
+            break;
+        case VAL_TIME:
+            printf("TIME: %lu ms", value->data.time_val);
+            break;
+        case VAL_UNDEFINED:
+            printf("UNDEFINED");
             break;
         default:
-            printf("unknown");
+            printf("UNKNOWN_TYPE");
             break;
     }
+}
+
+/* 执行直到断点 */
+int vm_execute_until_breakpoint(st_vm_t *vm) {
+    if (!vm) return -1;
+    
+    bool old_step_mode = vm->debug_info.step_mode;
+    vm->debug_info.step_mode = false;
+    
+    vm->state = VM_STATE_RUNNING;
+    int result = vm_execute_main_loop(vm);
+    
+    vm->debug_info.step_mode = old_step_mode;
+    
+    return result;
+}
+
+/* 暂停执行 */
+void vm_pause(st_vm_t *vm) {
+    if (vm && vm->state == VM_STATE_RUNNING) {
+        vm->state = VM_STATE_PAUSED;
+    }
+}
+
+/* 恢复执行 */
+void vm_resume(st_vm_t *vm) {
+    if (vm && vm->state == VM_STATE_PAUSED) {
+        vm->state = VM_STATE_RUNNING;
+    }
+}
+
+/* 停止执行 */
+void vm_stop(st_vm_t *vm) {
+    if (vm) {
+        vm->state = VM_STATE_STOPPED;
+    }
+}
+
+/* 设置和获取程序计数器 */
+void vm_set_pc(st_vm_t *vm, uint32_t pc) {
+    if (vm && vm_is_valid_pc(vm, pc)) {
+        vm->pc = pc;
+    }
+}
+
+uint32_t vm_get_pc(const st_vm_t *vm) {
+    return vm ? vm->pc : 0;
+}
+
+void vm_jump_to(st_vm_t *vm, uint32_t address) {
+    if (vm && vm_is_valid_pc(vm, address)) {
+        vm->pc = address;
+    }
+}
+
+/* 栈操作（补充） */
+vm_value_t* vm_stack_peek(st_vm_t *vm, int32_t offset) {
+    if (!vm) return NULL;
+    
+    int32_t index = vm->operand_stack.top - offset;
+    if (index < 0 || index > vm->operand_stack.top) {
+        return NULL;
+    }
+    
+    return &vm->operand_stack.data[index];
 }
