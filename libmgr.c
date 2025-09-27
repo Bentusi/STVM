@@ -1,4 +1,5 @@
 #include "libmgr.h"
+#include "symbol_table.h"
 #include "mmgr.h"
 #include "ast.h"
 #include "bytecode.h"
@@ -6,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <stdarg.h>
 
 /* 外部解析器声明 */
 extern FILE *yyin;
@@ -22,6 +24,9 @@ static int extract_symbols_from_bytecode(bytecode_file_t *bytecode, library_info
 static void generate_qualified_names(library_info_t *lib);
 static library_info_t* find_library_by_name_or_alias(library_manager_t *mgr, const char *name);
 static void set_error(library_manager_t *mgr, const char *format, ...);
+static uint32_t hash_string(const char *str);
+
+/* 内置库注册函数 */
 static int register_builtin_math_library(library_manager_t *mgr, const char *alias);
 static int register_builtin_string_library(library_manager_t *mgr, const char *alias);
 static int register_builtin_io_library(library_manager_t *mgr, const char *alias);
@@ -62,9 +67,15 @@ void libmgr_destroy(library_manager_t *mgr) {
         return;
     }
     
-    /* 卸载所有库 */
+    /* 清理所有库资源 */
     for (uint32_t i = 0; i < mgr->library_count; i++) {
-        // 清理库资源（如果需要）
+        library_info_t *lib = &mgr->libraries[i];
+        for (uint32_t j = 0; j < lib->symbol_count; j++) {
+            library_symbol_t *symbol = &lib->symbols[j];
+            if (symbol->data_type) {
+                // 清理类型信息（如果需要）
+            }
+        }
     }
     
     mmgr_free(mgr);
@@ -105,91 +116,42 @@ int libmgr_load_library(library_manager_t *mgr, const char *name,
         }
     }
     
-    /* 检测文件类型并加载 */
-    library_file_type_t file_type = detect_file_type(resolved_path);
-    switch (file_type) {
+    if (!file_exists(resolved_path)) {
+        set_error(mgr, "Library file not found: %s", resolved_path);
+        return LIBMGR_ERROR_INVALID_PATH;
+    }
+    
+    /* 创建新的库信息 */
+    library_info_t *lib = &mgr->libraries[mgr->library_count];
+    memset(lib, 0, sizeof(library_info_t));
+    
+    strncpy(lib->name, name, MAX_LIBRARY_NAME - 1);
+    strncpy(lib->path, resolved_path, MAX_LIBRARY_PATH - 1);
+    lib->type = LIB_TYPE_USER;
+    lib->file_type = detect_file_type(resolved_path);
+    lib->status = LIB_STATUS_UNLOADED;
+    
+    if (alias && strlen(alias) > 0) {
+        strncpy(lib->alias, alias, MAX_LIBRARY_NAME - 1);
+        lib->has_alias = true;
+    }
+    
+    /* 根据文件类型解析 */
+    int result;
+    switch (lib->file_type) {
         case FILE_TYPE_SOURCE:
-            return libmgr_load_source_library(mgr, name, resolved_path, alias);
+            result = parse_source_file(resolved_path, lib);
+            break;
         case FILE_TYPE_BYTECODE:
-            return libmgr_load_bytecode_library(mgr, name, resolved_path, alias);
+            result = parse_bytecode_file(resolved_path, lib);
+            break;
         default:
             set_error(mgr, "Unknown file type for '%s'", resolved_path);
             return LIBMGR_ERROR_FILE_TYPE_UNKNOWN;
     }
-}
-
-int libmgr_load_source_library(library_manager_t *mgr, const char *name, 
-                               const char *path, const char *alias) {
-    if (!mgr || !mgr->is_initialized || !name || !path) {
-        return LIBMGR_ERROR_NOT_INITIALIZED;
-    }
     
-    if (!file_exists(path)) {
-        set_error(mgr, "Source file not found: %s", path);
-        return LIBMGR_ERROR_INVALID_PATH;
-    }
-    
-    /* 创建新的库信息 */
-    library_info_t *lib = &mgr->libraries[mgr->library_count];
-    memset(lib, 0, sizeof(library_info_t));
-    
-    strncpy(lib->name, name, MAX_LIBRARY_NAME - 1);
-    strncpy(lib->path, path, MAX_LIBRARY_PATH - 1);
-    lib->type = LIB_TYPE_USER;
-    lib->file_type = FILE_TYPE_SOURCE;
-    lib->status = LIB_STATUS_UNLOADED;
-    
-    if (alias && strlen(alias) > 0) {
-        strncpy(lib->alias, alias, MAX_LIBRARY_NAME - 1);
-        lib->has_alias = true;
-    }
-    
-    /* 解析源文件 */
-    if (parse_source_file(path, lib) != 0) {
-        set_error(mgr, "Failed to parse source file: %s", path);
-        lib->status = LIB_STATUS_ERROR;
-        return LIBMGR_ERROR_PARSE_FAILED;
-    }
-    
-    /* 生成限定名 */
-    generate_qualified_names(lib);
-    
-    lib->status = LIB_STATUS_LOADED;
-    lib->reference_count = 1;
-    mgr->library_count++;
-    
-    return LIBMGR_SUCCESS;
-}
-
-int libmgr_load_bytecode_library(library_manager_t *mgr, const char *name, 
-                                 const char *path, const char *alias) {
-    if (!mgr || !mgr->is_initialized || !name || !path) {
-        return LIBMGR_ERROR_NOT_INITIALIZED;
-    }
-    
-    if (!file_exists(path)) {
-        set_error(mgr, "Bytecode file not found: %s", path);
-        return LIBMGR_ERROR_INVALID_PATH;
-    }
-    
-    /* 创建新的库信息 */
-    library_info_t *lib = &mgr->libraries[mgr->library_count];
-    memset(lib, 0, sizeof(library_info_t));
-    
-    strncpy(lib->name, name, MAX_LIBRARY_NAME - 1);
-    strncpy(lib->path, path, MAX_LIBRARY_PATH - 1);
-    lib->type = LIB_TYPE_USER;
-    lib->file_type = FILE_TYPE_BYTECODE;
-    lib->status = LIB_STATUS_UNLOADED;
-    
-    if (alias && strlen(alias) > 0) {
-        strncpy(lib->alias, alias, MAX_LIBRARY_NAME - 1);
-        lib->has_alias = true;
-    }
-    
-    /* 解析字节码文件 */
-    if (parse_bytecode_file(path, lib) != 0) {
-        set_error(mgr, "Failed to parse bytecode file: %s", path);
+    if (result != 0) {
+        set_error(mgr, "Failed to parse library file: %s", resolved_path);
         lib->status = LIB_STATUS_ERROR;
         return LIBMGR_ERROR_PARSE_FAILED;
     }
@@ -219,63 +181,98 @@ int libmgr_unload_library(library_manager_t *mgr, const char *name_or_alias) {
         return LIBMGR_SUCCESS;
     }
     
-    /* 清理库资源并移除 */
+    /* 清理库资源并标记为卸载 */
     lib->status = LIB_STATUS_UNLOADED;
-    // 这里可以添加更多清理逻辑
+    lib->reference_count = 0;
     
     return LIBMGR_SUCCESS;
 }
 
-/* ========== 符号查找实现 ========== */
+/* ========== 符号提取和注册实现（核心功能） ========== */
 
-library_symbol_t* libmgr_find_symbol(library_manager_t *mgr, const char *symbol_name) {
-    if (!mgr || !mgr->is_initialized || !symbol_name) {
-        return NULL;
+int libmgr_register_symbols_to_table(library_manager_t *mgr, const char *lib_name,
+                                     struct symbol_table *symbol_table) {
+    if (!mgr || !mgr->is_initialized || !lib_name || !symbol_table) {
+        return LIBMGR_ERROR_NOT_INITIALIZED;
     }
     
-    /* 首先尝试精确匹配限定名 */
-    for (uint32_t i = 0; i < mgr->library_count; i++) {
-        library_info_t *lib = &mgr->libraries[i];
-        if (lib->status != LIB_STATUS_LOADED) continue;
+    library_info_t *lib = find_library_by_name_or_alias(mgr, lib_name);
+    if (!lib || lib->status != LIB_STATUS_LOADED) {
+        set_error(mgr, "Library '%s' not found or not loaded", lib_name);
+        return LIBMGR_ERROR_LIBRARY_NOT_FOUND;
+    }
+    
+    /* 将库中的所有导出符号注册到符号表 */
+    for (uint32_t i = 0; i < lib->symbol_count; i++) {
+        library_symbol_t *lib_symbol = &lib->symbols[i];
         
-        for (uint32_t j = 0; j < lib->symbol_count; j++) {
-            library_symbol_t *symbol = &lib->symbols[j];
-            if (symbol->is_exported && 
-                strcmp(symbol->qualified_name, symbol_name) == 0) {
-                return symbol;
-            }
+        if (!lib_symbol->is_exported) {
+            continue;
+        }
+        
+        symbol_t *symbol = NULL;
+        
+        switch (lib_symbol->type) {
+            case LIB_SYMBOL_FUNCTION:
+                symbol = symbol_table_register_library_function(
+                    symbol_table,
+                    lib_symbol->name,
+                    lib_symbol->qualified_name,
+                    lib_symbol->data_type,
+                    lib_symbol->implementation,
+                    lib->name
+                );
+                break;
+                
+            case LIB_SYMBOL_VARIABLE:
+                symbol = symbol_table_register_library_variable(
+                    symbol_table,
+                    lib_symbol->name,
+                    lib_symbol->qualified_name,
+                    lib_symbol->data_type,
+                    lib_symbol->implementation,
+                    lib->name
+                );
+                break;
+                
+            case LIB_SYMBOL_CONSTANT:
+                // 常量可以作为特殊变量处理
+                symbol = symbol_table_register_library_variable(
+                    symbol_table,
+                    lib_symbol->name,
+                    lib_symbol->qualified_name,
+                    lib_symbol->data_type,
+                    lib_symbol->implementation,
+                    lib->name
+                );
+                break;
+        }
+        
+        if (!symbol) {
+            set_error(mgr, "Failed to register symbol '%s' from library '%s'", 
+                     lib_symbol->name, lib->name);
+            return LIBMGR_ERROR_PARSE_FAILED;
         }
     }
     
-    /* 然后尝试匹配原名 */
-    for (uint32_t i = 0; i < mgr->library_count; i++) {
-        library_info_t *lib = &mgr->libraries[i];
-        if (lib->status != LIB_STATUS_LOADED) continue;
-        
-        for (uint32_t j = 0; j < lib->symbol_count; j++) {
-            library_symbol_t *symbol = &lib->symbols[j];
-            if (symbol->is_exported && 
-                strcmp(symbol->name, symbol_name) == 0) {
-                return symbol;
-            }
-        }
+    return LIBMGR_SUCCESS;
+}
+
+int libmgr_get_library_symbols(library_manager_t *mgr, const char *lib_name,
+                               library_symbol_t **symbols, uint32_t *count) {
+    if (!mgr || !mgr->is_initialized || !lib_name) {
+        return LIBMGR_ERROR_NOT_INITIALIZED;
     }
     
-    return NULL;
-}
-
-library_symbol_t* libmgr_find_function(library_manager_t *mgr, const char *func_name) {
-    library_symbol_t *symbol = libmgr_find_symbol(mgr, func_name);
-    return (symbol && symbol->type == SYMBOL_FUNCTION) ? symbol : NULL;
-}
-
-library_symbol_t* libmgr_find_variable(library_manager_t *mgr, const char *var_name) {
-    library_symbol_t *symbol = libmgr_find_symbol(mgr, var_name);
-    return (symbol && symbol->type == SYMBOL_VAR) ? symbol : NULL;
-}
-
-bool libmgr_symbol_exists(library_manager_t *mgr, const char *symbol_name) {
-    return libmgr_find_symbol(mgr, symbol_name) != NULL;
+    library_info_t *lib = find_library_by_name_or_alias(mgr, lib_name);
+    if (!lib || lib->status != LIB_STATUS_LOADED) {
+        return LIBMGR_ERROR_LIBRARY_NOT_FOUND;
+    }
+    
+    if (symbols) *symbols = lib->symbols;
+    if (count) *count = lib->symbol_count;
+    
+    return LIBMGR_SUCCESS;
 }
 
 /* ========== 库信息查询实现 ========== */
@@ -288,6 +285,11 @@ library_info_t* libmgr_get_library_info(library_manager_t *mgr, const char *name
     return find_library_by_name_or_alias(mgr, name_or_alias);
 }
 
+bool libmgr_is_library_loaded(library_manager_t *mgr, const char *name_or_alias) {
+    library_info_t *lib = libmgr_get_library_info(mgr, name_or_alias);
+    return lib && lib->status == LIB_STATUS_LOADED;
+}
+
 int libmgr_get_library_stats(library_manager_t *mgr, const char *name_or_alias,
                              uint32_t *func_count, uint32_t *var_count) {
     library_info_t *lib = libmgr_get_library_info(mgr, name_or_alias);
@@ -297,19 +299,6 @@ int libmgr_get_library_stats(library_manager_t *mgr, const char *name_or_alias,
     
     if (func_count) *func_count = lib->function_count;
     if (var_count) *var_count = lib->variable_count;
-    
-    return LIBMGR_SUCCESS;
-}
-
-int libmgr_list_library_symbols(library_manager_t *mgr, const char *name_or_alias,
-                                library_symbol_t **symbols, uint32_t *count) {
-    library_info_t *lib = libmgr_get_library_info(mgr, name_or_alias);
-    if (!lib) {
-        return LIBMGR_ERROR_LIBRARY_NOT_FOUND;
-    }
-    
-    if (symbols) *symbols = lib->symbols;
-    if (count) *count = lib->symbol_count;
     
     return LIBMGR_SUCCESS;
 }
@@ -460,6 +449,7 @@ int libmgr_add_search_path(library_manager_t *mgr, const char *path) {
     }
     
     strncpy(mgr->search_paths[mgr->path_count], path, MAX_LIBRARY_PATH - 1);
+    mgr->search_paths[mgr->path_count][MAX_LIBRARY_PATH - 1] = '\0';
     mgr->path_count++;
     
     return LIBMGR_SUCCESS;
@@ -516,8 +506,26 @@ const char* libmgr_get_last_error(library_manager_t *mgr) {
 }
 
 static void set_error(library_manager_t *mgr, const char *format, ...) {
-    // 简化实现，实际应该使用 va_list
-    if (mgr && format) {
-        strncpy(mgr->last_error, format, sizeof(mgr->last_error) - 1);
-    }
+    if (!mgr || !format) return;
+    
+    va_list args;
+    va_start(args, format);
+    vsnprintf(mgr->last_error, sizeof(mgr->last_error) - 1, format, args);
+    va_end(args);
+}
+
+/* 内置库注册函数的简化实现 */
+static int register_builtin_math_library(library_manager_t *mgr, const char *alias) {
+    // 简化实现，实际需要创建内置数学库并注册函数
+    return LIBMGR_SUCCESS;
+}
+
+static int register_builtin_string_library(library_manager_t *mgr, const char *alias) {
+    // 简化实现，实际需要创建内置字符串库并注册函数
+    return LIBMGR_SUCCESS;
+}
+
+static int register_builtin_io_library(library_manager_t *mgr, const char *alias) {
+    // 简化实现，实际需要创建内置IO库并注册函数
+    return LIBMGR_SUCCESS;
 }

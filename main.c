@@ -1167,13 +1167,8 @@ static void print_help(void) {
 
     printf("基本选项:\n");
     printf("  -h, --help              显示此帮助信息\n");
-    printf("  -V, --version           显示版本信息\n");
-    printf("  -v, --verbose           显示详细信息\n");
-    printf("  -q, --quiet             静默模式\n");
+    printf("  -v, --version           显示版本信息\n");
     printf("  -o, --output FILE       指定输出文件\n");
-    printf("  -W, --no-warnings       禁用警告信息\n");
-    printf("  -C, --no-colors         禁用彩色输出\n");
-    printf("  -E, --max-errors N      最大错误数量\n");
 
     printf("\n运行模式:\n");
     printf("  -c, --compile           仅编译，不执行\n");
@@ -1182,32 +1177,12 @@ static void print_help(void) {
     printf("  -d, --debug FILE        调试模式\n");
     printf("  -D, --disassemble FILE  反汇编字节码文件\n");
     printf("  -s, --syntax-check FILE 语法检查模式\n");
-    printf("  -P, --profile FILE      性能分析模式\n");
-    printf("  -f, --format FILE       代码格式化模式\n");
 
     printf("\n编译选项:\n");
-    printf("  -O, --optimize[=N]      启用优化(级别0-3)\n");
     printf("  -A, --show-ast          显示抽象语法树\n");
     printf("  -B, --show-bytecode     显示字节码\n");
     printf("  -T, --show-tokens       显示词法分析结果\n");
-    printf("  -X, --strict            严格模式\n");
     printf("  -L, --library-path DIR  添加库搜索路径\n");
-    printf("  -b, --benchmark         基准测试模式\n");
-
-    printf("\n同步选项:\n");
-    printf("  -M, --sync-primary IP   启用主机同步模式\n");
-    printf("  -S, --sync-secondary IP 启用从机同步模式\n");
-    printf("  -p, --sync-port PORT    设置同步端口 (默认: 8888)\n");
-
-    printf("\n示例:\n");
-    printf("  %s program.st                    # 编译并执行\n", PROGRAM_NAME);
-    printf("  %s -c -O2 program.st             # 优化编译\n", PROGRAM_NAME);
-    printf("  %s -r program.stbc               # 执行字节码\n", PROGRAM_NAME);
-    printf("  %s -i                            # 交互模式\n", PROGRAM_NAME);
-    printf("  %s -d program.st                 # 调试模式\n", PROGRAM_NAME);
-    printf("  %s -P program.st                 # 性能分析\n", PROGRAM_NAME);
-    printf("  %s -f program.st                 # 代码格式化\n", PROGRAM_NAME);
-    printf("  %s -M 192.168.1.100 program.st  # 主机同步模式\n", PROGRAM_NAME);
 }
 
 static void print_usage(void) {

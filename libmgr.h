@@ -3,7 +3,10 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include "symbol_table.h"
+
+/* 前向声明，避免循环依赖 */
+struct symbol_table;
+struct type_info;
 
 /* 常量定义 */
 #define MAX_LIBRARIES 32
@@ -33,6 +36,13 @@ typedef enum {
     FILE_TYPE_UNKNOWN
 } library_file_type_t;
 
+/* 符号类型（简化版，只用于库管理） */
+typedef enum {
+    LIB_SYMBOL_FUNCTION = 0,
+    LIB_SYMBOL_VARIABLE,
+    LIB_SYMBOL_CONSTANT
+} lib_symbol_type_t;
+
 /* 错误码 */
 typedef enum {
     LIBMGR_SUCCESS = 0,
@@ -46,17 +56,18 @@ typedef enum {
     LIBMGR_ERROR_FILE_TYPE_UNKNOWN
 } libmgr_error_t;
 
-/* 库符号信息 - 简化版 */
+/* 库符号信息 - 专用于库管理 */
 typedef struct library_symbol {
     char name[MAX_LIBRARY_NAME];              // 原始符号名
     char qualified_name[MAX_LIBRARY_NAME*2];  // 限定名（alias.name）
-    symbol_type_t type;                       // 符号类型（函数/变量/常量）
-    type_info_t *data_type;                   // 数据类型
-    void *implementation;                     // 实现指针（函数指针或变量地址）
+    lib_symbol_type_t type;                   // 符号类型
+    struct type_info *data_type;              // 数据类型信息
+    void *implementation;                     // 实现指针
     bool is_exported;                         // 是否导出
+    uint32_t line_number;                     // 定义行号
 } library_symbol_t;
 
-/* 库信息 - 简化版 */
+/* 库信息 */
 typedef struct library_info {
     char name[MAX_LIBRARY_NAME];        // 库名
     char alias[MAX_LIBRARY_NAME];       // 别名（如果有）
@@ -80,7 +91,7 @@ typedef struct library_info {
     uint32_t reference_count;           // 引用计数
 } library_info_t;
 
-/* 库管理器 - 简化版 */
+/* 库管理器 */
 typedef struct library_manager {
     library_info_t libraries[MAX_LIBRARIES];        // 库数组
     uint32_t library_count;                         // 库数量
@@ -101,33 +112,27 @@ void libmgr_destroy(library_manager_t *mgr);
 bool libmgr_is_initialized(library_manager_t *mgr);
 
 /* 库文件加载接口（核心功能） */
-int libmgr_load_source_library(library_manager_t *mgr, const char *name, 
-                               const char *path, const char *alias);
-int libmgr_load_bytecode_library(library_manager_t *mgr, const char *name, 
-                                 const char *path, const char *alias);
 int libmgr_load_library(library_manager_t *mgr, const char *name, 
                         const char *path, const char *alias);
 int libmgr_unload_library(library_manager_t *mgr, const char *name_or_alias);
 
-/* 符号查找接口（支持别名） */
-library_symbol_t* libmgr_find_symbol(library_manager_t *mgr, const char *symbol_name);
-library_symbol_t* libmgr_find_function(library_manager_t *mgr, const char *func_name);
-library_symbol_t* libmgr_find_variable(library_manager_t *mgr, const char *var_name);
-bool libmgr_symbol_exists(library_manager_t *mgr, const char *symbol_name);
+/* 符号提取和注册接口（关键接口） */
+int libmgr_register_symbols_to_table(library_manager_t *mgr, const char *lib_name,
+                                     struct symbol_table *symbol_table);
+int libmgr_get_library_symbols(library_manager_t *mgr, const char *lib_name,
+                               library_symbol_t **symbols, uint32_t *count);
 
 /* 库信息查询接口 */
 library_info_t* libmgr_get_library_info(library_manager_t *mgr, const char *name_or_alias);
+bool libmgr_is_library_loaded(library_manager_t *mgr, const char *name_or_alias);
 int libmgr_get_library_stats(library_manager_t *mgr, const char *name_or_alias,
                              uint32_t *func_count, uint32_t *var_count);
-int libmgr_list_library_symbols(library_manager_t *mgr, const char *name_or_alias,
-                                library_symbol_t **symbols, uint32_t *count);
 
 /* 路径管理 */
 int libmgr_add_search_path(library_manager_t *mgr, const char *path);
 const char* libmgr_resolve_library_path(library_manager_t *mgr, const char *name);
 
 /* 内置库注册接口 */
-int libmgr_register_builtin_library(library_manager_t *mgr, const char *name, const char *alias);
 int libmgr_load_builtin_libraries(library_manager_t *mgr);
 
 /* 工具接口 */

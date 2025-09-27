@@ -4,195 +4,195 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+/* 常量定义 */
+#define MAX_SCOPE_DEPTH 32
+#define SYMBOL_HASH_SIZE 256
+#define MAX_SYMBOL_NAME 64
+
 /* 符号类型 */
 typedef enum {
-    SYMBOL_VAR,             // 变量
+    SYMBOL_VARIABLE,        // 变量
     SYMBOL_FUNCTION,        // 函数
-    SYMBOL_FUNCTION_BLOCK,  // 函数块
-    SYMBOL_TYPE,            // 用户定义类型
     SYMBOL_CONSTANT,        // 常量
-    SYMBOL_LIBRARY,         // 库符号
-    SYMBOL_BUILTIN          // 内置符号
+    SYMBOL_TYPE             // 类型定义
 } symbol_type_t;
 
+/* 基础数据类型 */
 typedef enum {
     TYPE_BOOL_ID,       // 布尔类型
     TYPE_BYTE_ID,       // 字节类型
-    TYPE_WORD_ID,       // 字类型
-    TYPE_DWORD_ID,      // 双字类型
-    TYPE_LWORD_ID,      // 长字类型
-    TYPE_SINT_ID,       // 短整数
     TYPE_INT_ID,        // 整数类型
-    TYPE_DINT_ID,       // 双整数类型
-    TYPE_LINT_ID,       // 长整数类型
-    TYPE_USINT_ID,      // 无符号短整数
-    TYPE_UINT_ID,       // 无符号整数
-    TYPE_UDINT_ID,      // 无符号双整数
-    TYPE_ULINT_ID,      // 无符号长整数
     TYPE_REAL_ID,       // 实数类型
-    TYPE_LREAL_ID,      // 长实数类型
     TYPE_STRING_ID,     // 字符串类型
-    TYPE_WSTRING_ID,    // 宽字符串类型
-    TYPE_TIME_ID,       // 时间类型
-    TYPE_DATE_ID,       // 日期类型
-    TYPE_TIME_OF_DAY_ID,// 时分秒类型
-    TYPE_DATE_AND_TIME_ID, // 日期时间类型
     TYPE_ARRAY_ID,      // 数组类型
     TYPE_STRUCT_ID,     // 结构体类型
-    TYPE_UNION_ID,      // 联合类型
-    TYPE_ENUM_ID,       // 枚举类型
     TYPE_FUNCTION_ID,   // 函数类型
-    TYPE_POINTER_ID,    // 指针类型
-    TYPE_USER_ID,       // 用户定义类型
-    TYPE_MAX_ID
+    TYPE_USER_ID        // 用户定义类型
 } base_type_t;
 
-/* 数据类型信息 */
+/* 变量类别 */
+typedef enum {
+    VAR_LOCAL,          // 局部变量
+    VAR_GLOBAL,         // 全局变量
+    VAR_INPUT,          // 输入变量
+    VAR_OUTPUT,         // 输出变量
+    VAR_IN_OUT,         // 输入输出变量
+    VAR_TEMP            // 临时变量
+} var_category_t;
+
+/* 作用域类型 */
+typedef enum {
+    SCOPE_GLOBAL,       // 全局作用域
+    SCOPE_PROGRAM,      // 程序作用域
+    SCOPE_FUNCTION,     // 函数作用域
+    SCOPE_BLOCK         // 块作用域
+} scope_type_t;
+
+/* 类型信息 */
 typedef struct type_info {
-    base_type_t base_type;    // 基础类型
-    
+    base_type_t base_type;      // 基础类型
     uint32_t size;              // 类型大小（字节）
-    uint32_t alignment;         // 对齐要求
     bool is_constant;           // 是否常量类型
     bool is_array;              // 是否数组类型
-    bool is_pointer;            // 是否指针类型
     
     /* 复合类型信息 */
     union {
         struct {
             struct type_info *element_type;     // 数组元素类型
-            uint32_t dimensions;                // 数组维数
+            uint32_t dimension_count;           // 维数
             uint32_t *bounds;                   // 各维边界
         } array_info;
         
         struct {
-            struct symbol **members;            // 结构体成员
-            uint32_t member_count;              // 成员数量
-        } struct_info;
-        
-        struct {
-            struct symbol **values;             // 枚举值
-            uint32_t value_count;               // 枚举值数量
-        } enum_info;
-        
-        struct {
             struct type_info *return_type;      // 返回类型
-            struct symbol **parameters;         // 参数列表
             uint32_t parameter_count;           // 参数数量
         } function_info;
     } compound;
     
     char *type_name;            // 类型名称
-    struct type_info *next;     // 链表下一项
 } type_info_t;
-
-/* 变量类别 */
-typedef enum {
-    SYMBOL_VAR_LOCAL,              // 局部变量
-    SYMBOL_VAR_INPUT,              // 输入变量
-    SYMBOL_VAR_OUTPUT,             // 输出变量
-    SYMBOL_VAR_IN_OUT,             // 输入输出变量
-    SYMBOL_VAR_EXTERNAL,           // 外部变量
-    SYMBOL_VAR_GLOBAL,             // 全局变量
-    SYMBOL_VAR_CONSTANT,           // 常量
-    SYMBOL_VAR_TEMP,               // 临时变量
-    SYMBOL_VAR_CONFIG,             // 配置变量
-    SYMBOL_VAR_ACCESS              // 访问变量
-} var_category_t;
-
-/* 函数类别 */
-typedef enum {
-    FUNC_FUNCTION,          // 标准函数
-    FUNC_FUNCTION_BLOCK,    // 函数块
-    FUNC_BUILTIN,           // 内置函数
-    FUNC_LIBRARY            // 库函数
-} function_category_t;
-
-/* 符号属性标志 */
-typedef enum {
-    SYMBOL_ATTR_NONE        = 0x0000,
-    SYMBOL_ATTR_CONSTANT    = 0x0001,   // 常量
-    SYMBOL_ATTR_RETAIN      = 0x0002,   // 保持
-    SYMBOL_ATTR_EXPORTED    = 0x0004,   // 导出
-    SYMBOL_ATTR_IMPORTED    = 0x0008,   // 导入
-    SYMBOL_ATTR_INITIALIZED = 0x0010,   // 已初始化
-    SYMBOL_ATTR_STATIC      = 0x0020,   // 静态
-    SYMBOL_ATTR_VOLATILE    = 0x0040,   // 易失
-    SYMBOL_ATTR_READ_ONLY   = 0x0080,   // 只读
-    SYMBOL_ATTR_DEPRECATED  = 0x0100    // 已弃用
-} symbol_attributes_t;
 
 /* 符号表项 */
 typedef struct symbol {
-    char *name;                         // 符号名称
-    char *qualified_name;               // 限定名称（包含库前缀）
-    symbol_type_t symbol_type;          // 符号类型
+    char name[MAX_SYMBOL_NAME];         // 符号名称
+    symbol_type_t type;                 // 符号类型
     type_info_t *data_type;             // 数据类型
     
-    uint32_t scope_level;               // 作用域级别
     uint32_t address;                   // 内存地址或偏移
-    uint32_t size;                      // 符号大小
+    uint32_t scope_level;               // 作用域级别
     
     /* 符号分类信息 */
     union {
         struct {
             var_category_t category;    // 变量类别
-            void *default_value;        // 默认值
-            void *current_value;        // 当前值
-        } var_info;
+            void *value_ptr;            // 变量值指针
+        } var;
         
         struct {
-            function_category_t category;   // 函数类别
-            struct symbol **parameters;     // 参数列表
-            uint32_t parameter_count;       // 参数数量
-            void *implementation;           // 函数实现
-            char *library_name;             // 所属库名
-        } func_info;
+            void *implementation;       // 函数实现指针
+            uint32_t param_count;       // 参数数量
+        } func;
         
         struct {
-            char *library_name;             // 库名
-            char *version;                  // 版本
-            bool is_loaded;                 // 是否已加载
-        } lib_info;
+            void *const_value;          // 常量值
+        } constant;
     } info;
     
-    /* 符号属性 */
-    symbol_attributes_t attributes;      // 符号属性标志
-    bool is_global;                      // 是否为全局符号
-    bool is_builtin;                     // 是否为内置符号
+    /* 库符号标识 */
+    bool is_library_symbol;             // 是否来自库
+    char *source_library;               // 源库名（如果来自库）
     
     /* 源码位置信息 */
-    struct {
-        int line;                       // 定义行号
-        int column;                     // 定义列号
-        char *filename;                 // 定义文件名
-    } location;
+    uint32_t line_number;               // 定义行号
+    char *source_file;                  // 定义文件名
     
-    /* 链表和树结构 */
+    /* 链表结构 */
     struct symbol *next;                // 同级链表下一项
-    struct symbol *parent;              // 父符号
-    struct symbol *children;            // 子符号链表
     struct symbol *hash_next;           // 哈希表链表
-    
-    /* 使用统计 */
-    uint32_t reference_count;           // 引用计数
-    uint32_t access_count;              // 访问计数
 } symbol_t;
 
-/* 作用域管理 */
-#define MAX_SCOPE_DEPTH 32
-#define SYMBOL_TABLE_SIZE 1024
-
+/* 作用域 */
+typedef struct scope {
+    uint32_t level;                     // 作用域级别
+    char name[MAX_SYMBOL_NAME];         // 作用域名称
+    scope_type_t type;                  // 作用域类型
     
-/* 作用域类型 */
-typedef enum {
-    SCOPE_GLOBAL,                   // 全局作用域
-    SCOPE_PROGRAM,                  // 程序作用域
-    SCOPE_FUNCTION,                 // 函数作用域
-    SCOPE_LIBRARY,                  // 库作用域
-    SCOPE_BLOCK                     // 块作用域
-} scope_type_t;
+    symbol_t *symbols;                  // 符号链表头
+    uint32_t symbol_count;              // 符号数量
+    uint32_t next_address;              // 下一个可用地址
+    
+    /* 哈希表优化查找 */
+    symbol_t *hash_table[SYMBOL_HASH_SIZE];
+    
+    struct scope *parent;               // 父作用域
+} scope_t;
 
+/* 符号表管理器 */
+typedef struct symbol_table {
+    scope_t *global_scope;              // 全局作用域
+    scope_t *current_scope;             // 当前作用域
+    scope_t *scope_stack[MAX_SCOPE_DEPTH]; // 作用域栈
+    uint32_t scope_depth;               // 当前作用域深度
+    
+    /* 预定义类型 */
+    type_info_t *builtin_types[16];     // 内置类型数组
+    
+    /* 统计信息 */
+    uint32_t total_symbols;             // 总符号数
+    uint32_t library_symbols;           // 库符号数
+    
+    bool is_initialized;                // 是否已初始化
+} symbol_table_t;
+
+/* ========== 核心接口 ========== */
+
+/* 生命周期管理 */
+symbol_table_t* symbol_table_create(void);
+int symbol_table_init(symbol_table_t *table);
+void symbol_table_destroy(symbol_table_t *table);
+bool symbol_table_is_initialized(symbol_table_t *table);
+
+/* 作用域管理 */
+int symbol_table_enter_scope(symbol_table_t *table, const char *scope_name, scope_type_t type);
+int symbol_table_exit_scope(symbol_table_t *table);
+scope_t* symbol_table_get_current_scope(symbol_table_t *table);
+scope_t* symbol_table_get_global_scope(symbol_table_t *table);
+
+/* 符号定义（由编译器/库管理器调用） */
+symbol_t* symbol_table_define_variable(symbol_table_t *table, const char *name, 
+                                       type_info_t *type, var_category_t category);
+symbol_t* symbol_table_define_function(symbol_table_t *table, const char *name,
+                                       type_info_t *return_type, void *implementation);
+symbol_t* symbol_table_define_constant(symbol_table_t *table, const char *name,
+                                       type_info_t *type, void *value);
+
+/* 库符号注册（关键接口） */
+symbol_t* symbol_table_register_library_function(symbol_table_t *table, const char *name,
+                                                 const char *qualified_name, type_info_t *type,
+                                                 void *implementation, const char *library_name);
+symbol_t* symbol_table_register_library_variable(symbol_table_t *table, const char *name,
+                                                 const char *qualified_name, type_info_t *type,
+                                                 void *value_ptr, const char *library_name);
+
+/* 符号查找（由VM调用） */
+symbol_t* symbol_table_lookup(symbol_table_t *table, const char *name);
+symbol_t* symbol_table_lookup_function(symbol_table_t *table, const char *name);
+symbol_t* symbol_table_lookup_variable(symbol_table_t *table, const char *name);
+bool symbol_table_symbol_exists(symbol_table_t *table, const char *name);
+
+/* 类型管理 */
+type_info_t* symbol_table_get_builtin_type(base_type_t type);
+type_info_t* symbol_table_create_array_type(type_info_t *element_type, uint32_t dimensions, uint32_t *bounds);
+type_info_t* symbol_table_create_function_type(type_info_t *return_type, uint32_t param_count);
+int symbol_table_register_user_type(symbol_table_t *table, const char *name, type_info_t *type);
+
+/* 工具接口 */
+void symbol_table_print_symbols(symbol_table_t *table);
+void symbol_table_print_scope(symbol_table_t *table, scope_t *scope);
+uint32_t symbol_table_get_symbol_count(symbol_table_t *table);
+uint32_t symbol_table_get_library_symbol_count(symbol_table_t *table);
+
+#endif /* SYMBOL_TABLE_H */
 typedef struct scope {
     uint32_t level;                     // 作用域级别
     char *name;                         // 作用域名称
