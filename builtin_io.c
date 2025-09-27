@@ -593,11 +593,8 @@ static int builtin_delay(struct vm_value *args, uint32_t arg_count, struct vm_va
         return -1;
     }
     
-    /* 简化实现：使用标准库延时 */
-    struct timespec ts;
-    ts.tv_sec = delay_ms / 1000;
-    ts.tv_nsec = (delay_ms % 1000) * 1000000;
-    nanosleep(&ts, NULL);
+    /* 使用标准库延时 */
+    usleep(delay_ms / 1000);
     
     result->type = VAL_BOOL;
     result->data.bool_val = true;

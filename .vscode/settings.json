@@ -6,6 +6,7 @@
         "string.h": "c",
         "ms_sync.h": "c",
         "symbol_table.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "time.h": "c"
     }
 }

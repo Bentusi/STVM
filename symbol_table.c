@@ -174,7 +174,6 @@ static symbol_t* create_symbol(const char *name, symbol_type_t type) {
     memset(symbol, 0, sizeof(symbol_t));
     symbol->name = mmgr_alloc_string(name);
     symbol->symbol_type = type;
-    symbol->scope_level = g_symbol_mgr.current_scope->level;
     symbol->reference_count = 0;
     symbol->access_count = 0;
     
@@ -242,7 +241,7 @@ symbol_t* add_variable_symbol(const char *name, type_info_t *data_type,
     symbol->info.var_info.current_value = NULL;
     
     /* 设置符号属性 */
-    if (category == VAR_CONSTANT) {
+    if (category == SYMBOL_VAR_CONSTANT) {
         symbol->attributes |= SYMBOL_ATTR_CONSTANT | SYMBOL_ATTR_READ_ONLY;
     }
     
@@ -626,4 +625,41 @@ static void free_scope(scope_t *scope) {
     }
     
     // 作用域本身由MMGR管理
+}
+
+/* 初始化符号表 */
+int init_symbol_table(void){
+    memset(&g_symbol_mgr, 0, sizeof(g_symbol_mgr));
+    g_symbol_mgr.is_initialized = true;
+    return 0;
+}
+
+/* 清理符号表 */
+int cleanup_symbol_table(void){
+    if (!g_symbol_mgr.is_initialized) {
+        return -1;
+    }
+
+    /* 释放所有作用域 */
+    for (int i = 0; i < g_symbol_mgr.scope_depth; i++) {
+        free_scope(g_symbol_mgr.scopes[i]);
+    }
+
+    /* 释放全局作用域 */
+    free_scope(g_symbol_mgr.global_scope);
+
+    /* 释放内置类型 */
+    for (int i = 0; i < 32; i++) {
+        free_type_info(g_symbol_mgr.builtin_types[i]);
+    }
+
+    /* 释放库信息 */
+    for (int i = 0; i < g_symbol_mgr.library_info.library_count; i++) {
+        mmgr_free_library_info(g_symbol_mgr.library_info.imported_libraries[i]);
+    }
+    mmgr_free_library_info(g_symbol_mgr.library_info.imported_libraries);
+    mmgr_free_string(g_symbol_mgr.library_info.library_paths);
+
+    g_symbol_mgr.is_initialized = false;
+    return 0;
 }

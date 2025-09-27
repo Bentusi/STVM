@@ -614,3 +614,246 @@ void mmgr_cleanup(void) {
     
     MMGR_DEBUG_LOG("MMGR module cleanup completed");
 }
+
+/* ========== 通用内存分配 ========== */
+
+/* 通用内存分配器 - 用于分配任意大小的内存块 */
+void* mmgr_alloc_general(size_t size) {
+    if (size == 0 || !g_mmgr.is_initialized) {
+        mmgr_set_error("Invalid size or MMGR not initialized");
+        return NULL;
+    }
+    
+    /* 检查是否有足够的剩余内存 */
+    if (g_mmgr.general_pool.used + size > g_mmgr.general_pool.total_size) {
+        mmgr_set_error("General memory pool exhausted");
+        return NULL;
+    }
+    
+    /* 内存对齐处理 - 8字节对齐 */
+    size_t aligned_size = ALIGN_SIZE(size, 8);
+    
+    /* 检查对齐后的大小 */
+    if (g_mmgr.general_pool.used + aligned_size > g_mmgr.general_pool.total_size) {
+        mmgr_set_error("General memory pool exhausted after alignment");
+        return NULL;
+    }
+    
+    /* 计算分配地址 */
+    void *ptr = (char*)g_mmgr.general_pool.pool + g_mmgr.general_pool.used;
+    
+    /* 更新使用统计 */
+    g_mmgr.general_pool.used += aligned_size;
+    g_mmgr.general_pool.allocations++;
+    g_mmgr.stats.allocation_count++;
+    g_mmgr.stats.total_allocated += aligned_size;
+    
+    /* 记录分配信息（用于调试） */
+    if (g_mmgr.debug_enabled) {
+        allocation_record_t *record = &g_mmgr.allocation_records[g_mmgr.record_count % MAX_ALLOCATION_RECORDS];
+        record->ptr = ptr;
+        record->size = aligned_size;
+        record->type = ALLOC_GENERAL;
+        record->line = 0;  // 调用者可以通过mmgr_alloc_general_debug设置
+        record->file = "unknown";
+        record->is_active = true;
+        g_mmgr.record_count++;
+    }
+    
+    /* 内存初始化为零 */
+    memset(ptr, 0, aligned_size);
+    
+    return ptr;
+}
+
+#ifdef MMGR_DEBUG
+/* 通用内存分配器（带调试信息） */
+void* mmgr_alloc_general_debug(size_t size, const char *file, int line) {
+    void *ptr = mmgr_alloc_general(size);
+    
+    if (ptr && g_mmgr.debug_enabled && g_mmgr.record_count > 0) {
+        /* 更新最后一条分配记录的调试信息 */
+        allocation_record_t *record = &g_mmgr.allocation_records[(g_mmgr.record_count - 1) % MAX_ALLOCATION_RECORDS];
+        if (record->ptr == ptr) {
+            record->file = file ? file : "unknown";
+            record->line = line;
+        }
+    }
+    
+    return ptr;
+}
+#endif
+
+/* 通用内存重新分配 */
+void* mmgr_realloc_general(void *ptr, size_t new_size) {
+    if (!g_mmgr.is_initialized) {
+        mmgr_set_error("MMGR not initialized");
+        return NULL;
+    }
+    
+    /* 如果ptr为NULL，相当于malloc */
+    if (!ptr) {
+        return mmgr_alloc_general(new_size);
+    }
+    
+    /* 如果new_size为0，相当于free（但在静态内存管理中不释放） */
+    if (new_size == 0) {
+        return NULL;
+    }
+    
+    /* 查找原始分配记录 */
+    allocation_record_t *record = NULL;
+    for (uint32_t i = 0; i < MAX_ALLOCATION_RECORDS && i < g_mmgr.record_count; i++) {
+        allocation_record_t *r = &g_mmgr.allocation_records[i];
+        if (r->ptr == ptr && r->is_active) {
+            record = r;
+            break;
+        }
+    }
+    
+    if (!record) {
+        mmgr_set_error("Invalid pointer for reallocation");
+        return NULL;
+    }
+    
+    size_t old_size = record->size;
+    
+    /* 如果新大小小于等于旧大小，直接返回原指针 */
+    if (new_size <= old_size) {
+        return ptr;
+    }
+    
+    /* 分配新内存 */
+    void *new_ptr = mmgr_alloc_general(new_size);
+    if (!new_ptr) {
+        return NULL;
+    }
+    
+    /* 复制旧数据 */
+    memcpy(new_ptr, ptr, old_size);
+    
+    /* 标记旧分配记录为非活跃（在静态内存管理中不实际释放） */
+    record->is_active = false;
+    
+    return new_ptr;
+}
+
+/* 获取通用内存池统计信息 */
+void mmgr_get_general_stats(mmgr_general_stats_t *stats) {
+    if (!stats || !g_mmgr.is_initialized) {
+        return;
+    }
+    
+    stats->total_size = g_mmgr.general_pool.total_size;
+    stats->used_size = g_mmgr.general_pool.used;
+    stats->free_size = g_mmgr.general_pool.total_size - g_mmgr.general_pool.used;
+    stats->allocation_count = g_mmgr.general_pool.allocations;
+    stats->fragmentation_ratio = 0.0f; // 静态分配无碎片
+}
+
+/* 检查指针是否在通用内存池范围内 */
+bool mmgr_is_general_pointer(const void *ptr) {
+    if (!ptr || !g_mmgr.is_initialized) {
+        return false;
+    }
+    
+    const char *pool_start = (const char*)g_mmgr.general_pool.pool;
+    const char *pool_end = pool_start + g_mmgr.general_pool.total_size;
+    const char *check_ptr = (const char*)ptr;
+    
+    return (check_ptr >= pool_start && check_ptr < pool_end);
+}
+
+/* 通用内存池压缩（静态内存管理中的模拟实现） */
+size_t mmgr_compact_general_pool(void) {
+    if (!g_mmgr.is_initialized) {
+        return 0;
+    }
+    
+    /* 在静态内存管理中，压缩操作主要是统计和重置非活跃分配 */
+    size_t reclaimed = 0;
+    uint32_t active_allocations = 0;
+    
+    for (uint32_t i = 0; i < MAX_ALLOCATION_RECORDS && i < g_mmgr.record_count; i++) {
+        allocation_record_t *record = &g_mmgr.allocation_records[i];
+        if (record->type == ALLOC_GENERAL) {
+            if (record->is_active) {
+                active_allocations++;
+            } else {
+                reclaimed += record->size;
+            }
+        }
+    }
+    
+    /* 更新统计信息 */
+    g_mmgr.general_pool.allocations = active_allocations;
+    
+    return reclaimed;
+}
+
+/* 通用内存池清理 */
+void mmgr_clear_general_pool(void) {
+    if (!g_mmgr.is_initialized) {
+        return;
+    }
+    
+    /* 重置池状态 */
+    g_mmgr.general_pool.used = 0;
+    g_mmgr.general_pool.allocations = 0;
+    
+    /* 标记所有通用分配记录为非活跃 */
+    for (uint32_t i = 0; i < MAX_ALLOCATION_RECORDS && i < g_mmgr.record_count; i++) {
+        allocation_record_t *record = &g_mmgr.allocation_records[i];
+        if (record->type == ALLOC_GENERAL) {
+            record->is_active = false;
+        }
+    }
+    
+    /* 清零内存池 */
+    if (g_mmgr.general_pool.pool) {
+        memset(g_mmgr.general_pool.pool, 0, g_mmgr.general_pool.total_size);
+    }
+}
+
+/* 设置错误 */
+void mmgr_set_error(const char *msg) {
+    if (msg && g_mmgr.is_initialized) {
+        strncpy(g_mmgr.last_error, msg, sizeof(g_mmgr.last_error) - 1);
+        g_mmgr.last_error[sizeof(g_mmgr.last_error) - 1] = '\0';
+        MMGR_DEBUG_LOG(g_mmgr.last_error);
+    }
+}
+
+/* 通用内存分配器调试信息 */
+void mmgr_dump_general_allocations(void) {
+    if (!g_mmgr.is_initialized || !g_mmgr.debug_enabled) {
+        printf("General memory debugging not available\n");
+        return;
+    }
+    
+    printf("\n=== General Memory Allocations ===\n");
+    printf("Pool size: %zu bytes\n", g_mmgr.general_pool.total_size);
+    printf("Used: %zu bytes (%.1f%%)\n", 
+           g_mmgr.general_pool.used,
+           100.0 * g_mmgr.general_pool.used / g_mmgr.general_pool.total_size);
+    printf("Free: %zu bytes\n", 
+           g_mmgr.general_pool.total_size - g_mmgr.general_pool.used);
+    printf("Active allocations: %u\n", g_mmgr.general_pool.allocations);
+    
+    printf("\nActive Allocation Details:\n");
+    uint32_t count = 0;
+    size_t total_active = 0;
+    
+    for (uint32_t i = 0; i < MAX_ALLOCATION_RECORDS && i < g_mmgr.record_count; i++) {
+        allocation_record_t *record = &g_mmgr.allocation_records[i];
+        if (record->type == ALLOC_GENERAL && record->is_active) {
+            printf("  [%u] %p: %zu bytes (%s:%d)\n", 
+                   count++, record->ptr, record->size, 
+                   record->file, record->line);
+            total_active += record->size;
+        }
+    }
+    
+    printf("Total active memory: %zu bytes\n", total_active);
+    printf("================================\n\n");
+}

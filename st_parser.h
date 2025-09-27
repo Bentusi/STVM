@@ -190,7 +190,7 @@ union YYSTYPE
     operator_type_t op;
     var_category_t var_cat;
     param_category_t param_cat;
-    function_type_t func_type;
+    function_category_t func_type;
 
 #line 196 "st_parser.h"
 

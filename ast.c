@@ -137,7 +137,7 @@ ast_node_t* ast_create_var_item(const char *name, struct type_info *type,
 }
 
 /* 创建函数声明节点 */
-ast_node_t* ast_create_function_declaration(const char *name, function_type_t func_type,
+ast_node_t* ast_create_function_declaration(const char *name, function_category_t func_type,
                                            ast_node_t *parameters, struct type_info *return_type,
                                            ast_node_t *declarations, ast_node_t *statements) {
     ast_node_t *node = ast_alloc_node(AST_FUNCTION_DECL);

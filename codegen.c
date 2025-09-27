@@ -42,15 +42,13 @@ codegen_context_t* codegen_create_context(void) {
 }
 
 /* 销毁代码生成器上下文 */
-void codegen_destroy_context(codegen_context_t *ctx) {
-    if (!ctx) return;
-    
+void codegen_destroy_context(codegen_context_t *ctx) {    
     /* 内存由MMGR管理，不需要显式释放 */
 }
 
 /* 初始化代码生成器上下文 */
 int codegen_init_context(codegen_context_t *ctx, symbol_table_manager_t *sym_mgr,
-                         library_manager_t *lib_mgr) {
+                         library_manager_t *lib_mgr, master_slave_sync_t *sync_mgr) {
     if (!ctx || !sym_mgr || !lib_mgr) {
         return -1;
     }
@@ -203,7 +201,7 @@ int codegen_compile_var_declaration(codegen_context_t *ctx, ast_node_t *var_decl
         return -1;
     }
     
-    bool is_global = (var_decl->data.var_decl.category == VAR_GLOBAL);
+    bool is_global = (var_decl->data.var_decl.category == SYMBOL_VAR_GLOBAL);
     
     /* 遍历变量列表 */
     ast_node_t *var_item = var_decl->data.var_decl.var_list;

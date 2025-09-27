@@ -5,6 +5,7 @@
 
 #include "ms_sync.h"
 #include "mmgr.h"
+#include "vm.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -883,16 +883,16 @@ unary_expr:
 
 primary_expr:
     INTEGER_LITERAL {
-        $$ = create_literal_node(LITERAL_INT, &$1);
+        $$ = ast_create_literal(LITERAL_INT, &$1);
     }
     | REAL_LITERAL {
-        $$ = create_literal_node(LITERAL_REAL, &$1);
+        $$ = ast_create_literal(LITERAL_REAL, &$1);
     }
     | BOOL_LITERAL {
-        $$ = create_literal_node(LITERAL_BOOL, &$1);
+        $$ = ast_create_literal(LITERAL_BOOL, &$1);
     }
     | STRING_LITERAL {
-        $$ = create_literal_node(LITERAL_STRING, $1);
+        $$ = ast_create_literal(LITERAL_STRING, $1);
     }
     | IDENTIFIER {
         $$ = create_identifier_node($1);
@@ -1111,7 +1111,7 @@ ast_node_t* create_while_node(ast_node_t *condition, ast_node_t *statements);
 ast_node_t* create_return_statement(ast_node_t *return_value);
 ast_node_t* create_binary_op_node(operator_type_t op, ast_node_t *left, ast_node_t *right);
 ast_node_t* create_unary_op_node(operator_type_t op, ast_node_t *operand);
-ast_node_t* create_literal_node(literal_type_t type, const void *value);
+ast_node_t* ast_create_literal(literal_type_t type, const void *value);
 ast_node_t* create_identifier_node(const char *name);
 
 /* AST操作函数 */
@@ -1403,9 +1403,11 @@ int vm_process_sync_messages(st_vm_t *vm);
 ├── builtin_math.c           # 内置数学库
 ├── builtin_string.c         # 内置字符串库
 ├── builtin_io.c             # 内置I/O库
+├── builtin_time.c           # 内置时间库
 ├── ms_sync.h/c              # 主从同步系统
 ├── mmgr.h/c                 # 静态内存管理
 ├── bytecode.h/c             # 字节码定义
+├── type_checher.h/c         # 类型检查器
 ├── codegen.h/c              # 代码生成器（支持库调用）
 ├── vm.h/vm.c                # 虚拟机实现（支持同步）
 ├── main.c                   # 主程序

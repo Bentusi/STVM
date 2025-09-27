@@ -43,7 +43,8 @@ typedef enum {
     TYPE_ENUM_ID,       // 枚举类型
     TYPE_FUNCTION_ID,   // 函数类型
     TYPE_POINTER_ID,    // 指针类型
-    TYPE_USER_ID        // 用户定义类型
+    TYPE_USER_ID,       // 用户定义类型
+    TYPE_MAX_ID
 } base_type_t;
 
 /* 数据类型信息 */
@@ -87,16 +88,16 @@ typedef struct type_info {
 
 /* 变量类别 */
 typedef enum {
-    VAR_LOCAL,              // 局部变量
-    VAR_INPUT,              // 输入变量
-    VAR_OUTPUT,             // 输出变量
-    VAR_IN_OUT,             // 输入输出变量
-    VAR_EXTERNAL,           // 外部变量
-    VAR_GLOBAL,             // 全局变量
-    VAR_CONSTANT,           // 常量
-    VAR_TEMP,               // 临时变量
-    VAR_CONFIG,             // 配置变量
-    VAR_ACCESS              // 访问变量
+    SYMBOL_VAR_LOCAL,              // 局部变量
+    SYMBOL_VAR_INPUT,              // 输入变量
+    SYMBOL_VAR_OUTPUT,             // 输出变量
+    SYMBOL_VAR_IN_OUT,             // 输入输出变量
+    SYMBOL_VAR_EXTERNAL,           // 外部变量
+    SYMBOL_VAR_GLOBAL,             // 全局变量
+    SYMBOL_VAR_CONSTANT,           // 常量
+    SYMBOL_VAR_TEMP,               // 临时变量
+    SYMBOL_VAR_CONFIG,             // 配置变量
+    SYMBOL_VAR_ACCESS              // 访问变量
 } var_category_t;
 
 /* 函数类别 */
@@ -314,5 +315,8 @@ void compact_symbol_table(void);
 /* 序列化支持 */
 int save_symbol_table(const char *filename);
 int load_symbol_table(const char *filename);
+
+int init_symbol_table(void);
+int cleanup_symbol_table(void);
 
 #endif /* SYMBOL_TABLE_H */

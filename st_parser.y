@@ -32,7 +32,7 @@ static ast_node_t *g_ast_root = NULL;
     operator_type_t op;
     var_category_t var_cat;
     param_category_t param_cat;
-    function_type_t func_type;
+    function_category_t func_type;
 }
 
 /* 终结符定义 */
@@ -234,15 +234,15 @@ var_declaration:
     ;
 
 var_category:
-    VAR { $$ = VAR_LOCAL; }
-    | VAR_INPUT { $$ = VAR_INPUT; }
-    | VAR_OUTPUT { $$ = VAR_OUTPUT; }
-    | VAR_IN_OUT { $$ = VAR_IN_OUT; }
-    | VAR_EXTERNAL { $$ = VAR_EXTERNAL; }
-    | VAR_GLOBAL { $$ = VAR_GLOBAL; }
-    | VAR_CONSTANT { $$ = VAR_CONSTANT; }
-    | VAR_TEMP { $$ = VAR_TEMP; }
-    | VAR_CONFIG { $$ = VAR_CONFIG; }
+    VAR { $$ = SYMBOL_VAR_LOCAL; }
+    | VAR_INPUT { $$ = SYMBOL_VAR_INPUT; }
+    | VAR_OUTPUT { $$ = SYMBOL_VAR_OUTPUT; }
+    | VAR_IN_OUT { $$ = SYMBOL_VAR_IN_OUT; }
+    | VAR_EXTERNAL { $$ = SYMBOL_VAR_EXTERNAL; }
+    | VAR_GLOBAL { $$ = SYMBOL_VAR_GLOBAL; }
+    | VAR_CONSTANT { $$ = SYMBOL_VAR_CONSTANT; }
+    | VAR_TEMP { $$ = SYMBOL_VAR_TEMP; }
+    | VAR_CONFIG { $$ = SYMBOL_VAR_CONFIG; }
     ;
 
 var_list:
@@ -259,12 +259,12 @@ var_item:
     IDENTIFIER COLON type_specifier SEMICOLON {
         $$ = ast_create_var_item($1, $3, NULL, NULL);
         /* 添加到符号表 */
-        add_symbol($1, $3, get_current_scope());
+        add_symbol($1, SYMBOL_VAR, $3);
     }
     | IDENTIFIER COLON type_specifier ASSIGN expression SEMICOLON {
         $$ = ast_create_var_item($1, $3, $5, NULL);
         /* 添加到符号表 */
-        add_symbol($1, $3, get_current_scope());
+        add_symbol($1, SYMBOL_VAR, $3);
     }
     | IDENTIFIER COLON array_type SEMICOLON {
         $$ = ast_create_var_item($1, NULL, NULL, $3);

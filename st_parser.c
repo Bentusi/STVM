@@ -1854,55 +1854,55 @@ yyreduce:
 
   case 25: /* var_category: VAR  */
 #line 237 "st_parser.y"
-        { (yyval.var_cat) = VAR_LOCAL; }
+        { (yyval.var_cat) = SYMBOL_VAR_LOCAL; }
 #line 1859 "st_parser.c"
     break;
 
   case 26: /* var_category: VAR_INPUT  */
 #line 238 "st_parser.y"
-                { (yyval.var_cat) = VAR_INPUT; }
+                { (yyval.var_cat) = SYMBOL_VAR_INPUT; }
 #line 1865 "st_parser.c"
     break;
 
   case 27: /* var_category: VAR_OUTPUT  */
 #line 239 "st_parser.y"
-                 { (yyval.var_cat) = VAR_OUTPUT; }
+                 { (yyval.var_cat) = SYMBOL_VAR_OUTPUT; }
 #line 1871 "st_parser.c"
     break;
 
   case 28: /* var_category: VAR_IN_OUT  */
 #line 240 "st_parser.y"
-                 { (yyval.var_cat) = VAR_IN_OUT; }
+                 { (yyval.var_cat) = SYMBOL_VAR_IN_OUT; }
 #line 1877 "st_parser.c"
     break;
 
   case 29: /* var_category: VAR_EXTERNAL  */
 #line 241 "st_parser.y"
-                   { (yyval.var_cat) = VAR_EXTERNAL; }
+                   { (yyval.var_cat) = SYMBOL_VAR_EXTERNAL; }
 #line 1883 "st_parser.c"
     break;
 
   case 30: /* var_category: VAR_GLOBAL  */
 #line 242 "st_parser.y"
-                 { (yyval.var_cat) = VAR_GLOBAL; }
+                 { (yyval.var_cat) = SYMBOL_VAR_GLOBAL; }
 #line 1889 "st_parser.c"
     break;
 
   case 31: /* var_category: VAR_CONSTANT  */
 #line 243 "st_parser.y"
-                   { (yyval.var_cat) = VAR_CONSTANT; }
+                   { (yyval.var_cat) = SYMBOL_VAR_CONSTANT; }
 #line 1895 "st_parser.c"
     break;
 
   case 32: /* var_category: VAR_TEMP  */
 #line 244 "st_parser.y"
-               { (yyval.var_cat) = VAR_TEMP; }
+               { (yyval.var_cat) = SYMBOL_VAR_TEMP; }
 #line 1901 "st_parser.c"
     break;
 
   case 33: /* var_category: VAR_CONFIG  */
 #line 245 "st_parser.y"
-                 { (yyval.var_cat) = VAR_CONFIG; }
+                 { (yyval.var_cat) = SYMBOL_VAR_CONFIG; }
 #line 1907 "st_parser.c"
     break;
 
@@ -1928,7 +1928,7 @@ yyreduce:
                                               {
         (yyval.node) = ast_create_var_item((yyvsp[-3].string), (yyvsp[-1].type), NULL, NULL);
         /* 添加到符号表 */
-        add_symbol((yyvsp[-3].string), (yyvsp[-1].type), get_current_scope());
+        add_symbol((yyvsp[-3].string), SYMBOL_VAR, (yyvsp[-1].type));
     }
 #line 1934 "st_parser.c"
     break;
@@ -1938,7 +1938,7 @@ yyreduce:
                                                                   {
         (yyval.node) = ast_create_var_item((yyvsp[-5].string), (yyvsp[-3].type), (yyvsp[-1].node), NULL);
         /* 添加到符号表 */
-        add_symbol((yyvsp[-5].string), (yyvsp[-3].type), get_current_scope());
+        add_symbol((yyvsp[-5].string), SYMBOL_VAR, (yyvsp[-3].type));
     }
 #line 1944 "st_parser.c"
     break;

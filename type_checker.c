@@ -12,7 +12,6 @@
 
 /* 内部辅助函数声明 */
 static int type_checker_check_node_recursive(type_checker_context_t *ctx, ast_node_t *node);
-static type_info_t* type_checker_get_node_type(type_checker_context_t *ctx, ast_node_t *node);
 static bool type_checker_is_assignable(type_checker_context_t *ctx, type_info_t *from, type_info_t *to);
 static void type_checker_add_message(type_checker_context_t *ctx, type_severity_t severity,
                                     type_check_error_t error_code, source_location_t *location,
@@ -45,7 +44,7 @@ type_checker_context_t* type_checker_create(void) {
     ctx->function_signatures = (function_signature_t*)mmgr_alloc_general(
         sizeof(function_signature_t) * 128);
     
-    if (!ctx->builtin_types || !ctx->compatibility_table || !ctx->function_signatures) {
+    if (!ctx->compatibility_table || !ctx->function_signatures) {
         return NULL;
     }
     
@@ -436,14 +435,14 @@ int type_checker_check_assignment(type_checker_context_t *ctx, ast_node_t *assig
         return -1;
     }
     
-    const char *target_name = assignment->data.assignment.target;
+    ast_node_t *target = assignment->data.assignment.target;
     ast_node_t *value = assignment->data.assignment.value;
     
     /* 解析目标变量 */
-    symbol_t *target_symbol = type_checker_resolve_symbol(ctx, target_name);
+    symbol_t *target_symbol = type_checker_resolve_symbol(ctx, target->data.identifier.name);
     if (!target_symbol) {
         type_checker_add_error(ctx, TYPE_CHECK_UNDEFINED_SYMBOL, assignment->loc,
-                              "Undefined variable '%s'", target_name);
+                              "Undefined variable '%s'", target->data.identifier.name);
         return -1;
     }
     
@@ -458,7 +457,7 @@ int type_checker_check_assignment(type_checker_context_t *ctx, ast_node_t *assig
         type_checker_add_error(ctx, TYPE_CHECK_TYPE_MISMATCH, assignment->loc,
                               "Cannot assign value of type '%s' to variable '%s' of type '%s'",
                               type_checker_type_to_string(value_result->inferred_type),
-                              target_name,
+                              target->data.identifier.name,
                               type_checker_type_to_string(target_symbol->data_type));
         type_checker_destroy_inference_result(value_result);
         return -1;
@@ -967,6 +966,895 @@ int type_checker_check_condition(type_checker_context_t *ctx, ast_node_t *condit
     return 0;
 }
 
+/* ========== 类型工具函数 ========== */
+
+/* 类型转字符串 */
+const char* type_checker_type_to_string(type_info_t *type) {
+    if (!type) {
+        return "NULL";
+    }
+    
+    switch (type->base_type) {
+        case TYPE_BOOL_ID:
+            return "BOOL";
+        case TYPE_BYTE_ID:
+            return "BYTE";
+        case TYPE_SINT_ID:
+            return "SINT";
+        case TYPE_USINT_ID:
+            return "USINT";
+        case TYPE_INT_ID:
+            return "INT";
+        case TYPE_UINT_ID:
+            return "UINT";
+        case TYPE_DINT_ID:
+            return "DINT";
+        case TYPE_UDINT_ID:
+            return "UDINT";
+        case TYPE_LINT_ID:
+            return "LINT";
+        case TYPE_ULINT_ID:
+            return "ULINT";
+        case TYPE_REAL_ID:
+            return "REAL";
+        case TYPE_LREAL_ID:
+            return "LREAL";
+        case TYPE_STRING_ID:
+            return "STRING";
+        case TYPE_WSTRING_ID:
+            return "WSTRING";
+        case TYPE_TIME_ID:
+            return "TIME";
+        case TYPE_DATE_ID:
+            return "DATE";
+        case TYPE_TIME_OF_DAY_ID:
+            return "TOD";
+        case TYPE_DATE_AND_TIME_ID:
+            return "DT";
+        case TYPE_ARRAY_ID:
+            if (type->is_array) {
+                return "ARRAY";
+            }
+            return "ARRAY_TYPE";
+        case TYPE_STRUCT_ID:
+            return "STRUCT";
+        case TYPE_ENUM_ID:
+            return "ENUM";
+        case TYPE_FUNCTION_ID:
+            return "FUNCTION";
+        case TYPE_POINTER_ID:
+            return "POINTER";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+/* 判断是否为数值类型 */
+bool type_checker_is_numeric_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    switch (type->base_type) {
+        case TYPE_BYTE_ID:
+        case TYPE_SINT_ID:
+        case TYPE_USINT_ID:
+        case TYPE_INT_ID:
+        case TYPE_UINT_ID:
+        case TYPE_DINT_ID:
+        case TYPE_UDINT_ID:
+        case TYPE_LINT_ID:
+        case TYPE_ULINT_ID:
+        case TYPE_REAL_ID:
+        case TYPE_LREAL_ID:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* 判断是否为整数类型 */
+bool type_checker_is_integer_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    switch (type->base_type) {
+        case TYPE_BYTE_ID:
+        case TYPE_SINT_ID:
+        case TYPE_USINT_ID:
+        case TYPE_INT_ID:
+        case TYPE_UINT_ID:
+        case TYPE_DINT_ID:
+        case TYPE_UDINT_ID:
+        case TYPE_LINT_ID:
+        case TYPE_ULINT_ID:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* 判断是否为实数类型 */
+bool type_checker_is_real_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    switch (type->base_type) {
+        case TYPE_REAL_ID:
+        case TYPE_LREAL_ID:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* 判断是否为布尔类型 */
+bool type_checker_is_boolean_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    return type->base_type == TYPE_BOOL_ID;
+}
+
+/* 判断是否为字符串类型 */
+bool type_checker_is_string_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    switch (type->base_type) {
+        case TYPE_STRING_ID:
+        case TYPE_WSTRING_ID:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* 判断是否为时间类型 */
+bool type_checker_is_time_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    switch (type->base_type) {
+        case TYPE_TIME_ID:
+        case TYPE_DATE_ID:
+        case TYPE_TIME_OF_DAY_ID:
+        case TYPE_DATE_AND_TIME_ID:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* 判断是否为有符号整数类型 */
+bool type_checker_is_signed_integer_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    switch (type->base_type) {
+        case TYPE_SINT_ID:
+        case TYPE_INT_ID:
+        case TYPE_DINT_ID:
+        case TYPE_LINT_ID:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* 判断是否为无符号整数类型 */
+bool type_checker_is_unsigned_integer_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    switch (type->base_type) {
+        case TYPE_BYTE_ID:
+        case TYPE_USINT_ID:
+        case TYPE_UINT_ID:
+        case TYPE_UDINT_ID:
+        case TYPE_ULINT_ID:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* 判断是否为数组类型 */
+bool type_checker_is_array_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    return type->is_array || type->base_type == TYPE_ARRAY_ID;
+}
+
+/* 判断是否为结构体类型 */
+bool type_checker_is_struct_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    return type->base_type == TYPE_STRUCT_ID;
+}
+
+/* 判断是否为枚举类型 */
+bool type_checker_is_enum_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    return type->base_type == TYPE_ENUM_ID;
+}
+
+/* 判断是否为函数类型 */
+bool type_checker_is_function_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    return type->base_type == TYPE_FUNCTION_ID;
+}
+
+/* 判断是否为指针类型 */
+bool type_checker_is_pointer_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    return type->is_pointer || type->base_type == TYPE_POINTER_ID;
+}
+
+/* 判断是否为常量类型 */
+bool type_checker_is_constant_type(type_info_t *type) {
+    if (!type) {
+        return false;
+    }
+    
+    return type->is_constant;
+}
+
+/* 获取类型大小 */
+uint32_t type_checker_get_type_size(type_info_t *type) {
+    if (!type) {
+        return 0;
+    }
+    
+    if (type->is_array && type->compound.array_info.element_type) {
+        /* 数组类型：元素大小 * 元素数量 */
+        uint32_t element_size = type_checker_get_type_size(type->compound.array_info.element_type);
+        uint32_t total_elements = 1;
+        
+        for (uint32_t i = 0; i < type->compound.array_info.dimensions; i++) {
+            uint32_t lower = type->compound.array_info.bounds[i * 2];
+            uint32_t upper = type->compound.array_info.bounds[i * 2 + 1];
+            total_elements *= (upper - lower + 1);
+        }
+        
+        return element_size * total_elements;
+    }
+    
+    return type->size;
+}
+
+/* 获取类型对齐 */
+uint32_t type_checker_get_type_alignment(type_info_t *type) {
+    if (!type) {
+        return 1;
+    }
+    
+    return type->alignment;
+}
+
+/* 获取数组元素类型 */
+type_info_t* type_checker_get_array_element_type(type_info_t *type) {
+    if (!type || !type_checker_is_array_type(type)) {
+        return NULL;
+    }
+    
+    return type->compound.array_info.element_type;
+}
+
+/* 获取数组维数 */
+uint32_t type_checker_get_array_dimensions(type_info_t *type) {
+    if (!type || !type_checker_is_array_type(type)) {
+        return 0;
+    }
+    
+    return type->compound.array_info.dimensions;
+}
+
+/* 比较类型相等性 */
+bool type_checker_types_equal(type_info_t *type1, type_info_t *type2) {
+    if (type1 == type2) {
+        return true;
+    }
+    
+    if (!type1 || !type2) {
+        return false;
+    }
+    
+    /* 基础类型必须相同 */
+    if (type1->base_type != type2->base_type) {
+        return false;
+    }
+    
+    /* 常量性和数组性必须相同 */
+    if (type1->is_constant != type2->is_constant ||
+        type1->is_array != type2->is_array ||
+        type1->is_pointer != type2->is_pointer) {
+        return false;
+    }
+    
+    /* 数组类型的特殊比较 */
+    if (type1->is_array) {
+        if (type1->compound.array_info.dimensions != type2->compound.array_info.dimensions) {
+            return false;
+        }
+        
+        /* 比较元素类型 */
+        if (!type_checker_types_equal(type1->compound.array_info.element_type,
+                                     type2->compound.array_info.element_type)) {
+            return false;
+        }
+        
+        /* 比较数组边界 */
+        for (uint32_t i = 0; i < type1->compound.array_info.dimensions * 2; i++) {
+            if (type1->compound.array_info.bounds[i] != 
+                type2->compound.array_info.bounds[i]) {
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+
+/* 获取数值类型的精度 */
+int type_checker_get_numeric_precision(type_info_t *type) {
+    if (!type || !type_checker_is_numeric_type(type)) {
+        return -1;
+    }
+    
+    switch (type->base_type) {
+        case TYPE_BYTE_ID:
+        case TYPE_SINT_ID:
+        case TYPE_USINT_ID:
+            return 8;
+        case TYPE_INT_ID:
+        case TYPE_UINT_ID:
+            return 16;
+        case TYPE_DINT_ID:
+        case TYPE_UDINT_ID:
+        case TYPE_REAL_ID:
+            return 32;
+        case TYPE_LINT_ID:
+        case TYPE_ULINT_ID:
+        case TYPE_LREAL_ID:
+            return 64;
+        default:
+            return -1;
+    }
+}
+
+/* 获取更高精度的类型 */
+type_info_t* type_checker_get_higher_precision_type(type_checker_context_t *ctx,
+                                                   type_info_t *type1, 
+                                                   type_info_t *type2) {
+    if (!ctx || !type1 || !type2) {
+        return NULL;
+    }
+    
+    /* 如果有一个是实数类型，返回实数类型 */
+    if (type_checker_is_real_type(type1)) {
+        if (type_checker_is_real_type(type2)) {
+            /* 两个都是实数，返回精度更高的 */
+            return (type_checker_get_numeric_precision(type1) >= 
+                    type_checker_get_numeric_precision(type2)) ? type1 : type2;
+        }
+        return type1;
+    }
+    
+    if (type_checker_is_real_type(type2)) {
+        return type2;
+    }
+    
+    /* 两个都是整数，返回精度更高的 */
+    if (type_checker_is_integer_type(type1) && type_checker_is_integer_type(type2)) {
+        int prec1 = type_checker_get_numeric_precision(type1);
+        int prec2 = type_checker_get_numeric_precision(type2);
+        
+        if (prec1 > prec2) {
+            return type1;
+        } else if (prec2 > prec1) {
+            return type2;
+        } else {
+            /* 精度相同，优先有符号类型 */
+            if (type_checker_is_signed_integer_type(type1)) {
+                return type1;
+            }
+            return type2;
+        }
+    }
+    
+    /* 默认返回第一个类型 */
+    return type1;
+}
+
+/* 操作符转字符串 */
+const char* type_checker_operator_to_string(operator_type_t op) {
+    switch (op) {
+        case OP_ADD: return "+";
+        case OP_SUB: return "-";
+        case OP_MUL: return "*";
+        case OP_DIV: return "/";
+        case OP_MOD: return "MOD";
+        case OP_POWER: return "**";
+        case OP_AND: return "AND";
+        case OP_OR: return "OR";
+        case OP_XOR: return "XOR";
+        case OP_NOT: return "NOT";
+        case OP_EQ: return "=";
+        case OP_NE: return "<>";
+        case OP_LT: return "<";
+        case OP_LE: return "<=";
+        case OP_GT: return ">";
+        case OP_GE: return ">=";
+        case OP_NEG: return "-";
+        case OP_POS: return "+";
+        case OP_ASSIGN: return ":=";
+        default: return "UNKNOWN_OP";
+    }
+}
+
+/* ========== 辅助函数实现 ========== */
+
+/* 类型兼容性检查 */
+static bool type_checker_is_assignable(type_checker_context_t *ctx, type_info_t *from, type_info_t *to) {
+    if (!ctx || !from || !to) {
+        return false;
+    }
+    
+    /* 相同类型总是兼容的 */
+    if (type_checker_types_equal(from, to)) {
+        return true;
+    }
+    
+    /* 检查是否允许隐式转换 */
+    return type_checker_is_implicitly_convertible(ctx, from, to);
+}
+
+/* 创建类型推断结果 */
+static type_inference_result_t* type_checker_create_inference_result(type_info_t *type) {
+    if (!type) {
+        return NULL;
+    }
+    
+    type_inference_result_t *result = (type_inference_result_t*)mmgr_alloc_general(
+        sizeof(type_inference_result_t));
+    if (!result) {
+        return NULL;
+    }
+    
+    memset(result, 0, sizeof(type_inference_result_t));
+    result->inferred_type = type;
+    result->is_constant = false;
+    result->is_lvalue = false;
+    
+    return result;
+}
+
+/* 销毁类型推断结果 */
+static void type_checker_destroy_inference_result(type_inference_result_t *result) {
+    if (!result) return;
+    
+    /* 内存由MMGR管理，不需要显式释放 */
+    /* 但需要清空指针避免悬空引用 */
+    result->inferred_type = NULL;
+}
+
+/* 添加消息到消息链表 */
+static void type_checker_add_message(type_checker_context_t *ctx, type_severity_t severity,
+                                    type_check_error_t error_code, source_location_t *location,
+                                    const char *format, va_list args) {
+    if (!ctx || !format) {
+        return;
+    }
+    
+    type_check_message_t *msg = (type_check_message_t*)mmgr_alloc_general(
+        sizeof(type_check_message_t));
+    if (!msg) {
+        return;
+    }
+    
+    msg->severity = severity;
+    msg->error_code = error_code;
+    msg->location = location;
+    
+    /* 格式化消息 */
+    char *message_buf = (char*)mmgr_alloc_general(512);
+    if (message_buf) {
+        vsnprintf(message_buf, 512, format, args);
+        msg->message = message_buf;
+    } else {
+        msg->message = mmgr_alloc_string("Memory allocation error");
+    }
+    
+    /* 添加到消息链表头部 */
+    msg->next = ctx->messages;
+    ctx->messages = msg;
+}
+
+/* ========== 类型检查器API ========== */
+
+/* 创建类型检查器 */
+type_checker_context_t* create_type_checker() {
+    return type_checker_create();
+}
+
+/* 销毁类型检查器 */
+void destroy_type_checker(type_checker_context_t *ctx) {
+    type_checker_destroy(ctx);
+}
+
+/* 初始化类型检查器 */
+int init_type_checker(type_checker_context_t *ctx, symbol_table_manager_t *sym_mgr) {
+    return type_checker_init(ctx, sym_mgr);
+}
+
+/* 设置严格模式 */
+int set_strict_mode(type_checker_context_t *ctx, bool enabled) {
+    return type_checker_set_strict_mode(ctx, enabled);
+}
+
+/* 设置警告为错误 */
+int set_warnings_as_errors(type_checker_context_t *ctx, bool enabled) {
+    return type_checker_set_warnings_as_errors(ctx, enabled);
+}
+
+/* 启用未使用变量检查 */
+int enable_unused_check(type_checker_context_t *ctx, bool enabled) {
+    return type_checker_enable_unused_check(ctx, enabled);
+}
+
+/* 允许隐式转换 */
+int allow_implicit_conversion(type_checker_context_t *ctx, bool enabled) {
+    return type_checker_allow_implicit_conversion(ctx, enabled);
+}
+
+/* 检查程序 */
+int check_program(type_checker_context_t *ctx, ast_node_t *program) {
+    return type_checker_check_program(ctx, program);
+}
+
+/* 检查声明列表 */
+int check_declarations(type_checker_context_t *ctx, ast_node_t *decl_list) {
+    return type_checker_check_declarations(ctx, decl_list);
+}
+
+/* 检查语句列表 */
+int check_statements(type_checker_context_t *ctx, ast_node_t *stmt_list) {
+    return type_checker_check_statements(ctx, stmt_list);
+}
+
+/* 检查AST节点 */
+int check_node(type_checker_context_t *ctx, ast_node_t *node) {
+    return type_checker_check_node(ctx, node);
+}
+
+/* 获取错误数量 */
+uint32_t get_error_count(const type_checker_context_t *ctx) {
+    return type_checker_get_error_count(ctx);
+}
+
+/* 获取警告数量 */
+uint32_t get_warning_count(const type_checker_context_t *ctx) {
+    return type_checker_get_warning_count(ctx);
+}
+
+/* 检查是否有错误 */
+bool has_errors(const type_checker_context_t *ctx) {
+    return type_checker_has_errors(ctx);
+}
+
+/* 打印消息 */
+void print_messages(const type_checker_context_t *ctx) {
+    type_checker_print_messages(ctx);
+}
+
+/* 打印总结 */
+void print_summary(const type_checker_context_t *ctx) {
+    type_checker_print_summary(ctx);
+}
+
+/* 获取消息字符串 */
+char* get_message_string(const type_checker_context_t *ctx) {
+    return type_checker_get_message_string(ctx);
+}
+
+/* 清理消息 */
+void clear_messages(type_checker_context_t *ctx) {
+    type_checker_clear_messages(ctx);
+}
+
+/* 打印统计信息 */
+void print_statistics(const type_checker_context_t *ctx) {
+    type_checker_print_statistics(ctx);
+}
+
+/* 转储符号表 */
+void dump_symbol_table(const type_checker_context_t *ctx) {
+    type_checker_dump_symbol_table(ctx);
+}
+
+/* 转储类型表 */
+void dump_type_table(const type_checker_context_t *ctx) {
+    type_checker_dump_type_table(ctx);
+}
+
+/* 转储函数签名 */
+void dump_function_signatures(const type_checker_context_t *ctx) {
+    type_checker_dump_function_signatures(ctx);
+}
+
+/* ========== 常量求值 ========== */
+
+/* 检查是否为常量表达式 */
+bool type_checker_is_constant_expression(type_checker_context_t *ctx, ast_node_t *expr) {
+    if (!ctx || !expr) {
+        return false;
+    }
+    
+    switch (expr->type) {
+        case AST_LITERAL:
+            return true;
+            
+        case AST_IDENTIFIER:
+            /* 简化：假设标识符不是常量 */
+            return false;
+            
+        case AST_BINARY_OP: {
+            /* 二元操作：两个操作数都是常量才是常量 */
+            return type_checker_is_constant_expression(ctx, expr->data.binary_op.left) &&
+                   type_checker_is_constant_expression(ctx, expr->data.binary_op.right);
+        }
+        
+        case AST_UNARY_OP:
+            /* 一元操作：操作数是常量才是常量 */
+            return type_checker_is_constant_expression(ctx, expr->data.unary_op.operand);
+            
+        default:
+            return false;
+    }
+}
+
+/* 求值常量表达式 */
+type_inference_result_t* type_checker_evaluate_constant(type_checker_context_t *ctx, 
+                                                       ast_node_t *expr) {
+    if (!ctx || !expr || !type_checker_is_constant_expression(ctx, expr)) {
+        return NULL;
+    }
+    
+    /* 复用现有的类型推断逻辑 */
+    return type_checker_infer_expression(ctx, expr);
+}
+
+/* 常量折叠 */
+ast_node_t* type_checker_fold_constant(type_checker_context_t *ctx, ast_node_t *expr) {
+    if (!ctx || !expr) {
+        return NULL;
+    }
+    
+    type_inference_result_t *result = type_checker_evaluate_constant(ctx, expr);
+    if (!result || !result->is_constant) {
+        return expr; /* 无法折叠，返回原表达式 */
+    }
+    
+    /* 创建新的字面量节点 */
+    ast_node_t *literal = NULL;
+    switch (result->inferred_type->base_type) {
+        case TYPE_INT_ID:
+            literal = ast_create_literal(LITERAL_INT, &result->const_value.int_val);
+            break;
+        case TYPE_REAL_ID:
+            literal = ast_create_literal(LITERAL_REAL, &result->const_value.real_val);
+            break;
+        case TYPE_BOOL_ID:
+            literal = ast_create_literal(LITERAL_BOOL, &result->const_value.bool_val);
+            break;
+        case TYPE_STRING_ID:
+            literal = ast_create_literal(LITERAL_STRING, result->const_value.string_val);
+            break;
+        default:
+            literal = expr;
+            break;
+    }
+    
+    type_checker_destroy_inference_result(result);
+    return literal ? literal : expr;
+}
+
+/* ========== 语义分析辅助 ========== */
+
+/* 死代码检测 */
+int type_checker_check_dead_code(type_checker_context_t *ctx, ast_node_t *node) {
+    if (!ctx || !node) {
+        return 0;
+    }
+    
+    /* 简化实现：检查RETURN语句后的代码 */
+    if (node->type == AST_STATEMENT_LIST) {
+        ast_node_t *stmt = node;
+        bool found_return = false;
+        
+        while (stmt) {
+            if (stmt->type == AST_RETURN_STMT) {
+                found_return = true;
+            } else if (found_return) {
+                type_checker_add_warning(ctx, TYPE_CHECK_MEMORY_ERROR, stmt->loc,
+                                        "Unreachable code after RETURN statement");
+            }
+            stmt = stmt->next;
+        }
+    }
+    
+    return 0;
+}
+
+/* 检查未使用变量 */
+int type_checker_check_unused_variables(type_checker_context_t *ctx) {
+    if (!ctx || !ctx->options.check_unused_vars) {
+        return 0;
+    }
+    
+    /* 简化实现：暂不检查 */
+    type_checker_add_info(ctx, "Unused variable checking not implemented");
+    return 0;
+}
+
+/* 检查未初始化变量 */
+int type_checker_check_uninitialized_variables(type_checker_context_t *ctx, ast_node_t *node) {
+    if (!ctx || !node || !ctx->options.check_uninitialized) {
+        return 0;
+    }
+    
+    /* 简化实现：暂不检查 */
+    return 0;
+}
+
+/* 控制流分析 */
+int type_checker_analyze_control_flow(type_checker_context_t *ctx, ast_node_t *node) {
+    if (!ctx || !node) {
+        return 0;
+    }
+    
+    /* 简化实现：基础的控制流检查 */
+    switch (node->type) {
+        case AST_IF_STMT:
+            /* 检查IF语句的条件和分支 */
+            if (type_checker_check_condition(ctx, node->data.if_stmt.condition) != 0) {
+                return -1;
+            }
+            break;
+            
+        case AST_WHILE_STMT:
+            /* 检查WHILE循环的条件 */
+            if (type_checker_check_condition(ctx, node->data.while_stmt.condition) != 0) {
+                return -1;
+            }
+            break;
+            
+        case AST_FOR_STMT:
+            /* 检查FOR循环的变量和范围 */
+            /* 已在for语句检查中实现 */
+            break;
+            
+        default:
+            break;
+    }
+    
+    return 0;
+}
+
+/* ========== 统计和诊断 ========== */
+
+/* 打印统计信息 */
+void type_checker_print_statistics(const type_checker_context_t *ctx) {
+    if (!ctx) return;
+    
+    printf("=== 类型检查器统计 ===\n");
+    printf("节点检查数: %u\n", ctx->statistics.nodes_checked);
+    printf("符号解析数: %u\n", ctx->statistics.symbols_resolved);
+    printf("类型推断数: %u\n", ctx->statistics.types_inferred);
+    printf("内置类型数: %u\n", ctx->builtin_type_count);
+    printf("注册函数数: %u\n", ctx->function_count);
+    printf("兼容性规则: %u\n", ctx->compatibility_count);
+    printf("当前作用域深度: %u\n", ctx->current_context.scope_depth);
+    printf("===================\n");
+}
+
+/* 获取检查节点数 */
+uint32_t type_checker_get_nodes_checked(const type_checker_context_t *ctx) {
+    return ctx ? ctx->statistics.nodes_checked : 0;
+}
+
+/* 获取符号解析数 */
+uint32_t type_checker_get_symbols_resolved(const type_checker_context_t *ctx) {
+    return ctx ? ctx->statistics.symbols_resolved : 0;
+}
+
+/* 转储符号表 */
+void type_checker_dump_symbol_table(const type_checker_context_t *ctx) {
+    if (!ctx) return;
+    
+    printf("=== 符号表转储 ===\n");
+    printf("作用域深度: %u\n", ctx->current_context.scope_depth);
+    printf("当前函数: %s\n", 
+           ctx->current_context.current_function ? 
+           ctx->current_context.current_function->name : "无");
+    printf("================\n");
+}
+
+/* 转储类型表 */
+void type_checker_dump_type_table(const type_checker_context_t *ctx) {
+    if (!ctx) return;
+    
+    printf("=== 类型表转储 ===\n");
+    printf("内置类型数量: %u\n", ctx->builtin_type_count);
+    
+    for (uint32_t i = 0; i < ctx->builtin_type_count; i++) {
+        if (ctx->builtin_types[i]) {
+            printf("类型 %u: %s (大小: %u)\n", 
+                   i, type_checker_type_to_string(ctx->builtin_types[i]),
+                   ctx->builtin_types[i]->size);
+        }
+    }
+    
+    printf("兼容性规则数量: %u\n", ctx->compatibility_count);
+    for (uint32_t i = 0; i < ctx->compatibility_count; i++) {
+        type_compatibility_t *compat = &ctx->compatibility_table[i];
+        printf("规则 %u: %s -> %s (隐式: %s, 显式: %s)\n", i,
+               type_checker_type_to_string(compat->from_type),
+               type_checker_type_to_string(compat->to_type),
+               compat->is_implicit_allowed ? "是" : "否",
+               compat->is_explicit_allowed ? "是" : "否");
+    }
+    printf("================\n");
+}
+
+/* 转储函数签名 */
+void type_checker_dump_function_signatures(const type_checker_context_t *ctx) {
+    if (!ctx) return;
+    
+    printf("=== 函数签名转储 ===\n");
+    printf("注册函数数量: %u\n", ctx->function_count);
+    
+    for (uint32_t i = 0; i < ctx->function_count; i++) {
+        function_signature_t *sig = &ctx->function_signatures[i];
+        printf("函数 %u: %s(", i, sig->name);
+        
+        for (uint32_t j = 0; j < sig->param_count; j++) {
+            if (j > 0) printf(", ");
+            printf("%s", type_checker_type_to_string(sig->param_types[j]));
+            if (sig->param_names && sig->param_names[j]) {
+                printf(" %s", sig->param_names[j]);
+            }
+        }
+        
+        printf(") : %s", type_checker_type_to_string(sig->return_type));
+        if (sig->is_builtin) printf(" [内置]");
+        if (sig->is_variadic) printf(" [可变参数]");
+        printf("\n");
+    }
+    printf("=================\n");
+}
+
 /* ========== 类型系统函数 ========== */
 
 /* 检查类型兼容性 */
@@ -1211,12 +2099,11 @@ int type_checker_register_symbol(type_checker_context_t *ctx, const char *name,
         return -1;
     }
     
-    symbol_t *symbol = add_symbol(name, type, ctx->current_context.scope_depth);
+    symbol_t *symbol = add_symbol(name, sym_type, type);
     if (!symbol) {
         return -1;
     }
     
-    symbol->symbol_type = sym_type;
     return 0;
 }
 
@@ -1242,11 +2129,18 @@ int type_checker_register_function(type_checker_context_t *ctx,
         new_sig->param_names = (char**)mmgr_alloc_general(
             sizeof(char*) * signature->param_count);
         
+        if (!new_sig->param_types || !new_sig->param_names) {
+            return -1;
+        }
+        
         for (uint32_t i = 0; i < signature->param_count; i++) {
             new_sig->param_types[i] = signature->param_types[i];
             new_sig->param_names[i] = signature->param_names[i] ? 
                 mmgr_alloc_string(signature->param_names[i]) : NULL;
         }
+    } else {
+        new_sig->param_types = NULL;
+        new_sig->param_names = NULL;
     }
     
     ctx->function_count++;
@@ -1313,6 +2207,10 @@ function_signature_t* type_checker_create_function_signature(const char *name,
             sizeof(type_info_t*) * param_count);
         signature->param_names = (char**)mmgr_alloc_general(
             sizeof(char*) * param_count);
+        
+        if (!signature->param_types || !signature->param_names) {
+            return NULL;
+        }
         
         for (uint32_t i = 0; i < param_count; i++) {
             signature->param_types[i] = param_types[i];
@@ -1528,6 +2426,9 @@ int type_checker_add_builtin_function(type_checker_context_t *ctx, const char *n
     
     if (param_count > 0) {
         sig->param_types = (type_info_t**)mmgr_alloc_general(sizeof(type_info_t*) * param_count);
+        if (!sig->param_types) {
+            return -1;
+        }
         
         va_list args;
         va_start(args, param_count);
@@ -1535,7 +2436,11 @@ int type_checker_add_builtin_function(type_checker_context_t *ctx, const char *n
             sig->param_types[i] = va_arg(args, type_info_t*);
         }
         va_end(args);
+    } else {
+        sig->param_types = NULL;
     }
+    
+    sig->param_names = NULL; /* 内置函数不需要参数名 */
     
     ctx->function_count++;
     
@@ -1655,258 +2560,6 @@ void type_checker_clear_messages(type_checker_context_t *ctx) {
     ctx->messages = NULL;
     ctx->error_count = 0;
     ctx->warning_count = 0;
-}
-
-/* ========== 常量求值 ========== */
-
-/* 检查是否为常量表达式 */
-bool type_checker_is_constant_expression(type_checker_context_t *ctx, ast_node_t *expr) {
-    if (!ctx || !expr) {
-        return false;
-    }
-    
-    switch (expr->type) {
-        case AST_LITERAL:
-            return true;
-            
-        case AST_IDENTIFIER:
-            /* 简化：假设标识符不是常量 */
-            return false;
-            
-        case AST_BINARY_OP: {
-            /* 二元操作：两个操作数都是常量才是常量 */
-            return type_checker_is_constant_expression(ctx, expr->data.binary_op.left) &&
-                   type_checker_is_constant_expression(ctx, expr->data.binary_op.right);
-        }
-        
-        case AST_UNARY_OP:
-            /* 一元操作：操作数是常量才是常量 */
-            return type_checker_is_constant_expression(ctx, expr->data.unary_op.operand);
-            
-        default:
-            return false;
-    }
-}
-
-/* 求值常量表达式 */
-type_inference_result_t* type_checker_evaluate_constant(type_checker_context_t *ctx, 
-                                                       ast_node_t *expr) {
-    if (!ctx || !expr || !type_checker_is_constant_expression(ctx, expr)) {
-        return NULL;
-    }
-    
-    /* 复用现有的类型推断逻辑 */
-    return type_checker_infer_expression(ctx, expr);
-}
-
-/* 常量折叠 */
-ast_node_t* type_checker_fold_constant(type_checker_context_t *ctx, ast_node_t *expr) {
-    if (!ctx || !expr) {
-        return NULL;
-    }
-    
-    type_inference_result_t *result = type_checker_evaluate_constant(ctx, expr);
-    if (!result || !result->is_constant) {
-        return expr; /* 无法折叠，返回原表达式 */
-    }
-    
-    /* 创建新的字面量节点 */
-    ast_node_t *literal = NULL;
-    switch (result->inferred_type->base_type) {
-        case TYPE_INT_ID:
-            literal = create_literal_node(LITERAL_INT, &result->const_value.int_val);
-            break;
-        case TYPE_REAL_ID:
-            literal = create_literal_node(LITERAL_REAL, &result->const_value.real_val);
-            break;
-        case TYPE_BOOL_ID:
-            literal = create_literal_node(LITERAL_BOOL, &result->const_value.bool_val);
-            break;
-        case TYPE_STRING_ID:
-            literal = create_literal_node(LITERAL_STRING, result->const_value.string_val);
-            break;
-        default:
-            literal = expr;
-            break;
-    }
-    
-    type_checker_destroy_inference_result(result);
-    return literal ? literal : expr;
-}
-
-/* ========== 语义分析辅助 ========== */
-
-/* 死代码检测 */
-int type_checker_check_dead_code(type_checker_context_t *ctx, ast_node_t *node) {
-    if (!ctx || !node) {
-        return 0;
-    }
-    
-    /* 简化实现：检查RETURN语句后的代码 */
-    if (node->type == AST_STATEMENT_LIST) {
-        ast_node_t *stmt = node;
-        bool found_return = false;
-        
-        while (stmt) {
-            if (stmt->type == AST_RETURN_STMT) {
-                found_return = true;
-            } else if (found_return) {
-                type_checker_add_warning(ctx, TYPE_CHECK_MEMORY_ERROR, stmt->loc,
-                                        "Unreachable code after RETURN statement");
-            }
-            stmt = stmt->next;
-        }
-    }
-    
-    return 0;
-}
-
-/* 检查未使用变量 */
-int type_checker_check_unused_variables(type_checker_context_t *ctx) {
-    if (!ctx || !ctx->options.check_unused_vars) {
-        return 0;
-    }
-    
-    /* 简化实现：暂不检查 */
-    type_checker_add_info(ctx, "Unused variable checking not implemented");
-    return 0;
-}
-
-/* 检查未初始化变量 */
-int type_checker_check_uninitialized_variables(type_checker_context_t *ctx, ast_node_t *node) {
-    if (!ctx || !node || !ctx->options.check_uninitialized) {
-        return 0;
-    }
-    
-    /* 简化实现：暂不检查 */
-    return 0;
-}
-
-/* 控制流分析 */
-int type_checker_analyze_control_flow(type_checker_context_t *ctx, ast_node_t *node) {
-    if (!ctx || !node) {
-        return 0;
-    }
-    
-    /* 简化实现：基础的控制流检查 */
-    switch (node->type) {
-        case AST_IF_STMT:
-            /* 检查IF语句的条件和分支 */
-            if (type_checker_check_condition(ctx, node->data.if_stmt.condition) != 0) {
-                return -1;
-            }
-            break;
-            
-        case AST_WHILE_STMT:
-            /* 检查WHILE循环的条件 */
-            if (type_checker_check_condition(ctx, node->data.while_stmt.condition) != 0) {
-                return -1;
-            }
-            break;
-            
-        case AST_FOR_STMT:
-            /* 检查FOR循环的变量和范围 */
-            /* 已在for语句检查中实现 */
-            break;
-            
-        default:
-            break;
-    }
-    
-    return 0;
-}
-
-/* ========== 统计和诊断 ========== */
-
-/* 打印统计信息 */
-void type_checker_print_statistics(const type_checker_context_t *ctx) {
-    if (!ctx) return;
-    
-    printf("=== 类型检查器统计 ===\n");
-    printf("节点检查数: %u\n", ctx->statistics.nodes_checked);
-    printf("符号解析数: %u\n", ctx->statistics.symbols_resolved);
-    printf("类型推断数: %u\n", ctx->statistics.types_inferred);
-    printf("内置类型数: %u\n", ctx->builtin_type_count);
-    printf("注册函数数: %u\n", ctx->function_count);
-    printf("兼容性规则: %u\n", ctx->compatibility_count);
-    printf("当前作用域深度: %u\n", ctx->current_context.scope_depth);
-    printf("===================\n");
-}
-
-/* 获取检查节点数 */
-uint32_t type_checker_get_nodes_checked(const type_checker_context_t *ctx) {
-    return ctx ? ctx->statistics.nodes_checked : 0;
-}
-
-/* 获取符号解析数 */
-uint32_t type_checker_get_symbols_resolved(const type_checker_context_t *ctx) {
-    return ctx ? ctx->statistics.symbols_resolved : 0;
-}
-
-/* 转储符号表 */
-void type_checker_dump_symbol_table(const type_checker_context_t *ctx) {
-    if (!ctx) return;
-    
-    printf("=== 符号表转储 ===\n");
-    printf("作用域深度: %u\n", ctx->current_context.scope_depth);
-    printf("当前函数: %s\n", 
-           ctx->current_context.current_function ? 
-           ctx->current_context.current_function->name : "无");
-    printf("================\n");
-}
-
-/* 转储类型表 */
-void type_checker_dump_type_table(const type_checker_context_t *ctx) {
-    if (!ctx) return;
-    
-    printf("=== 类型表转储 ===\n");
-    printf("内置类型数量: %u\n", ctx->builtin_type_count);
-    
-    for (uint32_t i = 0; i < ctx->builtin_type_count; i++) {
-        if (ctx->builtin_types[i]) {
-            printf("类型 %u: %s (大小: %u)\n", 
-                   i, type_checker_type_to_string(ctx->builtin_types[i]),
-                   ctx->builtin_types[i]->size);
-        }
-    }
-    
-    printf("兼容性规则数量: %u\n", ctx->compatibility_count);
-    for (uint32_t i = 0; i < ctx->compatibility_count; i++) {
-        type_compatibility_t *compat = &ctx->compatibility_table[i];
-        printf("规则 %u: %s -> %s (隐式: %s, 显式: %s)\n", i,
-               type_checker_type_to_string(compat->from_type),
-               type_checker_type_to_string(compat->to_type),
-               compat->is_implicit_allowed ? "是" : "否",
-               compat->is_explicit_allowed ? "是" : "否");
-    }
-    printf("================\n");
-}
-
-/* 转储函数签名 */
-void type_checker_dump_function_signatures(const type_checker_context_t *ctx) {
-    if (!ctx) return;
-    
-    printf("=== 函数签名转储 ===\n");
-    printf("注册函数数量: %u\n", ctx->function_count);
-    
-    for (uint32_t i = 0; i < ctx->function_count; i++) {
-        function_signature_t *sig = &ctx->function_signatures[i];
-        printf("函数 %u: %s(", i, sig->name);
-        
-        for (uint32_t j = 0; j < sig->param_count; j++) {
-            if (j > 0) printf(", ");
-            printf("%s", type_checker_type_to_string(sig->param_types[j]));
-            if (sig->param_names && sig->param_names[j]) {
-                printf(" %s", sig->param_names[j]);
-            }
-        }
-        
-        printf(") : %s", type_checker_type_to_string(sig->return_type));
-        if (sig->is_builtin) printf(" [内置]");
-        if (sig->is_variadic) printf(" [可变参数]");
-        printf("\n");
-    }
-    printf("=================\n");
 }
 
 /* ========== 工具函数 ========== */

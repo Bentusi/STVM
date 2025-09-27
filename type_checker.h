@@ -33,7 +33,7 @@ typedef enum {
 typedef struct type_check_message {
     type_check_error_t error_code;  // 错误码
     type_severity_t severity;       // 严重级别
-    char message[256];              // 错误消息
+    char *message;              // 错误消息
     source_location_t *location;    // 错误位置
     struct type_check_message *next; // 下一个消息
 } type_check_message_t;
@@ -80,7 +80,7 @@ typedef struct type_checker_context {
     uint32_t compatibility_count;   // 规则数量
     
     /* 内置类型定义 */
-    type_info_t *builtin_types[16]; // 内置类型数组
+    type_info_t *builtin_types[TYPE_MAX_ID]; // 内置类型数组
     uint32_t builtin_type_count;    // 内置类型数量
     
     /* 函数签名表 */

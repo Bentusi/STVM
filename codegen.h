@@ -68,7 +68,7 @@ typedef struct codegen_context {
         uint32_t sync_instructions;      // 同步指令数
         uint32_t checkpoints_generated;  // 生成的检查点数
     } statistics;
-    
+    bool sync_enabled;
 } codegen_context_t;
 
 /* 变量访问信息 */

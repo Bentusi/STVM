@@ -7,7 +7,7 @@ FLEX = flex
 BISON = bison
 
 # 编译选项
-CFLAGS = -Wall -Wextra -std=c99 -g -O2 -DDEBUG
+CFLAGS = -Wall -Wextra -g -O2 -DDEBUG
 LDFLAGS = -lm
 
 # 安全级编译选项 (MISRA合规)
@@ -40,7 +40,8 @@ CORE_SOURCES = \
     codegen.c \
     vm.c \
     ms_sync.c \
-    libmgr.c
+    libmgr.c \
+	type_checker.c
 
 # 内置库源文件
 BUILTIN_SOURCES = \
@@ -68,7 +69,7 @@ TEST_SOURCES = \
 GENERATED_SOURCES = \
     st_lexer.c \
     st_parser.c \
-    st_parser.tab.h
+    st_parser.h
 
 # 目标文件
 CORE_OBJECTS = $(CORE_SOURCES:.c=.o)
@@ -126,12 +127,12 @@ $(LIBBUILTIN): $(BUILTIN_OBJECTS)
 	@echo "内置函数库构建完成: $(LIBBUILTIN)"
 
 # Flex词法分析器生成
-st_lexer.c: st_lexer.lex st_parser.tab.h
+st_lexer.c: st_lexer.lex st_parser.h
 	$(FLEX) -o $@ $<
 	@echo "词法分析器生成完成"
 
 # Bison语法分析器生成
-st_parser.c st_parser.tab.h: st_parser.y
+st_parser.c st_parser.h: st_parser.y
 	$(BISON) -d -v -o st_parser.c $<
 	@echo "语法分析器生成完成"
 
@@ -177,7 +178,7 @@ builtin_time.o: builtin_time.c libmgr.h vm.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # 主程序编译规则
-main.o: main.c ast.h symbol_table.h codegen.h vm.h libmgr.h
+main.o: main.c ast.h symbol_table.h codegen.h vm.h libmgr.h type_checker.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 vm_main.o: vm_main.c vm.h bytecode.h ms_sync.h
@@ -358,7 +359,7 @@ clean:
 	@echo "清理生成文件..."
 	@rm -f *.o
 	@rm -f $(GENERATED_SOURCES)
-	@rm -f st_parser.tab.h st_parser.output
+	@rm -f st_parser.h st_parser.output
 	@rm -f $(COMPILER) $(VM_RUNNER) $(DEBUGGER)
 	@rm -f $(LIBST) $(LIBBUILTIN)
 	@rm -f *.stbc
@@ -418,5 +419,5 @@ help:
         doc install uninstall package help directories
 
 # 依赖关系声明
-st_parser.o: st_parser.c st_parser.tab.h ast.h symbol_table.h
-st_lexer.o: st_lexer.c st_parser.tab.h ast.h
+st_parser.o: st_parser.c st_parser.h ast.h symbol_table.h
+st_lexer.o: st_lexer.c st_parser.h ast.h
