@@ -163,8 +163,8 @@ typedef struct ast_node {
         /* 函数声明节点 */
         struct {
             char *name;                     // 函数名
-            function_category_t func_type;      // 函数类型
             struct ast_node *parameters;    // 参数列表
+            func_category_t func_type;      // 函数类别
             struct type_info *return_type;  // 返回类型
             struct ast_node *declarations;  // 局部声明
             struct ast_node *statements;    // 语句列表
@@ -337,7 +337,7 @@ ast_node_t* ast_create_import(const char *library_name, const char *alias,
 ast_node_t* ast_create_var_declaration(var_category_t category, ast_node_t *var_list);
 ast_node_t* ast_create_var_item(const char *name, struct type_info *type, 
                                 ast_node_t *init_value, ast_node_t *array_bounds);
-ast_node_t* ast_create_function_declaration(const char *name, function_category_t func_type,
+ast_node_t* ast_create_function_declaration(const char *name, func_category_t func_type,
                                            ast_node_t *parameters, struct type_info *return_type,
                                            ast_node_t *declarations, ast_node_t *statements);
 ast_node_t* ast_create_parameter(const char *name, struct type_info *type, 

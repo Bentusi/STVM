@@ -16,11 +16,9 @@
 #include <stdint.h>
 #include "ast.h"
 #include "symbol_table.h"
-#include "type_checker.h"
 #include "codegen.h"
 #include "vm.h"
 #include "libmgr.h"
-#include "ms_sync.h"
 #include "mmgr.h"
 #include "bytecode.h"
 
@@ -55,39 +53,26 @@ typedef struct sync_options {
     uint32_t sync_timeout;  // 同步超时(ms)
 } sync_options_t;
 
-/* 编译器选项 */
-typedef struct compiler_options {
-    bool optimize;          // 启用优化
-    bool warnings_as_errors; // 警告视为错误
-    bool strict_mode;       // 严格模式
-    int optimization_level; // 优化级别(0-3)
-    bool generate_debug_info; // 生成调试信息
-    bool enable_bounds_check; // 启用边界检查
-} compiler_options_t;
-
 /* 全局配置 */
 typedef struct main_config {
     run_mode_t mode;                    // 运行模式
     char input_file[MAX_FILENAME_LEN];  // 输入文件
     char output_file[MAX_FILENAME_LEN]; // 输出文件
-    bool verbose;                       // 详细输出
-    bool quiet;                         // 静默模式
     bool show_ast;                      // 显示AST
     bool show_bytecode;                 // 显示字节码
     bool show_tokens;                   // 显示词法分析结果
-    bool enable_warnings;               // 启用警告
     bool enable_colors;                 // 启用彩色输出
     sync_options_t sync;                // 同步选项
-    compiler_options_t compiler;        // 编译器选项
     char lib_paths[MAX_LIB_PATHS][MAX_FILENAME_LEN]; // 库搜索路径
     int lib_path_count;                 // 库路径数量
     int max_errors;                     // 最大错误数
-    bool benchmark_mode;                // 基准测试模式
 } main_config_t;
 
 /* 全局状态 */
 typedef struct main_context {
+    symbol_table_t *sym_tbl;
     library_manager_t *lib_mgr;
+    codegen_context_t *codegen_ctx;
     master_slave_sync_t *sync_mgr;
     st_vm_t *vm;
     bool initialized;
@@ -125,8 +110,8 @@ static int init_libraries(main_context_t *ctx, main_config_t *config);
 static void signal_handler(int signum);
 static void setup_signal_handlers(void);
 static void print_colored(const char *text, const char *color);
-static int validate_config(const main_config_t *config);
 static void print_statistics(const main_context_t *ctx, const main_config_t *config);
+static int validate_config(const main_config_t *config);
 
 /* 颜色定义 */
 #define COLOR_RESET   "\033[0m"
@@ -149,21 +134,15 @@ int main(int argc, char **argv) {
     config.sync.sync_port = 8888;
     config.sync.heartbeat_interval = 100;
     config.sync.sync_timeout = 5000;
-    config.enable_warnings = true;
     config.enable_colors = isatty(STDOUT_FILENO);
-    config.compiler.optimization_level = 1;
-    config.compiler.generate_debug_info = true;
-    config.compiler.enable_bounds_check = true;
     config.max_errors = 10;
 
     /* 设置信号处理 */
     setup_signal_handlers();
 
     /* 显示程序信息 */
-    if (!config.quiet) {
-        print_colored("IEC61131 ST语言编译器", COLOR_CYAN);
-        printf(" v%s\n", PROGRAM_VERSION);
-    }
+    print_colored("IEC61131 ST语言编译器", COLOR_CYAN);
+    printf(" v%s\n", PROGRAM_VERSION);
 
     /* 解析命令行参数 */
     if (parse_arguments(argc, argv, &config) != 0) {
@@ -261,21 +240,14 @@ int main(int argc, char **argv) {
             break;
     }
 
-    /* 打印统计信息 */
-    if (config.verbose && !config.quiet) {
-        print_statistics(&g_main_ctx, &config);
-    }
-
 cleanup:
     /* 清理资源 */
     cleanup_main_context(&g_main_ctx);
 
-    if (!config.quiet) {
-        if (result == EXIT_SUCCESS) {
-            print_colored("执行完成\n", COLOR_GREEN);
-        } else {
-            print_colored("执行失败\n", COLOR_RED);
-        }
+    if (result == EXIT_SUCCESS) {
+        print_colored("执行完成\n", COLOR_GREEN);
+    } else {
+        print_colored("执行失败\n", COLOR_RED);
     }
 
     return result;
@@ -290,15 +262,9 @@ static int parse_arguments(int argc, char **argv, main_config_t *config) {
         {"compile",      no_argument,       0, 'c'},
         {"run",          required_argument, 0, 'r'},
         {"interactive",  no_argument,       0, 'i'},
-        {"debug",        required_argument, 0, 'd'},
         {"disassemble",  required_argument, 0, 'D'},
         {"syntax-check", required_argument, 0, 's'},
-        {"profile",      required_argument, 0, 'P'},
-        {"format",       required_argument, 0, 'f'},
         {"output",       required_argument, 0, 'o'},
-        {"verbose",      no_argument,       0, 'v'},
-        {"quiet",        no_argument,       0, 'q'},
-        {"optimize",     optional_argument, 0, 'O'},
         {"show-ast",     no_argument,       0, 'A'},
         {"show-bytecode", no_argument,      0, 'B'},
         {"show-tokens",  no_argument,       0, 'T'},
@@ -306,11 +272,6 @@ static int parse_arguments(int argc, char **argv, main_config_t *config) {
         {"sync-primary", required_argument, 0, 'M'},
         {"sync-secondary", required_argument, 0, 'S'},
         {"sync-port",    required_argument, 0, 'p'},
-        {"no-warnings",  no_argument,       0, 'W'},
-        {"no-colors",    no_argument,       0, 'C'},
-        {"strict",       no_argument,       0, 'X'},
-        {"max-errors",   required_argument, 0, 'E'},
-        {"benchmark",    no_argument,       0, 'b'},
         {0, 0, 0, 0}
     };
 
@@ -367,25 +328,6 @@ static int parse_arguments(int argc, char **argv, main_config_t *config) {
                 strncpy(config->output_file, optarg, MAX_FILENAME_LEN - 1);
                 break;
 
-            case 'v':
-                config->verbose = true;
-                break;
-
-            case 'q':
-                config->quiet = true;
-                config->verbose = false;
-                break;
-
-            case 'O':
-                config->compiler.optimize = true;
-                if (optarg) {
-                    config->compiler.optimization_level = atoi(optarg);
-                    if (config->compiler.optimization_level > 3) {
-                        config->compiler.optimization_level = 3;
-                    }
-                }
-                break;
-
             case 'A':
                 config->show_ast = true;
                 break;
@@ -424,17 +366,8 @@ static int parse_arguments(int argc, char **argv, main_config_t *config) {
                 config->sync.sync_port = (uint16_t)atoi(optarg);
                 break;
 
-            case 'W':
-                config->enable_warnings = false;
-                break;
-
             case 'C':
                 config->enable_colors = false;
-                break;
-
-            case 'X':
-                config->compiler.strict_mode = true;
-                config->compiler.warnings_as_errors = true;
                 break;
 
             case 'E':
@@ -442,10 +375,6 @@ static int parse_arguments(int argc, char **argv, main_config_t *config) {
                 if (config->max_errors <= 0) {
                     config->max_errors = 1;
                 }
-                break;
-
-            case 'b':
-                config->benchmark_mode = true;
                 break;
 
             case '?':
@@ -507,9 +436,7 @@ static int init_main_context(main_context_t *ctx, main_config_t *config) {
 
     ctx->initialized = true;
 
-    if (config->verbose) {
-        printf("系统初始化完成\n");
-    }
+    printf("系统初始化完成\n");
 
     return 0;
 }
@@ -522,9 +449,7 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
     codegen_context_t *codegen_ctx = NULL;
     int result = 0;
 
-    if (config->verbose) {
-        printf("编译源文件: %s\n", filename);
-    }
+    printf("编译源文件: %s\n", filename);
 
     /* 检查文件是否存在 */
     if (!file_exists(filename)) {
@@ -542,9 +467,7 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
     /* 设置词法分析器输入 */
     yyin = input_file;
 
-    if (config->verbose) {
-        printf("正在进行词法和语法分析...\n");
-    }
+    printf("正在进行词法和语法分析...\n");
 
     /* 进行语法分析 */
     if (yyparse() != 0) {
@@ -568,31 +491,15 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
     }
 
     /* 语义分析 */
-    if (config->verbose) {
-        printf("正在进行语义分析...\n");
-    }
-
-    type_checker_context_t *type_ctx = type_checker_create();
-    if (!type_ctx) {
-        fprintf(stderr, "错误: 类型检查器初始化失败\n");
-        result = -1;
-        goto cleanup;
-    }
-
-    if (type_checker_check_program(type_ctx, ast_root) != 0) {
+    printf("正在进行语义分析...\n");
+    if (symbol_table_build(ctx->sym_tbl, ast_root) != 0) {
         fprintf(stderr, "错误: 语义分析失败\n");
-        type_checker_destroy(type_ctx);
         result = -1;
         goto cleanup;
     }
-
-    type_checker_destroy(type_ctx);
 
     /* 代码生成 */
-    if (config->verbose) {
-        printf("正在生成字节码...\n");
-    }
-
+    printf("正在进行代码生成...\n");
     codegen_ctx = codegen_create_context();
     if (!codegen_ctx) {
         fprintf(stderr, "错误: 代码生成器初始化失败\n");
@@ -633,9 +540,7 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
             output_filename = generate_output_filename(filename, "stbc");
         }
 
-        if (config->verbose) {
-            printf("保存字节码文件: %s\n", output_filename);
-        }
+        printf("保存字节码文件: %s\n", output_filename);
 
         if (bytecode_save_file(&bytecode_file, output_filename) != 0) {
             fprintf(stderr, "错误: 无法保存字节码文件: %s\n", output_filename);
@@ -646,9 +551,7 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
 
     /* 执行字节码（如果需要） */
     if (config->mode == MODE_COMPILE_AND_RUN) {
-        if (config->verbose) {
-            printf("正在执行程序...\n");
-        }
+        printf("正在执行程序...\n");
 
         /* 启用同步（如果需要） */
         if (config->sync.enable_sync) {
@@ -672,11 +575,8 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
             result = -1;
             goto cleanup;
         }
-
-        if (config->verbose) {
-            printf("程序执行完成\n");
-            vm_print_statistics(ctx->vm);
-        }
+        printf("程序执行完成\n");
+        vm_print_statistics(ctx->vm);
     }
 
 cleanup:
@@ -842,7 +742,7 @@ static int interactive_mode(main_context_t *ctx, main_config_t *config) {
                 printf("函数显示功能未实现\n");
                 // symbol_table_print_functions(ctx->global_symtab);
             } else if (strcmp(input_line, ".libs") == 0) {
-                libmgr_print_loaded_libraries();
+                libmgr_print_loaded_libraries(ctx->lib_mgr);
             } else if (strcmp(input_line, ".ast") == 0) {
                 config->show_ast = !config->show_ast;
                 printf("AST显示: %s\n", config->show_ast ? "开启" : "关闭");
@@ -1267,13 +1167,13 @@ static int init_libraries(main_context_t *ctx, main_config_t *config) {
     }
 
     /* 添加库搜索路径 */
-    libmgr_add_search_path(".");
-    libmgr_add_search_path("/usr/local/lib/st");
-    libmgr_add_search_path("/usr/lib/st");
+    libmgr_add_search_path(ctx->lib_mgr, ".");
+    libmgr_add_search_path(ctx->lib_mgr, "/usr/local/lib/st");
+    libmgr_add_search_path(ctx->lib_mgr, "/usr/lib/st");
 
     /* 添加用户指定的库路径 */
     for (int i = 0; i < config->lib_path_count; i++) {
-        libmgr_add_search_path(config->lib_paths[i]);
+        libmgr_add_search_path(ctx->lib_mgr, config->lib_paths[i]);
     }
 
     /* 加载内置库 */
@@ -1285,7 +1185,7 @@ static int init_libraries(main_context_t *ctx, main_config_t *config) {
 
     if (config->verbose) {
         printf("库管理器初始化完成\n");
-        libmgr_print_loaded_libraries();
+        libmgr_print_loaded_libraries(ctx->lib_mgr);
     }
 
     return 0;
@@ -1311,7 +1211,6 @@ static void cleanup_main_context(main_context_t *ctx) {
         ctx->lib_mgr = NULL;
     }
 
-    yylex_destroy();
     mmgr_cleanup();
 
     ctx->initialized = false;
@@ -1349,7 +1248,6 @@ static void print_colored(const char *text, const char *color) {
         printf("%s", text);
     }
 }
-
 static void print_statistics(const main_context_t *ctx, const main_config_t *config) {
     printf("\n=== 执行统计 ===\n");
 
@@ -1361,6 +1259,32 @@ static void print_statistics(const main_context_t *ctx, const main_config_t *con
         printf("已加载库数量: %d\n", libmgr_get_loaded_count(ctx->lib_mgr));
     }
 
-    printf("内存使用: %zu bytes\n", mmgr_get_total_allocated());
     printf("================\n");
+}
+
+static int validate_config(const main_config_t *config) {
+    /* 验证输入文件 */
+    if (config->mode != MODE_INTERACTIVE && 
+        config->mode != MODE_FORMAT && 
+        strlen(config->input_file) == 0) {
+        fprintf(stderr, "错误: 需要指定输入文件\n");
+        return -1;
+    }
+
+    /* 验证同步配置 */
+    if (config->sync.enable_sync) {
+        if (config->sync.sync_port == 0) {
+            fprintf(stderr, "错误: 无效的同步端口\n");
+            return -1;
+        }
+    }
+
+    /* 验证最大错误数 */
+    if (config->max_errors <= 0) {
+        fprintf(stderr, "错误: 最大错误数必须大于0\n");
+        return -1;
+    }
+
+    return 0;
+}
 }

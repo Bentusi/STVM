@@ -12,7 +12,7 @@
 /* 代码生成器状态 */
 typedef struct codegen_context {
     bytecode_generator_t *bc_gen;       // 字节码生成器
-    symbol_table_manager_t *sym_mgr;    // 符号表管理器
+    symbol_table_t *sym_tbl;            // 符号表管理器
     library_manager_t *lib_mgr;         // 库管理器
     master_slave_sync_t *sync_mgr;      // 主从同步管理器
     
@@ -132,7 +132,7 @@ typedef struct sync_var_config {
 /* 初始化和清理 */
 codegen_context_t* codegen_create_context(void);
 void codegen_destroy_context(codegen_context_t *ctx);
-int codegen_init_context(codegen_context_t *ctx, symbol_table_manager_t *sym_mgr,
+int codegen_init_context(codegen_context_t *ctx, symbol_table_t *sym_tbl,
                          library_manager_t *lib_mgr, master_slave_sync_t *sync_mgr);
 
 /* ========== AST编译函数 ========== */

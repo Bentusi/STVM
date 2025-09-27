@@ -47,9 +47,9 @@ void codegen_destroy_context(codegen_context_t *ctx) {
 }
 
 /* 初始化代码生成器上下文 */
-int codegen_init_context(codegen_context_t *ctx, symbol_table_manager_t *sym_mgr,
+int codegen_init_context(codegen_context_t *ctx, symbol_table_t *sym_tbl,
                          library_manager_t *lib_mgr, master_slave_sync_t *sync_mgr) {
-    if (!ctx || !sym_mgr || !lib_mgr) {
+    if (!ctx || !sym_tbl || !lib_mgr) {
         return -1;
     }
     
@@ -60,7 +60,7 @@ int codegen_init_context(codegen_context_t *ctx, symbol_table_manager_t *sym_mgr
         return -1;
     }
     
-    ctx->sym_mgr = sym_mgr;
+    ctx->sym_tbl = sym_tbl;
     ctx->lib_mgr = lib_mgr;
     ctx->sync_enabled = false;
     
@@ -201,7 +201,7 @@ int codegen_compile_var_declaration(codegen_context_t *ctx, ast_node_t *var_decl
         return -1;
     }
     
-    bool is_global = (var_decl->data.var_decl.category == SYMBOL_VAR_GLOBAL);
+    bool is_global = (var_decl->data.var_decl.category == SYM_VAR_GLOBAL);
     
     /* 遍历变量列表 */
     ast_node_t *var_item = var_decl->data.var_decl.var_list;
@@ -859,7 +859,7 @@ var_access_info_t* codegen_get_variable_access(codegen_context_t *ctx, const cha
     access->is_sync = false; /* 简化：默认不同步 */
     access->library_name = NULL;
     
-    if (symbol->is_global) {
+    if (symbol->scope_level == SCOPE_GLOBAL) {
         access->access_type = VAR_ACCESS_GLOBAL;
     } else {
         access->access_type = VAR_ACCESS_LOCAL;
@@ -953,10 +953,9 @@ static uint32_t codegen_calculate_alignment(type_info_t *type) {
     
     switch (type->base_type) {
         case TYPE_BOOL_ID:
+        case TYPE_BYTE_ID:
             return 1;
         case TYPE_INT_ID:
-            return 2;
-        case TYPE_DINT_ID:
         case TYPE_REAL_ID:
             return 4;
         case TYPE_STRING_ID:

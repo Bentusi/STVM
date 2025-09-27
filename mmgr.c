@@ -47,7 +47,7 @@ int mmgr_init(void) {
     
     /* 初始化AST节点池 */
     if (!mmgr_init_fixed_pool(&g_mmgr.ast_node_pool,
-                              g_mmgr.ast_node_memory, 256, MAX_AST_NODES,
+                              g_mmgr.ast_node_memory, 256, MMGR_MAX_AST_NODES,
                               g_mmgr.ast_node_states, g_mmgr.ast_free_list)) {
         MMGR_DEBUG_LOG("Failed to initialize AST node pool");
         return -1;
@@ -55,7 +55,7 @@ int mmgr_init(void) {
     
     /* 初始化符号池 */
     if (!mmgr_init_fixed_pool(&g_mmgr.symbol_pool,
-                              g_mmgr.symbol_memory, 128, MAX_SYMBOLS,
+                              g_mmgr.symbol_memory, 128, MMGR_MAX_SYMBOLS,
                               g_mmgr.symbol_states, g_mmgr.symbol_free_list)) {
         MMGR_DEBUG_LOG("Failed to initialize symbol pool");
         return -1;
@@ -63,7 +63,7 @@ int mmgr_init(void) {
     
     /* 初始化类型信息池 */
     if (!mmgr_init_fixed_pool(&g_mmgr.type_info_pool,
-                              g_mmgr.type_info_memory, 64, MAX_TYPE_INFO,
+                              g_mmgr.type_info_memory, 64, MMGR_MAX_TYPE_INFO,
                               g_mmgr.type_info_states, g_mmgr.type_info_free_list)) {
         MMGR_DEBUG_LOG("Failed to initialize type info pool");
         return -1;
@@ -71,7 +71,7 @@ int mmgr_init(void) {
     
     /* 初始化库信息池 */
     if (!mmgr_init_fixed_pool(&g_mmgr.library_pool,
-                              g_mmgr.library_memory, 512, MAX_LIBRARIES,
+                              g_mmgr.library_memory, 512, MMGR_MAX_LIBRARIES,
                               g_mmgr.library_states, g_mmgr.library_free_list)) {
         MMGR_DEBUG_LOG("Failed to initialize library pool");
         return -1;
@@ -79,14 +79,14 @@ int mmgr_init(void) {
     
     /* 初始化字节码池 */
     if (!mmgr_init_variable_pool(&g_mmgr.bytecode_pool,
-                                 g_mmgr.bytecode_memory, MAX_BYTECODE_SIZE)) {
+                                 g_mmgr.bytecode_memory, MMGR_MAX_BYTECODE_SIZE)) {
         MMGR_DEBUG_LOG("Failed to initialize bytecode pool");
         return -1;
     }
     
     /* 初始化常量池 */
     if (!mmgr_init_variable_pool(&g_mmgr.const_pool,
-                                 g_mmgr.const_memory, MAX_CONST_POOL_SIZE)) {
+                                 g_mmgr.const_memory, MMGR_MAX_CONST_POOL_SIZE)) {
         MMGR_DEBUG_LOG("Failed to initialize constant pool");
         return -1;
     }
@@ -111,12 +111,12 @@ static bool mmgr_init_string_pool(mmgr_string_pool_t *pool) {
     pool->free_entry_count = 0;
     
     /* 初始化空闲条目列表 */
-    for (uint32_t i = 0; i < MAX_STRINGS; i++) {
+    for (uint32_t i = 0; i < MMGR_MAX_STRINGS; i++) {
         pool->free_entry_list[i] = i;
         pool->entries[i].is_allocated = false;
         pool->entries[i].ref_count = 0;
     }
-    pool->free_entry_count = MAX_STRINGS;
+    pool->free_entry_count = MMGR_MAX_STRINGS;
     
     return true;
 }
@@ -186,7 +186,7 @@ char* mmgr_alloc_string_with_length(const char *str, uint32_t length) {
     }
     
     /* 检查是否有足够空间 */
-    if (pool->used_size + length + 1 > MAX_STRING_POOL_SIZE ||
+    if (pool->used_size + length + 1 > MMGR_MAX_STRING_POOL_SIZE ||
         pool->free_entry_count == 0) {
         MMGR_DEBUG_LOG("String pool exhausted");
         return NULL;
@@ -569,20 +569,20 @@ void mmgr_print_statistics(void) {
     
     printf("\nPool Details:\n");
     printf("  String Pool: %u/%u entries, %u/%u bytes\n",
-           g_mmgr.string_pool.entry_count, MAX_STRINGS,
-           g_mmgr.string_pool.used_size, MAX_STRING_POOL_SIZE);
+           g_mmgr.string_pool.entry_count, MMGR_MAX_STRINGS,
+           g_mmgr.string_pool.used_size, MMGR_MAX_STRING_POOL_SIZE);
     printf("  AST Node Pool: %u/%u blocks\n",
-           g_mmgr.ast_node_pool.allocated_count, MAX_AST_NODES);
+           g_mmgr.ast_node_pool.allocated_count, MMGR_MAX_AST_NODES);
     printf("  Symbol Pool: %u/%u blocks\n",
-           g_mmgr.symbol_pool.allocated_count, MAX_SYMBOLS);
+           g_mmgr.symbol_pool.allocated_count, MMGR_MAX_SYMBOLS);
     printf("  Type Info Pool: %u/%u blocks\n",
-           g_mmgr.type_info_pool.allocated_count, MAX_TYPE_INFO);
+           g_mmgr.type_info_pool.allocated_count, MMGR_MAX_TYPE_INFO);
     printf("  Library Pool: %u/%u blocks\n",
-           g_mmgr.library_pool.allocated_count, MAX_LIBRARIES);
+           g_mmgr.library_pool.allocated_count, MMGR_MAX_LIBRARIES);
     printf("  Bytecode Pool: %u/%u bytes\n",
-           g_mmgr.bytecode_pool.used_size, MAX_BYTECODE_SIZE);
+           g_mmgr.bytecode_pool.used_size, MMGR_MAX_BYTECODE_SIZE);
     printf("  Constant Pool: %u/%u bytes\n",
-           g_mmgr.const_pool.used_size, MAX_CONST_POOL_SIZE);
+           g_mmgr.const_pool.used_size, MMGR_MAX_CONST_POOL_SIZE);
     printf("======================\n\n");
 }
 

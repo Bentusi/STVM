@@ -30,9 +30,9 @@ static ast_node_t *g_ast_root = NULL;
     ast_node_t *node;
     struct type_info *type;
     operator_type_t op;
-    var_category_t var_cat;
-    param_category_t param_cat;
-    function_category_t func_type;
+    var_category_t var_type;
+    param_category_t param_type;
+    func_category_t func_type;
 }
 
 /* 终结符定义 */
@@ -104,8 +104,8 @@ static ast_node_t *g_ast_root = NULL;
 %type <node> struct_members enum_values
 %type <type> type_specifier basic_type
 
-%type <var_cat> var_category
-%type <param_cat> parameter_category
+%type <var_type> var_category
+%type <param_type> parameter_category
 %type <func_type> function_type
 
 /* 运算符优先级和结合性 */
@@ -234,15 +234,15 @@ var_declaration:
     ;
 
 var_category:
-    VAR { $$ = SYMBOL_VAR_LOCAL; }
-    | VAR_INPUT { $$ = SYMBOL_VAR_INPUT; }
-    | VAR_OUTPUT { $$ = SYMBOL_VAR_OUTPUT; }
-    | VAR_IN_OUT { $$ = SYMBOL_VAR_IN_OUT; }
-    | VAR_EXTERNAL { $$ = SYMBOL_VAR_EXTERNAL; }
-    | VAR_GLOBAL { $$ = SYMBOL_VAR_GLOBAL; }
-    | VAR_CONSTANT { $$ = SYMBOL_VAR_CONSTANT; }
-    | VAR_TEMP { $$ = SYMBOL_VAR_TEMP; }
-    | VAR_CONFIG { $$ = SYMBOL_VAR_CONFIG; }
+    VAR { $$ = VAR_LOCAL; }
+    | VAR_INPUT { $$ = SYM_VAR_INPUT; }
+    | VAR_OUTPUT { $$ = SYM_VAR_OUTPUT; }
+    | VAR_IN_OUT { $$ = SYM_VAR_IN_OUT; }
+    | VAR_EXTERNAL { $$ = SYM_VAR_EXTERNAL; }
+    | VAR_GLOBAL { $$ = SYM_VAR_GLOBAL; }
+    | VAR_CONSTANT { $$ = SYM_VAR_CONSTANT; }
+    | VAR_TEMP { $$ = SYM_VAR_TEMP; }
+    | VAR_CONFIG { $$ = SYM_VAR_CONFIG; }
     ;
 
 var_list:
@@ -368,8 +368,8 @@ function_declaration:
     ;
 
 function_type:
-    FUNCTION { $$ = FUNC_FUNCTION; }
-    | FUNCTION_BLOCK { $$ = FUNC_FUNCTION_BLOCK; }
+    FUNCTION { $$ = SYM_FUNC_FUNCTION; }
+    | FUNCTION_BLOCK { $$ = SYM_FUNC_FUNCTION_BLOCK; }
     ;
 
 parameter_list:

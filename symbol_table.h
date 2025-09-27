@@ -33,13 +33,19 @@ typedef enum {
 
 /* 变量类别 */
 typedef enum {
-    VAR_LOCAL,          // 局部变量
-    VAR_GLOBAL,         // 全局变量
-    VAR_INPUT,          // 输入变量
-    VAR_OUTPUT,         // 输出变量
-    VAR_IN_OUT,         // 输入输出变量
-    VAR_TEMP            // 临时变量
+    SYM_VAR_LOCAL,          // 局部变量
+    SYM_VAR_GLOBAL,         // 全局变量
+    SYM_VAR_INPUT,          // 输入变量
+    SYM_VAR_OUTPUT,         // 输出变量
+    SYM_VAR_IN_OUT,         // 输入输出变量
+    SYM_VAR_TEMP            // 临时变量
 } var_category_t;
+
+/* 函数类别 */
+typedef enum {
+    SYM_FUNC_FUNCTION,     // 普通函数
+    SYM_FUNC_FUNCTION_BLOCK // 功能块
+} func_category_t;
 
 /* 作用域类型 */
 typedef enum {
@@ -80,7 +86,7 @@ typedef struct symbol {
     type_info_t *data_type;             // 数据类型
     
     uint32_t address;                   // 内存地址或偏移
-    uint32_t scope_level;               // 作用域级别
+    scope_type_t scope_level;           // 作用域级别
     
     /* 符号分类信息 */
     union {

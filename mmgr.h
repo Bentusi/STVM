@@ -5,15 +5,15 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* 静态内存池配置 */
-#define MAX_STRING_POOL_SIZE    (64 * 1024)    // 64KB字符串池
-#define MAX_STRINGS             2000           // 最大字符串数量
-#define MAX_AST_NODES           5000           // 最大AST节点数量
-#define MAX_SYMBOLS             1000           // 最大符号数量
-#define MAX_TYPE_INFO           500            // 最大类型信息数量
-#define MAX_LIBRARIES           50             // 最大库数量
-#define MAX_BYTECODE_SIZE       (1024 * 1024) // 1MB字节码池
-#define MAX_CONST_POOL_SIZE     (64 * 1024)   // 64KB常量池
+/* 静态MMGR_内存池配置 */
+#define MMGR_MAX_STRING_POOL_SIZE    (64 * 1024)    // 64KB字符串池
+#define MMGR_MAX_STRINGS             2000           // 最大字符串数量
+#define MMGR_MAX_AST_NODES           5000           // 最大AST节点数量
+#define MMGR_MAX_SYMBOLS             1000           // 最大符号数量
+#define MMGR_MAX_TYPE_INFO           500            // 最大类型信息数量
+#define MMGR_MAX_LIBRARIES           50             // 最大库数量
+#define MMGR_MAX_BYTECODE_SIZE       (1024 * 1024) // 1MB字节码池
+#define MMGR_MAX_CONST_POOL_SIZE     (64 * 1024)   // 64KB常量池
 
 /* 内存块状态 */
 typedef enum {
@@ -35,7 +35,7 @@ typedef enum {
 
 /* 字符串池管理 */
 typedef struct mmgr_string_pool {
-    char data[MAX_STRING_POOL_SIZE];           // 字符串数据池
+    char data[MMGR_MAX_STRING_POOL_SIZE];           // 字符串数据池
     uint32_t used_size;                        // 已使用的大小
     
     struct string_entry {
@@ -43,10 +43,10 @@ typedef struct mmgr_string_pool {
         uint32_t length;                       // 字符串长度
         uint32_t ref_count;                    // 引用计数
         bool is_allocated;                     // 是否已分配
-    } entries[MAX_STRINGS];
+    } entries[MMGR_MAX_STRINGS];
     
     uint32_t entry_count;                      // 条目数量
-    uint32_t free_entry_list[MAX_STRINGS];     // 空闲条目列表
+    uint32_t free_entry_list[MMGR_MAX_STRINGS];     // 空闲条目列表
     uint32_t free_entry_count;                 // 空闲条目数量
 } mmgr_string_pool_t;
 
@@ -135,25 +135,25 @@ typedef struct mmgr_static_manager {
     mmgr_general_pool_t general_pool;              // 通用内存池
     
     /* 内存数据区 */
-    uint8_t ast_node_memory[MAX_AST_NODES * 256];      // AST节点内存区
-    uint8_t symbol_memory[MAX_SYMBOLS * 128];          // 符号内存区
-    uint8_t type_info_memory[MAX_TYPE_INFO * 64];      // 类型信息内存区
-    uint8_t library_memory[MAX_LIBRARIES * 512];       // 库信息内存区
-    uint8_t bytecode_memory[MAX_BYTECODE_SIZE];        // 字节码内存区
-    uint8_t const_memory[MAX_CONST_POOL_SIZE];         // 常量内存区
-    uint8_t general_memory[256 * 1024];                // 通用内存区（256KB）
-    
+    uint8_t ast_node_memory[MMGR_MAX_AST_NODES * 256];      // AST节点内存区
+    uint8_t symbol_memory[MMGR_MAX_SYMBOLS * 128];          // 符号内存区
+    uint8_t type_info_memory[MMGR_MAX_TYPE_INFO * 64];      // 类型信息内存区
+    uint8_t library_memory[MMGR_MAX_LIBRARIES * 512];       // 库信息内存区
+    uint8_t bytecode_memory[MMGR_MAX_BYTECODE_SIZE];        // 字节码内存区
+    uint8_t const_memory[MMGR_MAX_CONST_POOL_SIZE];         // 常量内存区
+    uint8_t general_memory[256 * 1024];                     // 通用内存区（256KB）
+
     /* 块状态数组 */
-    mmgr_block_state_t ast_node_states[MAX_AST_NODES];
-    mmgr_block_state_t symbol_states[MAX_SYMBOLS];
-    mmgr_block_state_t type_info_states[MAX_TYPE_INFO];
-    mmgr_block_state_t library_states[MAX_LIBRARIES];
+    mmgr_block_state_t ast_node_states[MMGR_MAX_AST_NODES];
+    mmgr_block_state_t symbol_states[MMGR_MAX_SYMBOLS];
+    mmgr_block_state_t type_info_states[MMGR_MAX_TYPE_INFO];
+    mmgr_block_state_t library_states[MMGR_MAX_LIBRARIES];
     
     /* 空闲块列表 */
-    uint32_t ast_free_list[MAX_AST_NODES];
-    uint32_t symbol_free_list[MAX_SYMBOLS];
-    uint32_t type_info_free_list[MAX_TYPE_INFO];
-    uint32_t library_free_list[MAX_LIBRARIES];
+    uint32_t ast_free_list[MMGR_MAX_AST_NODES];
+    uint32_t symbol_free_list[MMGR_MAX_SYMBOLS];
+    uint32_t type_info_free_list[MMGR_MAX_TYPE_INFO];
+    uint32_t library_free_list[MMGR_MAX_LIBRARIES];
     
     /* 分配记录（调试用） */
     allocation_record_t allocation_records[MAX_ALLOCATION_RECORDS];
