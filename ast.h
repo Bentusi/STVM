@@ -7,7 +7,6 @@
 #define AST_H
 
 #include "symbol_table.h"
-#include "bytecode_generator.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -72,6 +71,71 @@ typedef enum {
     AST_ENUM_VALUE_LIST     // 枚举值列表
 } ast_node_type_t;
 
+/* 字节码指令操作码 */
+typedef enum {
+    // 数据操作指令
+    OP_LOAD_CONST_INT,      // 加载整数常量
+    OP_LOAD_CONST_REAL,     // 加载实数常量
+    OP_LOAD_CONST_BOOL,     // 加载布尔常量
+    OP_LOAD_CONST_STRING,   // 加载字符串常量
+    OP_LOAD_VAR,            // 加载变量
+    OP_STORE_VAR,           // 存储变量
+    OP_LOAD_PARAM,          // 加载函数参数
+    OP_STORE_PARAM,         // 存储函数参数
+    OP_LOAD_LOCAL,          // 加载局部变量
+    OP_STORE_LOCAL,         // 存储局部变量
+    OP_ASSIGN,              // 赋值操作
+    
+    // 算术运算指令
+    OP_ADD,                 // 加法
+    OP_SUB,                 // 减法
+    OP_MUL,                 // 乘法
+    OP_DIV,                 // 除法
+    OP_MOD,                 // 取模
+    OP_NEG,                 // 取负
+    OP_POS,                 // 正号
+    OP_ABS,                 // 绝对值
+    OP_POWER,               // 乘方
+    
+    // 比较运算指令
+    OP_EQ,                  // 等于
+    OP_NE,                  // 不等于
+    OP_LT,                  // 小于
+    OP_LE,                  // 小于等于
+    OP_GT,                  // 大于
+    OP_GE,                  // 大于等于
+    
+    // 逻辑运算指令
+    OP_AND,                 // 逻辑与
+    OP_OR,                  // 逻辑或
+    OP_NOT,                 // 逻辑非
+    OP_XOR,                 // 逻辑异或
+    
+    // 控制流指令
+    OP_JMP,                 // 无条件跳转
+    OP_JMP_IF,              // 条件跳转(真时跳转)
+    OP_JMP_UNLESS,          // 条件跳转(假时跳转)
+    OP_CALL,                // 函数调用
+    OP_RET,                 // 函数返回
+    OP_RET_VALUE,           // 带返回值的函数返回
+    
+    // 栈操作指令
+    OP_PUSH,                // 压栈
+    OP_POP,                 // 出栈
+    OP_DUP,                 // 复制栈顶
+    OP_SWAP,                // 交换栈顶两元素
+    
+    // 系统指令
+    OP_HALT,                // 停机
+    OP_NOP,                 // 空操作
+    OP_DEBUG_BREAK,         // 调试断点
+    
+    // 扩展指令
+    OP_SYNC_CHECKPOINT,     // 同步检查点
+    OP_LIB_CALL,            // 库函数调用
+    
+    OP_COUNT                // 指令总数
+} opcode_t;
 
 /* 字面量类型 */
 typedef enum { 
