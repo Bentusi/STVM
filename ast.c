@@ -249,7 +249,7 @@ ast_node_t* ast_create_return_statement(ast_node_t *return_value) {
 /* ========== 表达式节点创建函数 ========== */
 
 /* 创建二元操作节点 */
-ast_node_t* ast_create_binary_operation(operator_type_t op, ast_node_t *left, ast_node_t *right) {
+ast_node_t* ast_create_binary_operation(opcode_t op, ast_node_t *left, ast_node_t *right) {
     ast_node_t *node = ast_alloc_node(AST_BINARY_OP);
     if (!node) return NULL;
     
@@ -261,7 +261,7 @@ ast_node_t* ast_create_binary_operation(operator_type_t op, ast_node_t *left, as
 }
 
 /* 创建一元操作节点 */
-ast_node_t* ast_create_unary_operation(operator_type_t op, ast_node_t *operand) {
+ast_node_t* ast_create_unary_operation(opcode_t op, ast_node_t *operand) {
     ast_node_t *node = ast_alloc_node(AST_UNARY_OP);
     if (!node) return NULL;
     
@@ -604,7 +604,7 @@ const char* ast_node_type_name(ast_node_type_t type) {
 }
 
 /* 获取操作符名称 - 扩展支持所有操作符 */
-const char* ast_operator_name(operator_type_t op) {
+const char* ast_operator_name(opcode_t op) {
     switch (op) {
         case OP_ADD: return "+";
         case OP_SUB: return "-";

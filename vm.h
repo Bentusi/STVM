@@ -6,7 +6,7 @@
 #ifndef VM_H
 #define VM_H
 
-#include "bytecode.h"
+#include "bytecode_generator.h"
 #include "ms_sync.h"
 #include <stdint.h>
 #include <stdbool.h>

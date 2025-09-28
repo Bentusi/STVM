@@ -32,8 +32,7 @@ CORE_SOURCES = \
     ast.c \
     symbol_table.c \
     mmgr.c \
-    bytecode.c \
-    codegen.c \
+    bytecode_generator.c \
     vm.c \
     libmgr.c
 
@@ -109,13 +108,10 @@ symbol_table.o: symbol_table.c symbol_table.h mmgr.h ast.h
 mmgr.o: mmgr.c mmgr.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-bytecode.o: bytecode.c bytecode.h mmgr.h
+bytecode_generator.o: bytecode_generator.c bytecode_generator.h mmgr.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-codegen.o: codegen.c codegen.h ast.h bytecode.h symbol_table.h libmgr.h ms_sync.h
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-vm.o: vm.c vm.h bytecode.h mmgr.h libmgr.h ms_sync.h
+vm.o: vm.c vm.h bytecode_generator.h mmgr.h libmgr.h ms_sync.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 libmgr.o: libmgr.c libmgr.h mmgr.h symbol_table.h
@@ -132,10 +128,10 @@ builtin_io.o: builtin_io.c libmgr.h vm.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # 主程序编译规则
-main.o: main.c ast.h symbol_table.h codegen.h vm.h libmgr.h
+main.o: main.c ast.h symbol_table.h bytecode_generator.h vm.h libmgr.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-vm_main.o: vm_main.c vm.h bytecode.h
+vm_main.o: vm_main.c vm.h bytecode_generator.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # 通用编译规则

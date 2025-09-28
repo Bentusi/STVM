@@ -4,8 +4,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "ast.h"
 #include "symbol_table.h"
+#include "ast.h"
 
 /* 前向声明 */
 typedef struct bytecode_generator bytecode_generator_t;
@@ -45,6 +45,7 @@ typedef enum {
     OP_STORE_PARAM,         // 存储函数参数
     OP_LOAD_LOCAL,          // 加载局部变量
     OP_STORE_LOCAL,         // 存储局部变量
+    OP_ASSIGN,              // 赋值操作
     
     // 算术运算指令
     OP_ADD,                 // 加法
@@ -53,7 +54,9 @@ typedef enum {
     OP_DIV,                 // 除法
     OP_MOD,                 // 取模
     OP_NEG,                 // 取负
+    OP_POS,                 // 正号
     OP_ABS,                 // 绝对值
+    OP_POWER,               // 乘方
     
     // 比较运算指令
     OP_EQ,                  // 等于
@@ -67,6 +70,7 @@ typedef enum {
     OP_AND,                 // 逻辑与
     OP_OR,                  // 逻辑或
     OP_NOT,                 // 逻辑非
+    OP_XOR,                 // 逻辑异或
     
     // 控制流指令
     OP_JMP,                 // 无条件跳转

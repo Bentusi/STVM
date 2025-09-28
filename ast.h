@@ -7,6 +7,7 @@
 #define AST_H
 
 #include "symbol_table.h"
+#include "bytecode_generator.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -71,19 +72,6 @@ typedef enum {
     AST_ENUM_VALUE_LIST     // 枚举值列表
 } ast_node_type_t;
 
-/* 操作符类型 - 完整运算符支持 */
-typedef enum {
-    /* 算术运算 */
-    OP_ADD, OP_SUB, OP_MUL, OP_DIV, OP_MOD, OP_POWER,
-    /* 逻辑运算 */
-    OP_AND, OP_OR, OP_XOR, OP_NOT,
-    /* 比较运算 */
-    OP_EQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE,
-    /* 一元运算 */
-    OP_NEG, OP_POS,
-    /* 赋值运算 */
-    OP_ASSIGN
-} operator_type_t;
 
 /* 字面量类型 */
 typedef enum { 
@@ -247,14 +235,14 @@ typedef struct ast_node {
         
         /* 二元操作节点 */
         struct {
-            operator_type_t op;             // 操作符
+            opcode_t op;             // 操作符
             struct ast_node *left;          // 左操作数  
             struct ast_node *right;         // 右操作数
         } binary_op;
         
         /* 一元操作节点 */
         struct {
-            operator_type_t op;             // 操作符
+            opcode_t op;             // 操作符
             struct ast_node *operand;       // 操作数
         } unary_op;
         
@@ -363,8 +351,8 @@ ast_node_t* ast_create_continue_statement(void);
 ast_node_t* ast_create_expression_statement(ast_node_t *expression);
 
 /* 表达式节点创建函数 */
-ast_node_t* ast_create_binary_operation(operator_type_t op, ast_node_t *left, ast_node_t *right);
-ast_node_t* ast_create_unary_operation(operator_type_t op, ast_node_t *operand);
+ast_node_t* ast_create_binary_operation(opcode_t op, ast_node_t *left, ast_node_t *right);
+ast_node_t* ast_create_unary_operation(opcode_t op, ast_node_t *operand);
 ast_node_t* ast_create_function_call(const char *function_name, const char *library_name,
                                     ast_node_t *arguments);
 ast_node_t* ast_create_array_access(ast_node_t *array, ast_node_t *indices);
@@ -405,7 +393,7 @@ bool ast_nodes_equal(ast_node_t *node1, ast_node_t *node2);
 void ast_print_tree(ast_node_t *node, int indent);
 void ast_print_node_info(ast_node_t *node);
 const char* ast_node_type_name(ast_node_type_t type);
-const char* ast_operator_name(operator_type_t op);
+const char* ast_operator_name(opcode_t op);
 
 /* AST验证函数 */
 bool ast_validate_tree(ast_node_t *root);
