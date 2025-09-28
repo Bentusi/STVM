@@ -16,11 +16,10 @@
 #include <stdint.h>
 #include "ast.h"
 #include "symbol_table.h"
-#include "codegen.h"
+#include "bytecode_generator.h"
 #include "vm.h"
 #include "libmgr.h"
 #include "mmgr.h"
-#include "bytecode.h"
 
 /* 程序版本信息 */
 #define PROGRAM_VERSION "1.0.0"
@@ -72,7 +71,6 @@ typedef struct main_config {
 typedef struct main_context {
     symbol_table_t *sym_tbl;
     library_manager_t *lib_mgr;
-    codegen_context_t *codegen_ctx;
     master_slave_sync_t *sync_mgr;
     st_vm_t *vm;
     bool initialized;
@@ -445,8 +443,8 @@ static int init_main_context(main_context_t *ctx, main_config_t *config) {
 static int compile_source_file(main_context_t *ctx, const char *filename, main_config_t *config) {
     FILE *input_file = NULL;
     ast_node_t *ast_root = NULL;
+    bytecode_generator_t *bc_gen = NULL;
     bytecode_file_t bytecode_file = {0};
-    codegen_context_t *codegen_ctx = NULL;
     int result = 0;
 
     printf("编译源文件: %s\n", filename);
@@ -498,38 +496,45 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
         goto cleanup;
     }
 
-    /* 代码生成 */
+    /* 创建字节码生成器 */
     printf("正在进行代码生成...\n");
-    codegen_ctx = codegen_create_context();
-    if (!codegen_ctx) {
-        fprintf(stderr, "错误: 代码生成器初始化失败\n");
+    bc_gen = bc_generator_create();
+    if (!bc_gen) {
+        fprintf(stderr, "错误: 字节码生成器创建失败\n");
         result = -1;
         goto cleanup;
     }
 
-    /* 初始化代码生成器 */
-    if (codegen_init_context(codegen_ctx, NULL, ctx->lib_mgr, ctx->sync_mgr) != 0) {
-        fprintf(stderr, "错误: 代码生成器初始化失败\n");
+    /* 初始化字节码生成器 */
+    if (bc_generator_init(bc_gen, ctx->sym_tbl) != 0) {
+        fprintf(stderr, "错误: 字节码生成器初始化失败\n");
         result = -1;
         goto cleanup;
     }
 
-    /* 启用同步支持 */
-    if (config->sync.enable_sync) {
-        codegen_enable_sync(codegen_ctx);
-    }
+    /* 配置生成选项 */
+    bc_generator_set_output_format(bc_gen, BC_OUTPUT_BINARY);
+    bc_generator_enable_debug_info(bc_gen, config->show_ast);
+    bc_generator_enable_sync_support(bc_gen, config->sync.enable_sync);
 
-    /* 生成字节码 */
-    if (codegen_compile_program(codegen_ctx, ast_root, &bytecode_file) != 0) {
+    /* 编译程序 */
+    if (bc_generator_compile_program(bc_gen, ast_root) != 0) {
         fprintf(stderr, "错误: 字节码生成失败: %s\n",
-                codegen_get_last_error(codegen_ctx));
+                bc_generator_get_last_error(bc_gen));
+        result = -1;
+        goto cleanup;
+    }
+
+    /* 保存到内存格式用于显示和执行 */
+    if (bc_generator_save_to_memory(bc_gen, &bytecode_file) != 0) {
+        fprintf(stderr, "错误: 字节码保存失败\n");
         result = -1;
         goto cleanup;
     }
 
     if (config->show_bytecode) {
         printf("\n=== 字节码反汇编 ===\n");
-        bytecode_disassemble_file(&bytecode_file, stdout);
+        bc_file_disassemble(&bytecode_file, stdout);
         printf("==================\n\n");
     }
 
@@ -542,7 +547,7 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
 
         printf("保存字节码文件: %s\n", output_filename);
 
-        if (bytecode_save_file(&bytecode_file, output_filename) != 0) {
+        if (bc_generator_save_to_file(bc_gen, output_filename) != 0) {
             fprintf(stderr, "错误: 无法保存字节码文件: %s\n", output_filename);
             result = -1;
             goto cleanup;
@@ -562,8 +567,8 @@ static int compile_source_file(main_context_t *ctx, const char *filename, main_c
             }
         }
 
-        /* 加载字节码 */
-        if (vm_load_bytecode(ctx->vm, &bytecode_file) != 0) {
+        /* 加载字节码到虚拟机 */
+        if (bc_generator_load_to_vm(bc_gen, ctx->vm) != 0) {
             fprintf(stderr, "错误: 字节码加载失败\n");
             result = -1;
             goto cleanup;
@@ -584,11 +589,11 @@ cleanup:
         fclose(input_file);
     }
 
-    if (codegen_ctx) {
-        codegen_destroy_context(codegen_ctx);
+    if (bc_gen) {
+        bc_generator_destroy(bc_gen);
     }
 
-    bytecode_free_file(&bytecode_file);
+    bc_file_free(&bytecode_file);
 
     return result;
 }
@@ -598,9 +603,7 @@ static int execute_bytecode_file(main_context_t *ctx, const char *filename, main
     bytecode_file_t bytecode_file = {0};
     int result = 0;
 
-    if (config->verbose) {
-        printf("执行字节码文件: %s\n", filename);
-    }
+    printf("执行字节码文件: %s\n", filename);
 
     /* 检查文件是否存在 */
     if (!file_exists(filename)) {
@@ -609,13 +612,13 @@ static int execute_bytecode_file(main_context_t *ctx, const char *filename, main
     }
 
     /* 加载字节码文件 */
-    if (bytecode_load_file(&bytecode_file, filename) != 0) {
+    if (bc_file_load(&bytecode_file, filename) != 0) {
         fprintf(stderr, "错误: 无法加载字节码文件: %s\n", filename);
         return -1;
     }
 
     /* 验证字节码文件 */
-    if (!bytecode_verify_file(&bytecode_file)) {
+    if (!bc_file_verify(&bytecode_file)) {
         fprintf(stderr, "错误: 字节码文件验证失败\n");
         result = -1;
         goto cleanup;
@@ -623,7 +626,7 @@ static int execute_bytecode_file(main_context_t *ctx, const char *filename, main
 
     if (config->show_bytecode) {
         printf("\n=== 字节码反汇编 ===\n");
-        bytecode_disassemble_file(&bytecode_file, stdout);
+        bc_file_disassemble(&bytecode_file, stdout);
         printf("==================\n\n");
     }
 
@@ -636,17 +639,15 @@ static int execute_bytecode_file(main_context_t *ctx, const char *filename, main
         }
     }
 
-    /* 加载字节码 */
-    if (vm_load_bytecode(ctx->vm, &bytecode_file) != 0) {
+    /* 加载字节码到虚拟机 */
+    if (vm_load_bytecode_file(ctx->vm, &bytecode_file) != 0) {
         fprintf(stderr, "错误: 字节码加载失败: %s\n", vm_get_last_error(ctx->vm));
         result = -1;
         goto cleanup;
     }
 
     /* 执行程序 */
-    if (config->verbose) {
-        printf("正在执行程序...\n");
-    }
+    printf("正在执行程序...\n");
 
     if (vm_execute(ctx->vm) != 0) {
         fprintf(stderr, "错误: 程序执行失败: %s\n", vm_get_last_error(ctx->vm));
@@ -654,269 +655,45 @@ static int execute_bytecode_file(main_context_t *ctx, const char *filename, main
         goto cleanup;
     }
 
-    if (config->verbose) {
-        printf("程序执行完成\n");
-        vm_print_statistics(ctx->vm);
-    }
+    printf("程序执行完成\n");
+    vm_print_statistics(ctx->vm);
 
 cleanup:
-    bytecode_free_file(&bytecode_file);
+    bc_file_free(&bytecode_file);
 
     return result;
-}
-
-/* 交互模式 */
-static int interactive_mode(main_context_t *ctx, main_config_t *config) {
-    char input_line[MAX_INPUT_LINE];
-    char temp_filename[] = "/tmp/st_interactive_XXXXXX";
-    int temp_fd;
-    FILE *temp_file = NULL;
-    int line_count = 0;
-
-    print_colored("ST语言交互模式", COLOR_CYAN);
-    printf(" (输入 '.help' 查看命令, '.quit' 退出)\n");
-
-    /* 显示交互命令 */
-    printf("\n可用命令:\n");
-    printf("  .help      - 显示帮助\n");
-    printf("  .quit      - 退出交互模式\n");
-    printf("  .clear     - 清屏\n");
-    printf("  .reset     - 重置环境\n");
-    printf("  .vars      - 显示变量\n");
-    printf("  .funcs     - 显示函数\n");
-    printf("  .libs      - 显示已加载库\n");
-    printf("  .ast       - 切换AST显示\n");
-    printf("  .bytecode  - 切换字节码显示\n");
-    printf("  .time      - 切换执行时间显示\n");
-    printf("\n");
-
-    /* 创建临时文件 */
-    temp_fd = mkstemp(temp_filename);
-    if (temp_fd == -1) {
-        fprintf(stderr, "错误: 无法创建临时文件: %s\n", strerror(errno));
-        return -1;
-    }
-
-    while (!ctx->signal_received) {
-        printf("st[%d]> ", ++line_count);
-        fflush(stdout);
-
-        if (!fgets(input_line, sizeof(input_line), stdin)) {
-            break;
-        }
-
-        /* 去除换行符 */
-        size_t len = strlen(input_line);
-        if (len > 0 && input_line[len - 1] == '\n') {
-            input_line[len - 1] = '\0';
-            len--;
-        }
-
-        /* 跳过空行 */
-        if (len == 0) {
-            continue;
-        }
-
-        /* 处理交互命令 */
-        if (input_line[0] == '.') {
-            if (strcmp(input_line, ".help") == 0) {
-                printf("ST语言交互模式帮助:\n");
-                printf("  直接输入ST语句或表达式执行\n");
-                printf("  支持变量定义、函数调用等\n");
-                printf("  使用 .命令 控制交互环境\n");
-            } else if (strcmp(input_line, ".quit") == 0) {
-                break;
-            } else if (strcmp(input_line, ".clear") == 0) {
-                system("clear || cls");
-            } else if (strcmp(input_line, ".reset") == 0) {
-                if (ctx->vm) {
-                    vm_reset(ctx->vm);
-                }
-                printf("环境已重置\n");
-            } else if (strcmp(input_line, ".vars") == 0) {
-                if (ctx->vm) {
-                    vm_print_variables(ctx->vm);
-                }
-            } else if (strcmp(input_line, ".funcs") == 0) {
-                // TODO: 实现函数显示
-                printf("函数显示功能未实现\n");
-                // symbol_table_print_functions(ctx->global_symtab);
-            } else if (strcmp(input_line, ".libs") == 0) {
-                libmgr_print_loaded_libraries(ctx->lib_mgr);
-            } else if (strcmp(input_line, ".ast") == 0) {
-                config->show_ast = !config->show_ast;
-                printf("AST显示: %s\n", config->show_ast ? "开启" : "关闭");
-            } else if (strcmp(input_line, ".bytecode") == 0) {
-                config->show_bytecode = !config->show_bytecode;
-                printf("字节码显示: %s\n", config->show_bytecode ? "开启" : "关闭");
-            } else if (strcmp(input_line, ".time") == 0) {
-                config->benchmark_mode = !config->benchmark_mode;
-                printf("执行时间显示: %s\n", config->benchmark_mode ? "开启" : "关闭");
-            } else {
-                printf("未知命令: %s (输入 '.help' 查看帮助)\n", input_line);
-            }
-            continue;
-        }
-
-        /* 写入临时文件并执行ST代码 */
-        temp_file = fdopen(temp_fd, "w");
-        if (!temp_file) {
-            fprintf(stderr, "错误: 无法打开临时文件\n");
-            break;
-        }
-
-        /* 构造完整的ST程序 */
-        fprintf(temp_file, "PROGRAM Interactive\n");
-        fprintf(temp_file, "VAR\n");
-        fprintf(temp_file, "    result : INT;\n");
-        fprintf(temp_file, "END_VAR\n");
-        fprintf(temp_file, "%s\n", input_line);
-        fprintf(temp_file, "END_PROGRAM\n");
-
-        fclose(temp_file);
-
-        /* 编译并执行 */
-        main_config_t temp_config = *config;
-        temp_config.mode = MODE_COMPILE_AND_RUN;
-        strcpy(temp_config.input_file, temp_filename);
-
-        if (compile_source_file(ctx, temp_filename, &temp_config) != 0) {
-            printf("执行失败\n");
-        }
-
-        /* 重新打开临时文件用于下次写入 */
-        close(temp_fd);
-        temp_fd = open(temp_filename, O_WRONLY | O_TRUNC);
-        if (temp_fd == -1) {
-            fprintf(stderr, "错误: 无法重新打开临时文件\n");
-            break;
-        }
-    }
-
-    /* 清理 */
-    if (temp_fd != -1) {
-        close(temp_fd);
-    }
-    unlink(temp_filename);
-
-    print_colored("退出交互模式\n", COLOR_YELLOW);
-    return 0;
-}
-
-/* 简化的调试模式 */
-static int debug_mode(main_context_t *ctx, const char *filename, main_config_t *config) {
-    printf("调试模式: %s\n", filename);
-
-    /* 首先编译文件 */
-    main_config_t compile_config = *config;
-    compile_config.mode = MODE_COMPILE_ONLY;
-    compile_config.compiler.generate_debug_info = true;
-
-    if (compile_source_file(ctx, filename, &compile_config) != 0) {
-        return -1;
-    }
-
-    /* 生成字节码文件名 */
-    char *bytecode_filename = generate_output_filename(filename, "stbc");
-
-    /* 加载字节码并启动简单调试器 */
-    bytecode_file_t bytecode_file = {0};
-    if (bytecode_load_file(&bytecode_file, bytecode_filename) != 0) {
-        fprintf(stderr, "错误: 无法加载字节码文件用于调试\n");
-        return -1;
-    }
-
-    /* 加载字节码到虚拟机 */
-    if (vm_load_bytecode(ctx->vm, &bytecode_file) != 0) {
-        fprintf(stderr, "错误: 字节码加载失败\n");
-        bytecode_free_file(&bytecode_file);
-        return -1;
-    }
-
-    /* 启动简单的调试器 */
-    printf("简单调试器 (输入 'help' 查看命令)\n");
-
-    char debug_input[256];
-    while (1) {
-        printf("(stdbg) ");
-        fflush(stdout);
-
-        if (!fgets(debug_input, sizeof(debug_input), stdin)) {
-            break;
-        }
-
-        /* 去除换行符 */
-        size_t len = strlen(debug_input);
-        if (len > 0 && debug_input[len - 1] == '\n') {
-            debug_input[len - 1] = '\0';
-        }
-
-        if (strcmp(debug_input, "help") == 0) {
-            printf("调试命令:\n");
-            printf("  run      - 运行程序\n");
-            printf("  step     - 单步执行\n");
-            printf("  continue - 继续执行\n");
-            printf("  break <addr> - 设置断点\n");
-            printf("  info stack   - 显示栈信息\n");
-            printf("  info vars    - 显示变量信息\n");
-            printf("  quit     - 退出调试器\n");
-        } else if (strcmp(debug_input, "run") == 0) {
-            if (vm_execute(ctx->vm) != 0) {
-                printf("程序执行出错: %s\n", vm_get_last_error(ctx->vm));
-            } else {
-                printf("程序执行完成\n");
-            }
-        } else if (strcmp(debug_input, "step") == 0) {
-            if (vm_execute_single_step(ctx->vm) != 0) {
-                printf("单步执行出错: %s\n", vm_get_last_error(ctx->vm));
-            } else {
-                printf("PC: %u, 状态: %s\n", vm_get_pc(ctx->vm),
-                       vm_state_to_string(vm_get_state(ctx->vm)));
-            }
-        } else if (strcmp(debug_input, "info stack") == 0) {
-            vm_print_stack(ctx->vm);
-        } else if (strcmp(debug_input, "info vars") == 0) {
-            vm_print_variables(ctx->vm);
-        } else if (strcmp(debug_input, "quit") == 0) {
-            break;
-        } else {
-            printf("未知命令: %s (输入 'help' 查看帮助)\n", debug_input);
-        }
-    }
-
-    bytecode_free_file(&bytecode_file);
-    return 0;
 }
 
 /* 反汇编文件 */
 static int disassemble_file(const char *filename, main_config_t *config) {
     bytecode_file_t bytecode_file = {0};
 
-    if (config->verbose) {
-        printf("反汇编字节码文件: %s\n", filename);
-    }
+    printf("反汇编字节码文件: %s\n", filename);
 
     /* 加载字节码文件 */
-    if (bytecode_load_file(&bytecode_file, filename) != 0) {
+    if (bc_file_load(&bytecode_file, filename) != 0) {
         fprintf(stderr, "错误: 无法加载字节码文件: %s\n", filename);
         return -1;
     }
 
     /* 验证字节码文件 */
-    if (!bytecode_verify_file(&bytecode_file)) {
+    if (!bc_file_verify(&bytecode_file)) {
         fprintf(stderr, "错误: 字节码文件验证失败\n");
-        bytecode_free_file(&bytecode_file);
+        bc_file_free(&bytecode_file);
         return -1;
     }
 
     /* 输出文件信息 */
-    bytecode_print_file_info(&bytecode_file);
+    printf("文件: %s\n", filename);
+    printf("版本: %d.%d\n", bytecode_file.header.version_major, 
+           bytecode_file.header.version_minor);
+    printf("指令数: %u\n", bytecode_file.instruction_count);
     printf("\n");
 
     /* 反汇编输出 */
-    bytecode_disassemble_file(&bytecode_file, stdout);
+    bc_file_disassemble(&bytecode_file, stdout);
 
-    bytecode_free_file(&bytecode_file);
+    bc_file_free(&bytecode_file);
     return 0;
 }
 
@@ -1286,5 +1063,4 @@ static int validate_config(const main_config_t *config) {
     }
 
     return 0;
-}
 }

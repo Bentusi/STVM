@@ -198,7 +198,7 @@ static int vm_load_bytecode_from_file(st_vm_t *vm, const bytecode_file_t *bc_fil
                 vm->global_vars[i] = vm_create_bool_value(false);
                 break;
             case TYPE_INT_ID:
-            case TYPE_DINT_ID:
+            case TYPE_BYTE_ID:
                 vm->global_vars[i] = vm_create_int_value(0);
                 break;
             case TYPE_REAL_ID:
