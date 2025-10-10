@@ -272,6 +272,21 @@ typedef struct symbol_info {
     bool is_global;
 } symbol_info_t;
 
+/* 字节码指令结构 */
+typedef struct {
+    opcode_t opcode;
+    base_type_t type;
+    union {
+        int32_t int_operand;
+        double real_operand;
+        uint32_t uint_operand;
+        char *string_operand;
+        size_t addr_operand;
+    } operand;
+    uint32_t op1;
+    uint32_t op2;
+} bytecode_instr_t;
+
 /* API函数声明 */
 
 /* 创建和销毁 */

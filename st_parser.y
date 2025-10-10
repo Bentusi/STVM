@@ -45,7 +45,7 @@ static ast_node_t *g_ast_root = NULL;
 %token <string> PRAGMA
 
 /* 程序结构关键字 */
-%token PROGRAM END_PROGRAM FUNCTION END_FUNCTION FUNCTION_BLOCK END_FUNCTION_BLOCK
+%token PROGRAM END_PROGRAM FUNCTION END_FUNCTION
 
 /* 库和导入关键字 */
 %token LIBRARY END_LIBRARY IMPORT FROM AS EXPORT VERSION
@@ -362,14 +362,10 @@ function_declaration:
       declaration_list statement_list END_FUNCTION {
         $$ = ast_create_function_declaration($2, $1, $4, $7, $8, $9);
     }
-    | function_type IDENTIFIER declaration_list statement_list END_FUNCTION_BLOCK {
-        $$ = ast_create_function_declaration($2, $1, NULL, NULL, $3, $4);
-    }
     ;
 
 function_type:
     FUNCTION { $$ = SYM_FUNC_FUNCTION; }
-    | FUNCTION_BLOCK { $$ = SYM_FUNC_FUNCTION_BLOCK; }
     ;
 
 parameter_list:

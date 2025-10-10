@@ -640,28 +640,23 @@ int vm_execute_instruction(st_vm_t *vm, const bytecode_instr_t *instr) {
     }
 
         /* 算术运算指令 */
-    case OP_ADD_INT:
-    case OP_ADD_REAL:
-        return vm_exec_add(vm, (instr->opcode == OP_ADD_INT) ? VAL_INT : VAL_REAL);
+    case OP_ADD:
+        return vm_exec_add(vm, instr->type);
 
-    case OP_SUB_INT:
-    case OP_SUB_REAL:
-        return vm_exec_sub(vm, (instr->opcode == OP_SUB_INT) ? VAL_INT : VAL_REAL);
+    case OP_SUB:
+        return vm_exec_sub(vm, instr->type);
 
-    case OP_MUL_INT:
-    case OP_MUL_REAL:
-        return vm_exec_mul(vm, (instr->opcode == OP_MUL_INT) ? VAL_INT : VAL_REAL);
+    case OP_MUL:
+        return vm_exec_mul(vm, instr->type);
 
-    case OP_DIV_INT:
-    case OP_DIV_REAL:
-        return vm_exec_div(vm, (instr->opcode == OP_DIV_INT) ? VAL_INT : VAL_REAL);
+    case OP_DIV:
+        return vm_exec_div(vm, instr->type);
 
-    case OP_MOD_INT:
+    case OP_MOD:
         return vm_exec_mod(vm);
 
-    case OP_NEG_INT:
-    case OP_NEG_REAL:
-        return vm_exec_neg(vm, (instr->opcode == OP_NEG_INT) ? VAL_INT : VAL_REAL);
+    case OP_NEG:
+        return vm_exec_neg(vm, instr->type);
 
         /* 控制流指令 */
     case OP_JMP:
@@ -697,19 +692,10 @@ int vm_execute_instruction(st_vm_t *vm, const bytecode_instr_t *instr) {
         return vm_exec_jump_conditional(vm, instr->operand.addr_operand, condition);
     }
 
-        /* 同步指令 */
-    case OP_SYNC_VAR:
-        if (vm->sync_enabled) {
-            return vm_sync_variable(vm, instr->operand.int_operand);
-        }
-        break;
-
-    case OP_SYNC_CHECKPOINT:
-        if (vm->sync_enabled) {
-            return vm_send_sync_checkpoint(vm);
-        }
-        break;
-
+    case OP_CALL:
+        /* 函数调用实现,查找函数表以及参数变量来执行 */
+        
+        
     default:
         vm_set_error(vm, "Unknown instruction");
         return -1;

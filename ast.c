@@ -564,7 +564,6 @@ const char* ast_node_type_name(ast_node_type_t type) {
         case AST_VAR_DECL: return "VAR_DECL";
         case AST_VAR_ITEM: return "VAR_ITEM";
         case AST_FUNCTION_DECL: return "FUNCTION_DECL";
-        case AST_FUNCTION_BLOCK_DECL: return "FUNCTION_BLOCK_DECL";
         case AST_PARAM_DECL: return "PARAM_DECL";
         case AST_TYPE_DECL: return "TYPE_DECL";
         case AST_ASSIGNMENT: return "ASSIGNMENT";

@@ -26,7 +26,6 @@ typedef enum {
     AST_VAR_DECL,           // 变量声明
     AST_VAR_ITEM,           // 变量项
     AST_FUNCTION_DECL,      // 函数声明
-    AST_FUNCTION_BLOCK_DECL,// 函数块声明
     AST_PARAM_DECL,         // 参数声明
     AST_TYPE_DECL,          // 类型声明
     
@@ -113,8 +112,8 @@ typedef enum {
     
     // 控制流指令
     OP_JMP,                 // 无条件跳转
-    OP_JMP_IF,              // 条件跳转(真时跳转)
-    OP_JMP_UNLESS,          // 条件跳转(假时跳转)
+    OP_JMP_TRUE,            // 条件跳转(真时跳转)
+    OP_JMP_FALSE,           // 条件跳转(假时跳转)
     OP_CALL,                // 函数调用
     OP_RET,                 // 函数返回
     OP_RET_VALUE,           // 带返回值的函数返回

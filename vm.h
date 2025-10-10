@@ -101,8 +101,6 @@ typedef struct st_vm {
     /* 字节码和常量 */
     bytecode_instr_t *instructions;     // 指令序列
     uint32_t instr_count;               // 指令数量
-    const_pool_item_t *const_pool;      // 常量池
-    uint32_t const_pool_size;           // 常量池大小
     
     /* 运行时状态 */
     uint32_t pc;                        // 程序计数器
