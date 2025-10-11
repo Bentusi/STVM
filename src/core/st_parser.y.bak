@@ -1,0 +1,601 @@
+%{
+/**
+ * @file st_parser.y
+ * @brief ST语言语法分析器 (Bison)
+ */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "ast.h"
+#include "mmgr.h"
+
+/* 外部声明 */
+extern int yylex(void);
+extern int yylineno;
+extern int yycolumn;
+extern char* yytext;
+
+void yyerror(const char* s);
+
+/* 全局变量：解析结果 */
+ASTNode* parse_result = NULL;
+
+%}
+
+/* 联合体定义：token和非终结符的值类型 */
+%union {
+    int64_t int_value;
+    double real_value;
+    int bool_value;
+    char* string_value;
+    ASTNode* ast_node;
+    TypeInfo* type_info;
+    BinaryOperator binary_op;
+    UnaryOperator unary_op;
+}
+
+/* Token声明 */
+%token TOKEN_PROGRAM TOKEN_END_PROGRAM
+%token TOKEN_FUNCTION TOKEN_END_FUNCTION
+%token TOKEN_VAR TOKEN_VAR_INPUT TOKEN_VAR_OUTPUT TOKEN_END_VAR
+%token TOKEN_IF TOKEN_THEN TOKEN_ELSIF TOKEN_ELSE TOKEN_END_IF
+%token TOKEN_CASE TOKEN_OF TOKEN_END_CASE
+%token TOKEN_FOR TOKEN_TO TOKEN_BY TOKEN_DO TOKEN_END_FOR
+%token TOKEN_WHILE TOKEN_END_WHILE
+%token TOKEN_REPEAT TOKEN_UNTIL TOKEN_END_REPEAT
+%token TOKEN_RETURN TOKEN_EXIT
+%token TOKEN_IMPORT TOKEN_AS
+
+%token TOKEN_BOOL TOKEN_INT TOKEN_REAL TOKEN_STRING TOKEN_ARRAY
+
+%token <bool_value> TOKEN_TRUE TOKEN_FALSE
+%token <int_value> TOKEN_INTEGER_LITERAL
+%token <real_value> TOKEN_REAL_LITERAL
+%token <string_value> TOKEN_STRING_LITERAL TOKEN_IDENTIFIER
+
+%token TOKEN_ASSIGN TOKEN_EQ TOKEN_NE TOKEN_LT TOKEN_LE TOKEN_GT TOKEN_GE
+%token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MOD
+%token TOKEN_AND TOKEN_OR TOKEN_XOR TOKEN_NOT
+
+%token TOKEN_SEMICOLON TOKEN_COLON TOKEN_COMMA TOKEN_DOT TOKEN_RANGE
+%token TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACKET TOKEN_RBRACKET
+
+%token TOKEN_ERROR
+
+/* 非终结符类型声明 */
+%type <ast_node> program import_list import_decl
+%type <ast_node> var_decl_list var_decl var_decl_item
+%type <ast_node> function_list function_decl
+%type <ast_node> statement_list statement
+%type <ast_node> assignment_stmt if_stmt elsif_list while_stmt for_stmt case_stmt return_stmt
+%type <ast_node> expression or_expr xor_expr and_expr comparison_expr
+%type <ast_node> add_expr mult_expr unary_expr primary_expr
+%type <ast_node> argument_list
+%type <type_info> type_spec
+
+/* 运算符优先级和结合性 */
+%left TOKEN_OR
+%left TOKEN_XOR
+%left TOKEN_AND
+%left TOKEN_EQ TOKEN_NE
+%left TOKEN_LT TOKEN_LE TOKEN_GT TOKEN_GE
+%left TOKEN_PLUS TOKEN_MINUS
+%left TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MOD
+%right TOKEN_NOT UNARY_MINUS
+
+/* 起始符号 */
+%start program
+
+%%
+
+/* 程序结构 */
+program:
+    TOKEN_PROGRAM TOKEN_IDENTIFIER
+    import_list
+    var_decl_list
+    function_list
+    statement_list
+    TOKEN_END_PROGRAM
+    {
+        $$ = ast_create_program($2, NULL);
+        $$->data.program.imports = $3;
+        $$->data.program.var_decls = $4;
+        $$->data.program.functions = $5;
+        $$->data.program.body = $6;
+        parse_result = $$;
+    }
+    ;
+
+/* 导入声明列表 */
+import_list:
+    /* 空 */ { $$ = NULL; }
+    | import_list import_decl
+    {
+        if ($1 == NULL) {
+            $$ = $2;
+        } else {
+            ASTNode* last = $1;
+            while (last->next) last = last->next;
+            last->next = $2;
+            $$ = $1;
+        }
+    }
+    ;
+
+import_decl:
+    TOKEN_IMPORT TOKEN_STRING_LITERAL TOKEN_SEMICOLON
+    {
+        $$ = ast_create_import($2, NULL);
+    }
+    | TOKEN_IMPORT TOKEN_STRING_LITERAL TOKEN_AS TOKEN_IDENTIFIER TOKEN_SEMICOLON
+    {
+        $$ = ast_create_import($2, $4);
+    }
+    ;
+
+/* 变量声明列表 */
+var_decl_list:
+    /* 空 */ { $$ = NULL; }
+    | var_decl_list var_decl
+    {
+        if ($1 == NULL) {
+            $$ = $2;
+        } else {
+            ASTNode* last = $1;
+            while (last->next) last = last->next;
+            last->next = $2;
+            $$ = $1;
+        }
+    }
+    ;
+
+var_decl:
+    TOKEN_VAR var_decl_item TOKEN_END_VAR
+    {
+        $$ = $2;
+        /* 标记为普通变量 */
+        ASTNode* node = $$;
+        while (node) {
+            node->data.var_decl.is_input = 0;
+            node->data.var_decl.is_output = 0;
+            node = node->next;
+        }
+    }
+    | TOKEN_VAR_INPUT var_decl_item TOKEN_END_VAR
+    {
+        $$ = $2;
+        /* 标记为输入变量 */
+        ASTNode* node = $$;
+        while (node) {
+            node->data.var_decl.is_input = 1;
+            node->data.var_decl.is_output = 0;
+            node = node->next;
+        }
+    }
+    | TOKEN_VAR_OUTPUT var_decl_item TOKEN_END_VAR
+    {
+        $$ = $2;
+        /* 标记为输出变量 */
+        ASTNode* node = $$;
+        while (node) {
+            node->data.var_decl.is_input = 0;
+            node->data.var_decl.is_output = 1;
+            node = node->next;
+        }
+    }
+    ;
+
+var_decl_item:
+    TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_SEMICOLON
+    {
+        $$ = ast_create_var_decl($1, $3, NULL);
+    }
+    | TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_ASSIGN expression TOKEN_SEMICOLON
+    {
+        $$ = ast_create_var_decl($1, $3, $5);
+    }
+    | var_decl_item TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_SEMICOLON
+    {
+        ASTNode* new_decl = ast_create_var_decl($2, $4, NULL);
+        ASTNode* last = $1;
+        while (last->next) last = last->next;
+        last->next = new_decl;
+        $$ = $1;
+    }
+    | var_decl_item TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_ASSIGN expression TOKEN_SEMICOLON
+    {
+        ASTNode* new_decl = ast_create_var_decl($2, $4, $6);
+        ASTNode* last = $1;
+        while (last->next) last = last->next;
+        last->next = new_decl;
+        $$ = $1;
+    }
+    ;
+
+/* 类型规范 */
+type_spec:
+    TOKEN_BOOL      { $$ = type_info_create(TYPE_BOOL); }
+    | TOKEN_INT     { $$ = type_info_create(TYPE_INT); }
+    | TOKEN_REAL    { $$ = type_info_create(TYPE_REAL); }
+    | TOKEN_STRING  { $$ = type_info_create(TYPE_STRING); }
+    | TOKEN_ARRAY TOKEN_LBRACKET TOKEN_INTEGER_LITERAL TOKEN_RANGE TOKEN_INTEGER_LITERAL TOKEN_RBRACKET TOKEN_OF type_spec
+    {
+        int size = (int)($5 - $3 + 1);
+        $$ = type_info_create_array($8, size);
+    }
+    ;
+
+/* 函数声明列表 */
+function_list:
+    /* 空 */ { $$ = NULL; }
+    | function_list function_decl
+    {
+        if ($1 == NULL) {
+            $$ = $2;
+        } else {
+            ASTNode* last = $1;
+            while (last->next) last = last->next;
+            last->next = $2;
+            $$ = $1;
+        }
+    }
+    ;
+
+function_decl:
+    TOKEN_FUNCTION TOKEN_IDENTIFIER
+    var_decl_list
+    TOKEN_COLON type_spec
+    var_decl_list
+    statement_list
+    TOKEN_END_FUNCTION
+    {
+        $$ = ast_create_function($2, $3, $5, $7);
+        $$->data.function_decl.var_decls = $6;
+    }
+    | TOKEN_FUNCTION TOKEN_IDENTIFIER
+    var_decl_list
+    var_decl_list
+    statement_list
+    TOKEN_END_FUNCTION
+    {
+        $$ = ast_create_function($2, $3, NULL, $5);
+        $$->data.function_decl.var_decls = $4;
+    }
+    ;
+
+/* 语句列表 */
+statement_list:
+    /* 空 */ { $$ = NULL; }
+    | statement_list statement
+    {
+        if ($1 == NULL) {
+            $$ = $2;
+        } else {
+            ASTNode* last = $1;
+            while (last->next) last = last->next;
+            last->next = $2;
+            $$ = $1;
+        }
+    }
+    ;
+
+/* 语句 */
+statement:
+    assignment_stmt { $$ = $1; }
+    | if_stmt       { $$ = $1; }
+    | while_stmt    { $$ = $1; }
+    | for_stmt      { $$ = $1; }
+    | case_stmt     { $$ = $1; }
+    | return_stmt   { $$ = $1; }
+    | TOKEN_SEMICOLON { $$ = NULL; } /* 空语句 */
+    ;
+
+/* 赋值语句 */
+assignment_stmt:
+    TOKEN_IDENTIFIER TOKEN_ASSIGN expression TOKEN_SEMICOLON
+    {
+        ASTNode* target = ast_create_identifier($1);
+        $$ = ast_create_assignment(target, $3);
+    }
+    | TOKEN_IDENTIFIER TOKEN_LBRACKET expression TOKEN_RBRACKET TOKEN_ASSIGN expression TOKEN_SEMICOLON
+    {
+        ASTNode* array = ast_create_identifier($1);
+        ASTNode* target = ast_create_array_access(array, $3);
+        $$ = ast_create_assignment(target, $6);
+    }
+    ;
+
+/* IF语句 */
+if_stmt:
+    TOKEN_IF expression TOKEN_THEN statement_list TOKEN_END_IF
+    {
+        $$ = ast_create_if($2, $4, NULL);
+    }
+    | TOKEN_IF expression TOKEN_THEN statement_list TOKEN_ELSE statement_list TOKEN_END_IF
+    {
+        $$ = ast_create_if($2, $4, $6);
+    }
+    | TOKEN_IF expression TOKEN_THEN statement_list elsif_list TOKEN_END_IF
+    {
+        $$ = ast_create_if($2, $4, $5);
+    }
+    | TOKEN_IF expression TOKEN_THEN statement_list elsif_list TOKEN_ELSE statement_list TOKEN_END_IF
+    {
+        /* 找到elsif链的最后一个，添加else分支 */
+        ASTNode* last_elsif = $5;
+        while (last_elsif->type == AST_IF_STMT && last_elsif->data.if_stmt.else_branch) {
+            last_elsif = last_elsif->data.if_stmt.else_branch;
+        }
+        if (last_elsif->type == AST_IF_STMT) {
+            last_elsif->data.if_stmt.else_branch = ast_create_block($7);
+        }
+        $$ = ast_create_if($2, $4, $5);
+    }
+    ;
+
+elsif_list:
+    TOKEN_ELSIF expression TOKEN_THEN statement_list
+    {
+        $$ = ast_create_if($2, $4, NULL);
+    }
+    | elsif_list TOKEN_ELSIF expression TOKEN_THEN statement_list
+    {
+        ASTNode* new_elsif = ast_create_if($3, $5, NULL);
+        /* 找到elsif链的最后一个 */
+        ASTNode* last = $1;
+        while (last->type == AST_IF_STMT && last->data.if_stmt.else_branch) {
+            last = last->data.if_stmt.else_branch;
+        }
+        if (last->type == AST_IF_STMT) {
+            last->data.if_stmt.else_branch = new_elsif;
+        }
+        $$ = $1;
+    }
+    ;
+
+/* WHILE语句 */
+while_stmt:
+    TOKEN_WHILE expression TOKEN_DO statement_list TOKEN_END_WHILE
+    {
+        $$ = ast_create_while($2, $4);
+    }
+    ;
+
+/* FOR语句 */
+for_stmt:
+    TOKEN_FOR TOKEN_IDENTIFIER TOKEN_ASSIGN expression TOKEN_TO expression TOKEN_DO statement_list TOKEN_END_FOR
+    {
+        ASTNode* var = ast_create_identifier($2);
+        ASTNode* init = ast_create_assignment(var, $4);
+        $$ = ast_create_for(init, $6, NULL, $8);
+    }
+    | TOKEN_FOR TOKEN_IDENTIFIER TOKEN_ASSIGN expression TOKEN_TO expression TOKEN_BY expression TOKEN_DO statement_list TOKEN_END_FOR
+    {
+        ASTNode* var = ast_create_identifier($2);
+        ASTNode* init = ast_create_assignment(var, $4);
+        $$ = ast_create_for(init, $6, $8, $10);
+    }
+    ;
+
+/* CASE语句 */
+case_stmt:
+    TOKEN_CASE expression TOKEN_OF statement_list TOKEN_END_CASE
+    {
+        $$ = ast_create_case($2, $4);
+    }
+    ;
+
+/* RETURN语句 */
+return_stmt:
+    TOKEN_RETURN TOKEN_SEMICOLON
+    {
+        $$ = ast_create_return(NULL);
+    }
+    | TOKEN_RETURN expression TOKEN_SEMICOLON
+    {
+        $$ = ast_create_return($2);
+    }
+    ;
+
+/* 表达式 */
+expression:
+    or_expr { $$ = $1; }
+    ;
+
+or_expr:
+    xor_expr { $$ = $1; }
+    | or_expr TOKEN_OR xor_expr
+    {
+        $$ = ast_create_binary_op(OP_OR, $1, $3);
+    }
+    ;
+
+xor_expr:
+    and_expr { $$ = $1; }
+    | xor_expr TOKEN_XOR and_expr
+    {
+        $$ = ast_create_binary_op(OP_XOR, $1, $3);
+    }
+    ;
+
+and_expr:
+    comparison_expr { $$ = $1; }
+    | and_expr TOKEN_AND comparison_expr
+    {
+        $$ = ast_create_binary_op(OP_AND, $1, $3);
+    }
+    ;
+
+comparison_expr:
+    add_expr { $$ = $1; }
+    | comparison_expr TOKEN_EQ add_expr
+    {
+        $$ = ast_create_binary_op(OP_EQ, $1, $3);
+    }
+    | comparison_expr TOKEN_NE add_expr
+    {
+        $$ = ast_create_binary_op(OP_NE, $1, $3);
+    }
+    | comparison_expr TOKEN_LT add_expr
+    {
+        $$ = ast_create_binary_op(OP_LT, $1, $3);
+    }
+    | comparison_expr TOKEN_LE add_expr
+    {
+        $$ = ast_create_binary_op(OP_LE, $1, $3);
+    }
+    | comparison_expr TOKEN_GT add_expr
+    {
+        $$ = ast_create_binary_op(OP_GT, $1, $3);
+    }
+    | comparison_expr TOKEN_GE add_expr
+    {
+        $$ = ast_create_binary_op(OP_GE, $1, $3);
+    }
+    ;
+
+add_expr:
+    mult_expr { $$ = $1; }
+    | add_expr TOKEN_PLUS mult_expr
+    {
+        $$ = ast_create_binary_op(OP_ADD, $1, $3);
+    }
+    | add_expr TOKEN_MINUS mult_expr
+    {
+        $$ = ast_create_binary_op(OP_SUB, $1, $3);
+    }
+    ;
+
+mult_expr:
+    unary_expr { $$ = $1; }
+    | mult_expr TOKEN_MULTIPLY unary_expr
+    {
+        $$ = ast_create_binary_op(OP_MUL, $1, $3);
+    }
+    | mult_expr TOKEN_DIVIDE unary_expr
+    {
+        $$ = ast_create_binary_op(OP_DIV, $1, $3);
+    }
+    | mult_expr TOKEN_MOD unary_expr
+    {
+        $$ = ast_create_binary_op(OP_MOD, $1, $3);
+    }
+    ;
+
+unary_expr:
+    primary_expr { $$ = $1; }
+    | TOKEN_NOT unary_expr
+    {
+        $$ = ast_create_unary_op(OP_NOT, $2);
+    }
+    | TOKEN_MINUS unary_expr %prec UNARY_MINUS
+    {
+        $$ = ast_create_unary_op(OP_NEG, $2);
+    }
+    ;
+
+primary_expr:
+    TOKEN_INTEGER_LITERAL
+    {
+        $$ = ast_create_int_literal($1);
+    }
+    | TOKEN_REAL_LITERAL
+    {
+        $$ = ast_create_real_literal($1);
+    }
+    | TOKEN_TRUE
+    {
+        $$ = ast_create_bool_literal(1);
+    }
+    | TOKEN_FALSE
+    {
+        $$ = ast_create_bool_literal(0);
+    }
+    | TOKEN_STRING_LITERAL
+    {
+        $$ = ast_create_string_literal($1);
+    }
+    | TOKEN_IDENTIFIER
+    {
+        $$ = ast_create_identifier($1);
+    }
+    | TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN
+    {
+        $$ = ast_create_call($1, $3);
+    }
+    | TOKEN_IDENTIFIER TOKEN_LPAREN TOKEN_RPAREN
+    {
+        $$ = ast_create_call($1, NULL);
+    }
+    | TOKEN_IDENTIFIER TOKEN_LBRACKET expression TOKEN_RBRACKET
+    {
+        ASTNode* array = ast_create_identifier($1);
+        $$ = ast_create_array_access(array, $3);
+    }
+    | TOKEN_LPAREN expression TOKEN_RPAREN
+    {
+        $$ = $2;
+    }
+    ;
+
+argument_list:
+    expression
+    {
+        $$ = $1;
+    }
+    | argument_list TOKEN_COMMA expression
+    {
+        ASTNode* last = $1;
+        while (last->next) last = last->next;
+        last->next = $3;
+        $$ = $1;
+    }
+    ;
+
+%%
+
+void yyerror(const char* s) {
+    fprintf(stderr, "Parse error at line %d, column %d: %s\n", yylineno, yycolumn, s);
+    if (yytext[0] != '\0') {
+        fprintf(stderr, "Near token: '%s'\n", yytext);
+    }
+}
+
+/* 解析文件 */
+ASTNode* parse_file(const char* filename) {
+    extern FILE* yyin;
+    yyin = fopen(filename, "r");
+    if (!yyin) {
+        fprintf(stderr, "Cannot open file: %s\n", filename);
+        return NULL;
+    }
+    
+    parse_result = NULL;
+    yyparse();
+    
+    fclose(yyin);
+    return parse_result;
+}
+
+/* 解析字符串 */
+ASTNode* parse_string(const char* source) {
+    extern FILE* yyin;
+    
+    /* 创建临时文件 */
+    FILE* temp = tmpfile();
+    if (!temp) {
+        fprintf(stderr, "Cannot create temporary file\n");
+        return NULL;
+    }
+    
+    fputs(source, temp);
+    rewind(temp);
+    
+    yyin = temp;
+    parse_result = NULL;
+    yyparse();
+    
+    fclose(temp);
+    return parse_result;
+}

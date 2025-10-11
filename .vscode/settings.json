@@ -9,6 +9,12 @@
         "stdint.h": "c",
         "time.h": "c",
         "stdio.h": "c",
-        "bytecode_generator.h": "c"
+        "bytecode_generator.h": "c",
+        "array": "cpp",
+        "compare": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp"
     }
 }

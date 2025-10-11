@@ -1,0 +1,620 @@
+/**
+ * @file typecheck.c
+ * @brief ST语言类型检查器实现
+ */
+
+#include "typecheck.h"
+#include "mmgr.h"
+#include <stdio.h>
+#include <string.h>
+
+// 前向声明
+static ErrorCode check_statement_list(TypeChecker* checker, ASTNode* stmt);
+
+ErrorCode typecheck_init(TypeChecker* checker, SymbolTable* symtbl) {
+    if (!checker || !symtbl) {
+        return ERR_NULL_POINTER;
+    }
+    
+    checker->symtbl = symtbl;
+    checker->current_function = NULL;
+    checker->had_error = false;
+    checker->error_code = ERR_OK;
+    checker->error_msg[0] = '\0';
+    
+    return ERR_OK;
+}
+
+void typecheck_cleanup(TypeChecker* checker) {
+    if (!checker) return;
+    // 类型检查器本身不持有需要释放的资源
+}
+
+void typecheck_error(TypeChecker* checker, ASTNode* node, const char* message) {
+    checker->had_error = true;
+    checker->error_code = ERR_TYPE;
+    
+    if (node) {
+        fprintf(stderr, "[%s:%u:%u] Type error: %s\n",
+                node->location.filename,
+                node->location.line,
+                node->location.column,
+                message);
+    } else {
+        fprintf(stderr, "Type error: %s\n", message);
+    }
+    
+    snprintf(checker->error_msg, sizeof(checker->error_msg), "%s", message);
+}
+
+ErrorCode typecheck_program(TypeChecker* checker, ASTNode* program) {
+    if (!checker || !program || program->type != AST_PROGRAM) {
+        return ERR_NULL_POINTER;
+    }
+    
+    // 注册全局变量
+    ASTNode* var_decl = program->data.program.var_decls;
+    while (var_decl) {
+        ErrorCode err = typecheck_var_decl(checker, var_decl);
+        if (err != ERR_OK && err != ERR_SYMBOL_EXISTS) {
+            return err;
+        }
+        var_decl = var_decl->next;
+    }
+    
+    // 注册函数
+    ASTNode* function = program->data.program.functions;
+    while (function) {
+        // 先注册函数符号
+        Symbol* func_sym = symtbl_define_function(
+            checker->symtbl,
+            function->data.function_decl.name,
+            function->data.function_decl.return_type,
+            0  // 参数数量后续计算
+        );
+        
+        if (!func_sym) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Function '%s' already defined",
+                    function->data.function_decl.name);
+            typecheck_error(checker, function, msg);
+        }
+        
+        function = function->next;
+    }
+    
+    // 检查函数体
+    function = program->data.program.functions;
+    while (function) {
+        ErrorCode err = typecheck_function(checker, function);
+        if (err != ERR_OK && err != ERR_SYMBOL_EXISTS) {
+            // 继续检查其他函数
+        }
+        function = function->next;
+    }
+    
+    // 检查程序主体
+    ErrorCode err = check_statement_list(checker, program->data.program.body);
+    if (err != ERR_OK) {
+        // 继续执行，收集所有错误
+    }
+    
+    return checker->had_error ? ERR_TYPE : ERR_OK;
+}
+
+ErrorCode typecheck_function(TypeChecker* checker, ASTNode* function) {
+    if (!function || function->type != AST_FUNCTION_DECL) {
+        return ERR_NULL_POINTER;
+    }
+    
+    checker->current_function = function;
+    
+    // 进入函数作用域
+    symtbl_enter_scope(checker->symtbl, SCOPE_FUNCTION);
+    
+    // 注册参数
+    ASTNode* param = function->data.function_decl.params;
+    while (param) {
+        Symbol* param_sym = symtbl_define_variable(
+            checker->symtbl,
+            param->data.var_decl.name,
+            param->data.var_decl.type,
+            false  // 参数不是全局的
+        );
+        
+        if (!param_sym) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Parameter '%s' already defined",
+                    param->data.var_decl.name);
+            typecheck_error(checker, param, msg);
+        } else {
+            param_sym->kind = SYMBOL_PARAM;
+        }
+        
+        param = param->next;
+    }
+    
+    // 注册局部变量
+    ASTNode* var_decl = function->data.function_decl.var_decls;
+    while (var_decl) {
+        typecheck_var_decl(checker, var_decl);
+        var_decl = var_decl->next;
+    }
+    
+    // 检查函数体
+    check_statement_list(checker, function->data.function_decl.body);
+    
+    // 离开函数作用域
+    symtbl_leave_scope(checker->symtbl);
+    
+    checker->current_function = NULL;
+    
+    return ERR_OK;
+}
+
+ErrorCode typecheck_var_decl(TypeChecker* checker, ASTNode* var_decl) {
+    if (!var_decl || var_decl->type != AST_VAR_DECL) {
+        return ERR_NULL_POINTER;
+    }
+    
+    // 注册变量到符号表
+    bool is_global = (checker->symtbl->current_scope->level == 0);
+    Symbol* var_sym = symtbl_define_variable(
+        checker->symtbl,
+        var_decl->data.var_decl.name,
+        var_decl->data.var_decl.type,
+        is_global
+    );
+    
+    if (!var_sym) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Variable '%s' already defined",
+                var_decl->data.var_decl.name);
+        typecheck_error(checker, var_decl, msg);
+        return ERR_SYMBOL_EXISTS;
+    }
+    
+    // 检查初始值（如果有）
+    if (var_decl->data.var_decl.init_value) {
+        TypeInfo* init_type = typecheck_expression(checker, 
+                                                   var_decl->data.var_decl.init_value);
+        
+        if (init_type && !typecheck_assignment_compatible(checker,
+                                                          var_decl->data.var_decl.type,
+                                                          init_type)) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), 
+                    "Type mismatch in variable initialization: cannot assign %s to %s",
+                    type_info_to_string(init_type),
+                    type_info_to_string(var_decl->data.var_decl.type));
+            typecheck_error(checker, var_decl, msg);
+        }
+    }
+    
+    return ERR_OK;
+}
+
+static ErrorCode check_statement_list(TypeChecker* checker, ASTNode* stmt) {
+    while (stmt) {
+        ErrorCode err = typecheck_statement(checker, stmt);
+        if (err != ERR_OK && err != ERR_TYPE) {
+            return err;
+        }
+        stmt = stmt->next;
+    }
+    return ERR_OK;
+}
+
+ErrorCode typecheck_statement(TypeChecker* checker, ASTNode* stmt) {
+    if (!stmt) {
+        return ERR_OK;
+    }
+    
+    switch (stmt->type) {
+        case AST_ASSIGNMENT: {
+            // 检查左值
+            ASTNode* target = stmt->data.assignment.target;
+            TypeInfo* target_type = typecheck_expression(checker, target);
+            
+            // 检查右值
+            TypeInfo* value_type = typecheck_expression(checker, 
+                                                       stmt->data.assignment.value);
+            
+            // 检查类型兼容性
+            if (target_type && value_type) {
+                if (!typecheck_assignment_compatible(checker, target_type, value_type)) {
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                            "Type mismatch in assignment: cannot assign %s to %s",
+                            type_info_to_string(value_type),
+                            type_info_to_string(target_type));
+                    typecheck_error(checker, stmt, msg);
+                }
+            }
+            break;
+        }
+        
+        case AST_IF_STMT: {
+            // 检查条件表达式
+            TypeInfo* cond_type = typecheck_expression(checker, 
+                                                      stmt->data.if_stmt.condition);
+            
+            if (cond_type && cond_type->base_type != TYPE_BOOL) {
+                typecheck_error(checker, stmt->data.if_stmt.condition,
+                              "Condition must be of type BOOL");
+            }
+            
+            // 检查then分支
+            check_statement_list(checker, stmt->data.if_stmt.then_branch);
+            
+            // 检查else分支
+            if (stmt->data.if_stmt.else_branch) {
+                check_statement_list(checker, stmt->data.if_stmt.else_branch);
+            }
+            break;
+        }
+        
+        case AST_WHILE_STMT: {
+            // 检查条件表达式
+            TypeInfo* cond_type = typecheck_expression(checker,
+                                                      stmt->data.while_stmt.condition);
+            
+            if (cond_type && cond_type->base_type != TYPE_BOOL) {
+                typecheck_error(checker, stmt->data.while_stmt.condition,
+                              "Condition must be of type BOOL");
+            }
+            
+            // 检查循环体
+            check_statement_list(checker, stmt->data.while_stmt.body);
+            break;
+        }
+        
+        case AST_FOR_STMT: {
+            // 检查初始化
+            if (stmt->data.for_stmt.init) {
+                typecheck_statement(checker, stmt->data.for_stmt.init);
+            }
+            
+            // 检查结束值
+            TypeInfo* end_type = typecheck_expression(checker,
+                                                     stmt->data.for_stmt.end_value);
+            
+            if (end_type && end_type->base_type != TYPE_INT) {
+                typecheck_error(checker, stmt->data.for_stmt.end_value,
+                              "FOR loop end value must be of type INT");
+            }
+            
+            // 检查步长
+            if (stmt->data.for_stmt.step) {
+                TypeInfo* step_type = typecheck_expression(checker,
+                                                          stmt->data.for_stmt.step);
+                
+                if (step_type && step_type->base_type != TYPE_INT) {
+                    typecheck_error(checker, stmt->data.for_stmt.step,
+                                  "FOR loop step must be of type INT");
+                }
+            }
+            
+            // 检查循环体
+            check_statement_list(checker, stmt->data.for_stmt.body);
+            break;
+        }
+        
+        case AST_CASE_STMT: {
+            // 检查表达式
+            typecheck_expression(checker, stmt->data.case_stmt.expr);
+            
+            // 检查分支体
+            check_statement_list(checker, stmt->data.case_stmt.branches);
+            break;
+        }
+        
+        case AST_RETURN_STMT: {
+            // 检查是否在函数中
+            if (!checker->current_function) {
+                typecheck_error(checker, stmt, "RETURN statement outside function");
+                break;
+            }
+            
+            TypeInfo* return_type = checker->current_function->data.function_decl.return_type;
+            
+            // 检查返回值
+            if (stmt->data.return_stmt.value) {
+                TypeInfo* value_type = typecheck_expression(checker,
+                                                           stmt->data.return_stmt.value);
+                
+                if (value_type && return_type) {
+                    if (!typecheck_assignment_compatible(checker, return_type, value_type)) {
+                        char msg[256];
+                        snprintf(msg, sizeof(msg),
+                                "Return type mismatch: expected %s, got %s",
+                                type_info_to_string(return_type),
+                                type_info_to_string(value_type));
+                        typecheck_error(checker, stmt, msg);
+                    }
+                }
+            } else if (return_type && return_type->base_type != TYPE_VOID) {
+                typecheck_error(checker, stmt, "Function must return a value");
+            }
+            break;
+        }
+        
+        case AST_BLOCK: {
+            // 检查块内的语句
+            check_statement_list(checker, stmt->data.block.statements);
+            break;
+        }
+        
+        default:
+            // 其他语句类型
+            break;
+    }
+    
+    return ERR_OK;
+}
+
+TypeInfo* typecheck_expression(TypeChecker* checker, ASTNode* expr) {
+    if (!expr) {
+        return NULL;
+    }
+    
+    // 如果已经有类型，直接返回
+    if (expr->resolved_type) {
+        return expr->resolved_type;
+    }
+    
+    TypeInfo* result_type = NULL;
+    
+    switch (expr->type) {
+        case AST_INT_LITERAL:
+            result_type = type_info_create(TYPE_INT);
+            break;
+            
+        case AST_REAL_LITERAL:
+            result_type = type_info_create(TYPE_REAL);
+            break;
+            
+        case AST_BOOL_LITERAL:
+            result_type = type_info_create(TYPE_BOOL);
+            break;
+            
+        case AST_STRING_LITERAL:
+            result_type = type_info_create(TYPE_STRING);
+            break;
+            
+        case AST_IDENTIFIER: {
+            Symbol* sym = symtbl_lookup(checker->symtbl, expr->data.identifier.name);
+            if (!sym) {
+                char msg[256];
+                snprintf(msg, sizeof(msg), "Undefined variable '%s'",
+                        expr->data.identifier.name);
+                typecheck_error(checker, expr, msg);
+                return NULL;
+            }
+            result_type = sym->type;
+            break;
+        }
+        
+        case AST_BINARY_OP: {
+            TypeInfo* left_type = typecheck_expression(checker, 
+                                                      expr->data.binary_op.left);
+            TypeInfo* right_type = typecheck_expression(checker,
+                                                       expr->data.binary_op.right);
+            
+            if (left_type && right_type) {
+                result_type = typecheck_binary_op(checker,
+                                                 expr->data.binary_op.op,
+                                                 left_type,
+                                                 right_type);
+            }
+            break;
+        }
+        
+        case AST_UNARY_OP: {
+            TypeInfo* operand_type = typecheck_expression(checker,
+                                                         expr->data.unary_op.operand);
+            
+            if (operand_type) {
+                result_type = typecheck_unary_op(checker,
+                                                expr->data.unary_op.op,
+                                                operand_type);
+            }
+            break;
+        }
+        
+        case AST_CALL:
+            result_type = typecheck_call(checker, expr);
+            break;
+            
+        case AST_ARRAY_ACCESS: {
+            TypeInfo* array_type = typecheck_expression(checker,
+                                                       expr->data.array_access.array);
+            TypeInfo* index_type = typecheck_expression(checker,
+                                                       expr->data.array_access.index);
+            
+            if (array_type) {
+                if (array_type->base_type != TYPE_ARRAY) {
+                    typecheck_error(checker, expr, "Cannot index non-array type");
+                    return NULL;
+                }
+                result_type = array_type->array_info.elem_type;
+            }
+            
+            if (index_type && index_type->base_type != TYPE_INT) {
+                typecheck_error(checker, expr->data.array_access.index,
+                              "Array index must be of type INT");
+            }
+            break;
+        }
+        
+        default:
+            break;
+    }
+    
+    // 缓存推导出的类型
+    expr->resolved_type = result_type;
+    
+    return result_type;
+}
+
+bool typecheck_assignment_compatible(TypeChecker* checker,
+                                    TypeInfo* target_type,
+                                    TypeInfo* value_type) {
+    (void)checker; // 未使用参数
+    
+    if (!target_type || !value_type) {
+        return false;
+    }
+    
+    // 相同类型
+    if (type_info_equals(target_type, value_type)) {
+        return true;
+    }
+    
+    // 检查隐式转换
+    return typecheck_can_convert(value_type, target_type);
+}
+
+TypeInfo* typecheck_binary_op(TypeChecker* checker,
+                              BinaryOperator op,
+                              TypeInfo* left_type,
+                              TypeInfo* right_type) {
+    // 检查操作数类型是否相同或兼容
+    DataType left = left_type->base_type;
+    DataType right = right_type->base_type;
+    
+    switch (op) {
+        // 算术运算符
+        case OP_ADD:
+        case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
+        case OP_MOD:
+            if (left == TYPE_INT && right == TYPE_INT) {
+                return type_info_create(TYPE_INT);
+            }
+            if ((left == TYPE_INT || left == TYPE_REAL) &&
+                (right == TYPE_INT || right == TYPE_REAL)) {
+                return type_info_create(TYPE_REAL);
+            }
+            break;
+            
+        // 比较运算符
+        case OP_EQ:
+        case OP_NE:
+        case OP_LT:
+        case OP_LE:
+        case OP_GT:
+        case OP_GE:
+            if ((left == TYPE_INT || left == TYPE_REAL) &&
+                (right == TYPE_INT || right == TYPE_REAL)) {
+                return type_info_create(TYPE_BOOL);
+            }
+            if (left == TYPE_BOOL && right == TYPE_BOOL) {
+                return type_info_create(TYPE_BOOL);
+            }
+            break;
+            
+        // 逻辑运算符
+        case OP_AND:
+        case OP_OR:
+        case OP_XOR:
+            if (left == TYPE_BOOL && right == TYPE_BOOL) {
+                return type_info_create(TYPE_BOOL);
+            }
+            break;
+            
+        default:
+            break;
+    }
+    
+    // 类型不匹配
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+            "Type mismatch in binary operation: %s and %s",
+            type_info_to_string(left_type),
+            type_info_to_string(right_type));
+    typecheck_error(checker, NULL, msg);
+    
+    return NULL;
+}
+
+TypeInfo* typecheck_unary_op(TypeChecker* checker,
+                             UnaryOperator op,
+                             TypeInfo* operand_type) {
+    DataType type = operand_type->base_type;
+    
+    switch (op) {
+        case OP_NEG:
+            if (type == TYPE_INT) {
+                return type_info_create(TYPE_INT);
+            }
+            if (type == TYPE_REAL) {
+                return type_info_create(TYPE_REAL);
+            }
+            break;
+            
+        case OP_NOT:
+            if (type == TYPE_BOOL) {
+                return type_info_create(TYPE_BOOL);
+            }
+            break;
+            
+        default:
+            break;
+    }
+    
+    // 类型不匹配
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+            "Type mismatch in unary operation: %s",
+            type_info_to_string(operand_type));
+    typecheck_error(checker, NULL, msg);
+    
+    return NULL;
+}
+
+TypeInfo* typecheck_call(TypeChecker* checker, ASTNode* call) {
+    if (!call || call->type != AST_CALL) {
+        return NULL;
+    }
+    
+    // 查找函数符号
+    Symbol* func_sym = symtbl_lookup(checker->symtbl, call->data.call.function_name);
+    if (!func_sym) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Undefined function '%s'",
+                call->data.call.function_name);
+        typecheck_error(checker, call, msg);
+        return NULL;
+    }
+    
+    if (func_sym->kind != SYMBOL_FUNCTION) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "'%s' is not a function",
+                call->data.call.function_name);
+        typecheck_error(checker, call, msg);
+        return NULL;
+    }
+    
+    // TODO: 检查参数数量和类型
+    
+    return func_sym->type;
+}
+
+bool typecheck_can_convert(TypeInfo* from_type, TypeInfo* to_type) {
+    if (!from_type || !to_type) {
+        return false;
+    }
+    
+    DataType from = from_type->base_type;
+    DataType to = to_type->base_type;
+    
+    // INT 可以隐式转换为 REAL
+    if (from == TYPE_INT && to == TYPE_REAL) {
+        return true;
+    }
+    
+    // 其他转换不允许
+    return false;
+}
