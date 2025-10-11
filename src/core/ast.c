@@ -32,9 +32,9 @@ ASTNode* ast_create_program(const char* name, ASTNode* declarations, ASTNode* fu
     if (!node) return NULL;
     
     node->data.program.name = name ? mmgr_strdup(name) : NULL;
-    node->data.program.declarations = declarations;
+    node->data.program.var_decls = declarations;
     node->data.program.functions = functions;
-    node->data.program.statements = statements;
+    node->data.program.body = statements;
     
     return node;
 }
@@ -63,7 +63,7 @@ ASTNode* ast_create_function_decl(const char* name, ASTNode* parameters, TypeInf
     if (!node) return NULL;
     
     node->data.function_decl.name = name ? mmgr_strdup(name) : NULL;
-    node->data.function_decl.parameters = parameters;
+    node->data.function_decl.params = parameters;
     node->data.function_decl.return_type = return_type;
     node->data.function_decl.declarations = declarations;
     node->data.function_decl.body = body;
@@ -235,14 +235,13 @@ ASTNode* ast_create_function_call(const char* name, ASTNode** arguments, int arg
 /**
  * @brief 创建数组访问节点
  */
-ASTNode* ast_create_array_access(ASTNode* array, ASTNode** indices, int index_count) {
+ASTNode* ast_create_array_access(ASTNode* array, ASTNode* index) {
     ASTNode* node = ast_create_node(AST_ARRAY_ACCESS);
     if (!node) return NULL;
     
     node->data.array_access.array = array;
-    node->data.array_access.indices = indices;
-    node->data.array_access.index_count = index_count;
-    
+    node->data.array_access.index = index;
+
     return node;
 }
 
@@ -271,9 +270,9 @@ void ast_free_node(ASTNode* node) {
     // 递归释放子节点
     switch (node->type) {
         case AST_PROGRAM:
-            ast_free_node(node->data.program.declarations);
+            ast_free_node(node->data.program.var_decls);
             ast_free_node(node->data.program.functions);
-            ast_free_node(node->data.program.statements);
+            ast_free_node(node->data.program.body);
             if (node->data.program.name) mmgr_free(node->data.program.name);
             break;
             
@@ -284,7 +283,7 @@ void ast_free_node(ASTNode* node) {
             break;
             
         case AST_FUNCTION_DECL:
-            ast_free_node(node->data.function_decl.parameters);
+            ast_free_node(node->data.function_decl.params);
             ast_free_node(node->data.function_decl.declarations);
             ast_free_node(node->data.function_decl.body);
             if (node->data.function_decl.name) mmgr_free(node->data.function_decl.name);
@@ -347,10 +346,7 @@ void ast_free_node(ASTNode* node) {
             
         case AST_ARRAY_ACCESS:
             ast_free_node(node->data.array_access.array);
-            for (int i = 0; i < node->data.array_access.index_count; i++) {
-                ast_free_node(node->data.array_access.indices[i]);
-            }
-            if (node->data.array_access.indices) mmgr_free(node->data.array_access.indices);
+            ast_free_node(node->data.array_access.index);
             break;
             
         default:
@@ -428,17 +424,17 @@ void ast_print(ASTNode* node, int indent) {
     switch (node->type) {
         case AST_PROGRAM:
             printf("PROGRAM: %s\n", node->data.program.name ? node->data.program.name : "<unnamed>");
-            if (node->data.program.declarations) {
+            if (node->data.program.var_decls) {
                 print_indent(indent); printf("  Declarations:\n");
-                ast_print(node->data.program.declarations, indent + 2);
+                ast_print(node->data.program.var_decls, indent + 2);
             }
             if (node->data.program.functions) {
                 print_indent(indent); printf("  Functions:\n");
                 ast_print(node->data.program.functions, indent + 2);
             }
-            if (node->data.program.statements) {
+            if (node->data.program.body) {
                 print_indent(indent); printf("  Statements:\n");
-                ast_print(node->data.program.statements, indent + 2);
+                ast_print(node->data.program.body, indent + 2);
             }
             break;
             
@@ -541,9 +537,9 @@ void ast_visit(ASTNode* node, ASTVisitor visitor, void* context) {
     // 递归访问子节点（根据节点类型）
     switch (node->type) {
         case AST_PROGRAM:
-            ast_visit(node->data.program.declarations, visitor, context);
+            ast_visit(node->data.program.var_decls, visitor, context);
             ast_visit(node->data.program.functions, visitor, context);
-            ast_visit(node->data.program.statements, visitor, context);
+            ast_visit(node->data.program.body, visitor, context);
             break;
             
         case AST_VAR_DECL:
@@ -551,7 +547,7 @@ void ast_visit(ASTNode* node, ASTVisitor visitor, void* context) {
             break;
             
         case AST_FUNCTION_DECL:
-            ast_visit(node->data.function_decl.parameters, visitor, context);
+            ast_visit(node->data.function_decl.params, visitor, context);
             ast_visit(node->data.function_decl.declarations, visitor, context);
             ast_visit(node->data.function_decl.body, visitor, context);
             break;
@@ -589,9 +585,7 @@ void ast_visit(ASTNode* node, ASTVisitor visitor, void* context) {
             
         case AST_ARRAY_ACCESS:
             ast_visit(node->data.array_access.array, visitor, context);
-            for (int i = 0; i < node->data.array_access.index_count; i++) {
-                ast_visit(node->data.array_access.indices[i], visitor, context);
-            }
+            ast_visit(node->data.array_access.index, visitor, context);
             break;
             
         default:

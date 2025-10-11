@@ -94,9 +94,9 @@ typedef union {
     // 程序节点
     struct {
         char* name;                 // 程序名
-        ASTNode* declarations;      // 声明列表
+        ASTNode* var_decls;         // 变量声明列表
         ASTNode* functions;         // 函数列表
-        ASTNode* statements;        // 主程序语句
+        ASTNode* body;        // 主程序语句
     } program;
     
     // 变量声明
@@ -110,7 +110,7 @@ typedef union {
     // 函数声明
     struct {
         char* name;                 // 函数名
-        ASTNode* parameters;        // 参数列表
+        ASTNode* params;        // 参数列表
         TypeInfo* return_type;      // 返回类型
         ASTNode* declarations;      // 局部变量声明
         ASTNode* body;              // 函数体
@@ -198,8 +198,7 @@ typedef union {
     // 数组访问
     struct {
         ASTNode* array;             // 数组表达式
-        ASTNode** indices;          // 索引表达式数组
-        int index_count;            // 索引个数
+        ASTNode* index;             // 索引表达式
     } array_access;
     
     // 类型规范
@@ -300,7 +299,7 @@ ASTNode* ast_create_function_call(const char* name, ASTNode** arguments, int arg
 /**
  * @brief 创建数组访问节点
  */
-ASTNode* ast_create_array_access(ASTNode* array, ASTNode** indices, int index_count);
+ASTNode* ast_create_array_access(ASTNode* array, ASTNode* index);
 
 /**
  * @brief 将节点添加到列表末尾

@@ -33,7 +33,7 @@ void test_simple_program(void) {
     
     printf("  Simple program test passed ✓\n");
     
-    ast_free(program);
+    ast_free_node(program);
 }
 
 void test_expressions(void) {
@@ -52,12 +52,12 @@ void test_expressions(void) {
     
     // 检查表达式结构
     ASTNode* stmt = program->data.program.body;
-    assert(stmt->type == AST_ASSIGNMENT);
-    assert(stmt->data.assignment.value->type == AST_BINARY_OP);
+    assert(stmt->type == AST_ASSIGN);
+    assert(stmt->data.assign.value->type == AST_BINARY_OP);
     
     printf("  Expressions test passed ✓\n");
     
-    ast_free(program);
+    ast_free_node(program);
 }
 
 void test_if_statement(void) {
@@ -80,14 +80,14 @@ void test_if_statement(void) {
     assert(program != NULL);
     
     ASTNode* stmt = program->data.program.body;
-    assert(stmt->type == AST_IF_STMT);
+    assert(stmt->type == AST_IF);
     assert(stmt->data.if_stmt.condition != NULL);
     assert(stmt->data.if_stmt.then_branch != NULL);
     assert(stmt->data.if_stmt.else_branch != NULL);
     
     printf("  If statement test passed ✓\n");
     
-    ast_free(program);
+    ast_free_node(program);
 }
 
 void test_while_loop(void) {
@@ -107,13 +107,13 @@ void test_while_loop(void) {
     assert(program != NULL);
     
     ASTNode* stmt = program->data.program.body;
-    assert(stmt->type == AST_WHILE_STMT);
+    assert(stmt->type == AST_WHILE);
     assert(stmt->data.while_stmt.condition != NULL);
     assert(stmt->data.while_stmt.body != NULL);
     
     printf("  While loop test passed ✓\n");
     
-    ast_free(program);
+    ast_free_node(program);
 }
 
 void test_for_loop(void) {
@@ -134,14 +134,14 @@ void test_for_loop(void) {
     assert(program != NULL);
     
     ASTNode* stmt = program->data.program.body;
-    assert(stmt->type == AST_FOR_STMT);
-    assert(stmt->data.for_stmt.init != NULL);
-    assert(stmt->data.for_stmt.end_value != NULL);
+    assert(stmt->type == AST_FOR);
+    assert(stmt->data.for_stmt.start != NULL);
+    assert(stmt->data.for_stmt.end != NULL);
     assert(stmt->data.for_stmt.body != NULL);
     
     printf("  For loop test passed ✓\n");
     
-    ast_free(program);
+    ast_free_node(program);
 }
 
 void test_function_declaration(void) {
@@ -171,7 +171,7 @@ void test_function_declaration(void) {
     
     printf("  Function declaration test passed ✓\n");
     
-    ast_free(program);
+    ast_free_node(program);
 }
 
 void test_typecheck(void) {
@@ -190,21 +190,21 @@ void test_typecheck(void) {
     ASTNode* program = parse_string(source);
     assert(program != NULL);
     
-    SymbolTable* symtbl = symtbl_create();
+    SymbolTable* symtbl = symtbl_init();
     assert(symtbl != NULL);
     
     TypeChecker checker;
-    assert(typecheck_init(&checker, symtbl) == ERR_OK);
+    assert(typecheck_init(&checker, symtbl) == OK);
     
     ErrorCode err = typecheck_program(&checker, program);
-    assert(err == ERR_OK);
+    assert(err == OK);
     assert(!checker.had_error);
     
     printf("  Type checking test passed ✓\n");
     
     typecheck_cleanup(&checker);
-    symtbl_destroy(symtbl);
-    ast_free(program);
+    symtbl_free(symtbl);
+    ast_free_node(program);
 }
 
 void test_type_error_detection(void) {
@@ -222,11 +222,11 @@ void test_type_error_detection(void) {
     ASTNode* program = parse_string(source);
     assert(program != NULL);
     
-    SymbolTable* symtbl = symtbl_create();
+    SymbolTable* symtbl = symtbl_init();
     assert(symtbl != NULL);
     
     TypeChecker checker;
-    assert(typecheck_init(&checker, symtbl) == ERR_OK);
+    assert(typecheck_init(&checker, symtbl) == OK);
     
     typecheck_program(&checker, program);
     assert(checker.had_error);  // 应该检测到错误
@@ -234,15 +234,15 @@ void test_type_error_detection(void) {
     printf("  Type error detection test passed ✓\n");
     
     typecheck_cleanup(&checker);
-    symtbl_destroy(symtbl);
-    ast_free(program);
+    symtbl_free(symtbl);
+    ast_free_node(program);
 }
 
 int main(void) {
     printf("=== Parser and Type Checker Tests (Flex/Bison) ===\n\n");
     
     // 初始化内存管理器
-    assert(mmgr_init() == ERR_OK);
+    assert(mmgr_init() == OK);
     
     test_simple_program();
     test_expressions();

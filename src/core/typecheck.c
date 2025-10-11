@@ -43,8 +43,8 @@ ErrorCode typecheck_program(TypeChecker* checker, ASTNode* program) {
     }
     
     // 检查声明
-    if (program->data.program.declarations) {
-        ASTNode* decl = program->data.program.declarations;
+    if (program->data.program.var_decls) {
+        ASTNode* decl = program->data.program.var_decls;
         while (decl) {
             if (decl->type == AST_VAR_DECL) {
                 const char* name = decl->data.var_decl.name;
@@ -82,8 +82,8 @@ ErrorCode typecheck_program(TypeChecker* checker, ASTNode* program) {
     }
     
     // 检查主程序语句
-    if (program->data.program.statements) {
-        check_statement_list(checker, program->data.program.statements);
+    if (program->data.program.body) {
+        check_statement_list(checker, program->data.program.body);
     }
     
     return checker->error_count == 0 ? OK : ERR_TYPE;
@@ -101,7 +101,7 @@ ErrorCode typecheck_function(TypeChecker* checker, ASTNode* func_decl) {
     
     const char* func_name = func_decl->data.function_decl.name;
     TypeInfo* return_type = func_decl->data.function_decl.return_type;
-    ASTNode* params = func_decl->data.function_decl.parameters;
+    ASTNode* params = func_decl->data.function_decl.params;
     
     // 计数参数
     int param_count = 0;
@@ -463,12 +463,11 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             }
             
             // 检查索引
-            for (int i = 0; i < expr->data.array_access.index_count; i++) {
-                TypeInfo* index_type = check_expression(checker, expr->data.array_access.indices[i]);
-                if (index_type && index_type->base_type != TYPE_INT) {
-                    fprintf(stderr, "Type error: Array index must be integer\n");
-                    checker->error_count++;
-                }
+            TypeInfo* index_type = check_expression(checker, expr->data.array_access.index);
+            if (index_type && index_type->base_type != TYPE_INT) {
+                fprintf(stderr, "Type error: Array index must be integer\n");
+                checker->error_count++;
+                return NULL;
             }
             
             // 返回元素类型

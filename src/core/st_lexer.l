@@ -10,8 +10,7 @@
 #include "st_parser.tab.h"
 #include "mmgr.h"
 
-/* 当前行号和列号 */
-int yylineno = 1;
+/* 当前列号 */
 int yycolumn = 1;
 
 /* 更新位置信息 */
@@ -165,15 +164,15 @@ STRING      '([^'\n]|'')*'
                         }
                     }
 
-    /* 块注释 /* ... */ */
-"/*"                {
+    /* 块注释 (* ... *) */
+"(*"                {
                         int c;
                         while ((c = input()) != 0) {
                             if (c == '\n') {
                                 yylineno++;
                                 yycolumn = 1;
                             } else if (c == '*') {
-                                if ((c = input()) == '/') {
+                                if ((c = input()) == ')') {
                                     break;
                                 } else {
                                     unput(c);
