@@ -1,6 +1,38 @@
 /**
  * @file ast.c
  * @brief 抽象语法树的实现
+ * 
+ * AST节点内存管理和所有权规则：
+ * 
+ * 1. 节点创建：
+ *    - 所有ast_create_*函数返回的节点由调用者拥有
+ *    - 调用者负责在不再需要时调用ast_free_node释放
+ * 
+ * 2. 子节点所有权：
+ *    - 当节点A包含子节点B的指针时，A拥有B
+ *    - 释放A时会自动递归释放B
+ *    - 例如：program拥有declarations/functions/body
+ * 
+ * 3. TypeInfo所有权：
+ *    - TypeInfo使用引用计数管理（在types.h中定义）
+ *    - AST节点创建时会retain TypeInfo（增加ref_count）
+ *    - AST节点释放时会release TypeInfo（减少ref_count）
+ *    - 多个节点可以共享同一个TypeInfo
+ * 
+ * 4. 字符串所有权：
+ *    - AST节点中的字符串（如name）由节点拥有
+ *    - 创建时使用mmgr_strdup复制
+ *    - 释放节点时会自动释放字符串
+ * 
+ * 5. 链表节点：
+ *    - next指针连接的节点属于同一个列表
+ *    - 释放头节点时会递归释放整个链表
+ *    - 注意：不要手动释放链表中的中间节点
+ * 
+ * 6. resolved_type字段：
+ *    - 由类型检查器设置
+ *    - 使用TypeInfo引用计数管理
+ *    - 释放节点时会自动release
  */
 
 #include "ast.h"

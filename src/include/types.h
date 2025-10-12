@@ -47,9 +47,17 @@ typedef struct {
 
 /**
  * @brief 类型信息（用于编译时类型检查）
+ * 
+ * 所有权规则：
+ * - TypeInfo使用引用计数管理生命周期
+ * - 创建时ref_count=1
+ * - type_info_retain增加ref_count
+ * - type_info_free减少ref_count，为0时释放
+ * - 子类型（elem_type, return_type, param_types）被引用时自动retain
  */
 typedef struct TypeInfo {
     DataType base_type;         // 基础类型
+    int32_t ref_count;          // 引用计数
     
     // 数组类型扩展信息
     struct {
@@ -99,7 +107,14 @@ TypeInfo* type_info_create_array(TypeInfo* elem_type, int32_t dimensions, int32_
 TypeInfo* type_info_create_function(TypeInfo* return_type, TypeInfo** param_types, int32_t param_count);
 
 /**
- * @brief 释放类型信息
+ * @brief 增加类型信息的引用计数
+ * @param type_info 类型信息指针
+ * @return 同一个类型信息指针（便于链式调用）
+ */
+TypeInfo* type_info_retain(TypeInfo* type_info);
+
+/**
+ * @brief 释放类型信息（减少引用计数，为0时真正释放）
  * @param type_info 类型信息指针
  */
 void type_info_free(TypeInfo* type_info);

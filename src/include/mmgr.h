@@ -27,6 +27,7 @@ typedef enum {
  * @brief 内存块头（用于追踪和调试）
  */
 typedef struct MemoryBlock {
+    uint32_t magic;             // 魔数，用于验证内存块有效性 (0xDEADBEEF)
     size_t size;                // 块大小
     PoolType pool_type;         // 所属池类型
     struct MemoryBlock* next;   // 空闲链表指针
@@ -36,6 +37,10 @@ typedef struct MemoryBlock {
     int line;                   // 分配行号（调试用）
 #endif
 } MemoryBlock;
+
+// 内存块魔数
+#define MMGR_MAGIC 0xDEADBEEF
+#define MMGR_FREED_MAGIC 0xFEEDF00D
 
 /**
  * @brief 内存池结构

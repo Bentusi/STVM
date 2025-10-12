@@ -34,6 +34,7 @@ TypeInfo* type_info_create(DataType type) {
     
     memset(ti, 0, sizeof(TypeInfo));
     ti->base_type = type;
+    ti->ref_count = 1;  // 初始引用计数为1
     
     return ti;
 }
@@ -49,7 +50,8 @@ TypeInfo* type_info_create_array(TypeInfo* elem_type, int32_t dimensions, int32_
     
     memset(ti, 0, sizeof(TypeInfo));
     ti->base_type = TYPE_ARRAY;
-    ti->array_info.elem_type = elem_type;
+    ti->ref_count = 1;  // 初始引用计数为1
+    ti->array_info.elem_type = type_info_retain(elem_type);  // 增加子类型引用计数
     ti->array_info.dimensions = dimensions;
     
     if (sizes) {
@@ -73,13 +75,17 @@ TypeInfo* type_info_create_function(TypeInfo* return_type, TypeInfo** param_type
     
     memset(ti, 0, sizeof(TypeInfo));
     ti->base_type = TYPE_FUNCTION;
-    ti->func_info.return_type = return_type;
+    ti->ref_count = 1;  // 初始引用计数为1
+    ti->func_info.return_type = return_type ? type_info_retain(return_type) : NULL;  // 增加返回类型引用计数
     ti->func_info.param_count = param_count;
     
     if (param_count > 0 && param_types) {
         ti->func_info.param_types = (TypeInfo**)mmgr_alloc(sizeof(TypeInfo*) * param_count);
         if (ti->func_info.param_types) {
-            memcpy(ti->func_info.param_types, param_types, sizeof(TypeInfo*) * param_count);
+            // 复制指针并增加每个参数类型的引用计数
+            for (int32_t i = 0; i < param_count; i++) {
+                ti->func_info.param_types[i] = param_types[i] ? type_info_retain(param_types[i]) : NULL;
+            }
         }
     } else {
         ti->func_info.param_types = NULL;
@@ -89,14 +95,30 @@ TypeInfo* type_info_create_function(TypeInfo* return_type, TypeInfo** param_type
 }
 
 /**
- * @brief 释放类型信息
+ * @brief 增加类型信息的引用计数
+ */
+TypeInfo* type_info_retain(TypeInfo* type_info) {
+    if (!type_info) return NULL;
+    type_info->ref_count++;
+    return type_info;
+}
+
+/**
+ * @brief 释放类型信息（减少引用计数，为0时真正释放）
  */
 void type_info_free(TypeInfo* type_info) {
     if (!type_info) return;
     
+    // 减少引用计数
+    type_info->ref_count--;
+    
+    // 引用计数为0时才真正释放
+    if (type_info->ref_count > 0) {
+        return;
+    }
+    
     // 递归释放数组元素类型
     if (type_info->base_type == TYPE_ARRAY) {
-        // 注意：elem_type是子类型，需要递归释放
         if (type_info->array_info.elem_type) {
             type_info_free(type_info->array_info.elem_type);
         }
@@ -107,7 +129,6 @@ void type_info_free(TypeInfo* type_info) {
     
     // 递归释放函数类型信息
     if (type_info->base_type == TYPE_FUNCTION) {
-        // 注意：return_type和param_types是子类型，需要递归释放
         if (type_info->func_info.return_type) {
             type_info_free(type_info->func_info.return_type);
         }

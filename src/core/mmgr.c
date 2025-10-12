@@ -43,7 +43,9 @@ static bool init_pool(MemoryPool* pool, size_t block_size, size_t block_count) {
     // 初始化空闲链表
     MemoryBlock* block = (MemoryBlock*)pool->pool_data;
     for (size_t i = 0; i < block_count; i++) {
-        block->size = block_size;
+        block->magic = MMGR_MAGIC;
+        // size字段存储可用数据大小（总块大小 - 头大小）
+        block->size = block_size - sizeof(MemoryBlock);
         block->is_free = true;
         block->next = (i < block_count - 1) ? 
                       (MemoryBlock*)((char*)block + block_size) : NULL;
@@ -100,11 +102,23 @@ void mmgr_cleanup(void) {
 
 /**
  * @brief 根据大小选择合适的内存池
+ * 
+ * 注意：这里的size是用户请求的数据大小，不包括MemoryBlock头部。
+ * 池的block_size配置是总块大小，可用数据大小 = block_size - sizeof(MemoryBlock)。
+ * 
+ * sizeof(MemoryBlock) = 40字节（在64位系统上）
+ * POOL_SMALL: 64字节总大小，24字节可用
+ * POOL_MEDIUM: 512字节总大小，472字节可用  
+ * POOL_LARGE: 4096字节总大小，4056字节可用
  */
 static PoolType select_pool(size_t size) {
-    if (size <= 64) {
+    // 考虑头部开销后的实际可用空间
+    size_t small_avail = 64 - sizeof(MemoryBlock);    // ~24字节
+    size_t medium_avail = 512 - sizeof(MemoryBlock);  // ~472字节
+    
+    if (size <= small_avail) {
         return POOL_SMALL;
-    } else if (size <= 512) {
+    } else if (size <= medium_avail) {
         return POOL_MEDIUM;
     } else {
         return POOL_LARGE;
@@ -121,14 +135,19 @@ void* mmgr_alloc_from_pool(PoolType pool_type, size_t size) {
     
     MemoryPool* pool = &g_mmgr.pools[pool_type];
     
-    // 检查是否有空闲块
-    if (!pool->free_list) {
-        // 池已满，回退到标准malloc
-        void* ptr = malloc(size + sizeof(MemoryBlock));
+    // 计算池中实际可用的数据空间
+    size_t available_size = pool->block_size - sizeof(MemoryBlock);
+    
+    // 如果请求的大小超过池块的可用空间，回退到malloc
+    if (size > available_size || !pool->free_list) {
+        // 池已满或块太小，回退到标准malloc
+        size_t total_size = size + sizeof(MemoryBlock);
+        void* ptr = malloc(total_size);
         if (!ptr) return NULL;
         
         MemoryBlock* block = (MemoryBlock*)ptr;
-        block->size = size;
+        block->magic = MMGR_MAGIC;
+        block->size = total_size;  // 存储总大小（包括头部）
         block->pool_type = pool_type;
         block->is_free = false;
         block->next = NULL;
@@ -146,6 +165,14 @@ void* mmgr_alloc_from_pool(PoolType pool_type, size_t size) {
     
     // 从空闲链表分配
     MemoryBlock* block = pool->free_list;
+    
+    // 验证magic number
+    if (block->magic != MMGR_MAGIC) {
+        fprintf(stderr, "Error: Invalid memory block magic (expected 0x%08X, got 0x%08X)\n", 
+                MMGR_MAGIC, block->magic);
+        return NULL;
+    }
+    
     pool->free_list = block->next;
     pool->used_count++;
     
@@ -205,6 +232,13 @@ void mmgr_free(void* ptr) {
     // 获取内存块头
     MemoryBlock* block = (MemoryBlock*)((char*)ptr - sizeof(MemoryBlock));
     
+    // 验证magic number
+    if (block->magic != MMGR_MAGIC) {
+        fprintf(stderr, "Error: Invalid memory block magic at %p (expected 0x%08X, got 0x%08X)\n", 
+                ptr, MMGR_MAGIC, block->magic);
+        return;
+    }
+    
     if (block->is_free) {
         // 双重释放检测
         fprintf(stderr, "Warning: Double free detected at %p\n", ptr);
@@ -261,7 +295,16 @@ void* mmgr_realloc(void* ptr, size_t new_size) {
     
     // 获取原块信息
     MemoryBlock* old_block = (MemoryBlock*)((char*)ptr - sizeof(MemoryBlock));
-    size_t old_size = old_block->size - sizeof(MemoryBlock);
+    
+    // 验证magic number
+    if (old_block->magic != MMGR_MAGIC) {
+        fprintf(stderr, "Error: Invalid memory block magic in realloc (expected 0x%08X, got 0x%08X)\n", 
+                MMGR_MAGIC, old_block->magic);
+        return NULL;
+    }
+    
+    // block->size存储的就是可用数据大小
+    size_t old_size = old_block->size;
     
     // 如果新大小小于等于原大小，直接返回
     if (new_size <= old_size) {
@@ -274,6 +317,7 @@ void* mmgr_realloc(void* ptr, size_t new_size) {
         return NULL;
     }
     
+    // 复制旧数据
     memcpy(new_ptr, ptr, old_size);
     mmgr_free(ptr);
     
