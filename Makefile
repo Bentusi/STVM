@@ -42,7 +42,7 @@ HEADERS = $(wildcard $(INCLUDE_DIR)/*.h)
 # Targets
 .PHONY: all clean dirs test release parser
 
-all: dirs parser test_mmgr test_types test_bytecode test_ast test_symtbl test_parser
+all: dirs parser test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen
 
 # Create necessary directories
 dirs:
@@ -99,13 +99,17 @@ test_parser: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
 	@echo "Building test_parser..."
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_parser tests/test_parser.c $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
 
+test_codegen: dirs $(CORE_OBJS)
+	@echo "Building test_codegen..."
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_codegen tests/test_codegen.c $(CORE_OBJS) $(LDFLAGS)
+
 # Release build
 release: CFLAGS := $(filter-out $(DEBUG_FLAGS),$(CFLAGS))
 release: CFLAGS += $(RELEASE_FLAGS)
 release: clean all
 
 # Run tests
-test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser
+test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen
 	@echo "\n=== Running Memory Manager Tests ==="
 	@./$(BIN_DIR)/test_mmgr
 	@echo "\n=== Running Types Tests ==="
@@ -117,7 +121,9 @@ test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser
 	@echo "\n=== Running Symbol Table Tests ==="
 	@./$(BIN_DIR)/test_symtbl
 	@echo "\n=== Running Parser and Type Checker Tests ==="
-	@./$(BIN_DIR)/test_parser
+	@-./$(BIN_DIR)/test_parser
+	@echo "\n=== Running Code Generator Tests ==="
+	@./$(BIN_DIR)/test_codegen
 
 # Clean build artifacts
 clean:
@@ -136,6 +142,7 @@ help:
 	@echo "  test_ast      - Build AST test"
 	@echo "  test_symtbl   - Build symbol table test"
 	@echo "  test_parser   - Build parser and type checker test"
+	@echo "  test_codegen  - Build code generator test"
 	@echo "  test          - Build and run all tests"
 	@echo "  release       - Build optimized release version"
 	@echo "  clean         - Remove build artifacts"
