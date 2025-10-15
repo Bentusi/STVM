@@ -230,6 +230,12 @@ static ErrorCode save_functions(const BytecodeModule* module, FILE* fp) {
         if (fwrite(&func->return_type, sizeof(DataType), 1, fp) != 1) {
             return ERR_FILE_IO;
         }
+        // 写入参数类型数组
+        if (func->param_count > 0 && func->param_types) {
+            if (fwrite(func->param_types, sizeof(DataType), func->param_count, fp) != (size_t)func->param_count) {
+                return ERR_FILE_IO;
+            }
+        }
     }
     
     return OK;
@@ -277,8 +283,23 @@ static ErrorCode load_functions(BytecodeModule* module, FILE* fp, int32_t count)
             if (name) mmgr_free(name);
             return ERR_FILE_IO;
         }
+        // 读取参数类型数组
+        DataType* param_types = NULL;
+        if (param_count > 0) {
+            param_types = (DataType*)mmgr_alloc(sizeof(DataType) * param_count);
+            if (!param_types) {
+                if (name) mmgr_free(name);
+                return ERR_OUT_OF_MEMORY;
+            }
+            if (fread(param_types, sizeof(DataType), param_count, fp) != (size_t)param_count) {
+                mmgr_free(param_types);
+                if (name) mmgr_free(name);
+                return ERR_FILE_IO;
+            }
+        }
         // 添加函数
-        bytecode_add_function(module, name, address, param_count, local_count, return_type);
+        bytecode_add_function(module, name, address, param_count, local_count, return_type, param_types);
+        if (param_types) mmgr_free(param_types);
         if (name) mmgr_free(name);
     }
     

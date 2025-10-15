@@ -305,13 +305,32 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
     codegen_emit(ctx, OP_RET, 0);
     
     // 添加函数到函数表
-    // bytecode_add_function需要return_type参数，从TypeInfo获取
+    // 提取返回类型
     DataType return_type = TYPE_VOID;
     if (func_decl->data.function_decl.return_type) {
         return_type = func_decl->data.function_decl.return_type->base_type;
     }
+    
+    // 提取参数类型
+    DataType* param_types = NULL;
+    if (param_count > 0 && func_decl->data.function_decl.return_type && 
+        func_decl->data.function_decl.return_type->base_type == TYPE_FUNCTION) {
+        TypeInfo* func_type = func_decl->data.function_decl.return_type;
+        if (func_type->func_info.param_types) {
+            param_types = (DataType*)mmgr_alloc(sizeof(DataType) * param_count);
+            for (int32_t i = 0; i < param_count; i++) {
+                param_types[i] = func_type->func_info.param_types[i]->base_type;
+            }
+        }
+    }
+    
     bytecode_add_function(ctx->module, func_decl->data.function_decl.name, 
-                         entry_address, param_count, ctx->local_var_count, return_type);
+                         entry_address, param_count, ctx->local_var_count, return_type, param_types);
+    
+    // 释放参数类型数组
+    if (param_types) {
+        mmgr_free(param_types);
+    }
     
     // 清除当前函数上下文
     ctx->current_function = NULL;

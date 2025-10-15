@@ -42,7 +42,7 @@ HEADERS = $(wildcard $(INCLUDE_DIR)/*.h)
 # Targets
 .PHONY: all clean dirs test release parser
 
-all: dirs parser test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen
+all: dirs parser test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr
 
 # Create necessary directories
 dirs:
@@ -103,13 +103,22 @@ test_codegen: dirs $(CORE_OBJS)
 	@echo "Building test_codegen..."
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_codegen tests/test_codegen.c $(CORE_OBJS) $(LDFLAGS)
 
+# VM and Library Manager tests
+test_vm: dirs $(CORE_OBJS)
+	@echo "Building test_vm..."
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_vm tests/test_vm.c $(CORE_OBJS) $(LDFLAGS)
+
+test_libmgr: dirs $(CORE_OBJS)
+	@echo "Building test_libmgr..."
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_libmgr tests/test_libmgr.c $(CORE_OBJS) $(LDFLAGS)
+
 # Release build
 release: CFLAGS := $(filter-out $(DEBUG_FLAGS),$(CFLAGS))
 release: CFLAGS += $(RELEASE_FLAGS)
 release: clean all
 
 # Run tests
-test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen
+test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr
 	@echo "\n=== Running Memory Manager Tests ==="
 	@./$(BIN_DIR)/test_mmgr
 	@echo "\n=== Running Types Tests ==="

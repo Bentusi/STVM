@@ -350,6 +350,34 @@ Value value_copy(Value v) {
 /**
  * @brief 释放Value值持有的资源
  */
+void value_print(Value* v) {
+    if (!v) {
+        printf("NULL");
+        return;
+    }
+    
+    switch (v->type) {
+        case TYPE_INT:
+            printf("%d", v->int_val);
+            break;
+        case TYPE_REAL:
+            printf("%g", v->real_val);
+            break;
+        case TYPE_BOOL:
+            printf("%s", v->bool_val ? "true" : "false");
+            break;
+        case TYPE_STRING:
+            printf("\"%s\"", v->string_val ? v->string_val : "");
+            break;
+        case TYPE_ARRAY:
+            printf("[array len=%d]", v->array_val.length);
+            break;
+        default:
+            printf("<?>");
+            break;
+    }
+}
+
 void value_free(Value* v) {
     if (!v) return;
     

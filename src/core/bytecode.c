@@ -99,10 +99,13 @@ void bytecode_module_free(BytecodeModule* module) {
         mmgr_free(module->constants);
     }
     
-    // 释放函数表中的字符串
+    // 释放函数表中的字符串和参数类型数组
     for (uint32_t i = 0; i < module->function_count; i++) {
         if (module->functions[i].name) {
             mmgr_free(module->functions[i].name);
+        }
+        if (module->functions[i].param_types) {
+            mmgr_free(module->functions[i].param_types);
         }
     }
     if (module->functions) {
@@ -339,7 +342,8 @@ static bool expand_functions(BytecodeModule* module) {
  * @brief 添加函数
  */
 uint32_t bytecode_add_function(BytecodeModule* module, const char* name, uint32_t address,
-                                int32_t param_count, int32_t local_count, DataType return_type) {
+                                int32_t param_count, int32_t local_count, DataType return_type,
+                                const DataType* param_types) {
     if (!name) return (uint32_t)-1;
     
     if (module->function_count >= module->function_capacity) {
@@ -354,6 +358,16 @@ uint32_t bytecode_add_function(BytecodeModule* module, const char* name, uint32_
     module->functions[index].param_count = param_count;
     module->functions[index].local_count = local_count;
     module->functions[index].return_type = return_type;
+    
+    // 复制参数类型数组
+    if (param_types && param_count > 0) {
+        module->functions[index].param_types = (DataType*)mmgr_alloc(sizeof(DataType) * param_count);
+        if (module->functions[index].param_types) {
+            memcpy(module->functions[index].param_types, param_types, sizeof(DataType) * param_count);
+        }
+    } else {
+        module->functions[index].param_types = NULL;
+    }
     
     return index;
 }

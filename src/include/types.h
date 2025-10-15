@@ -172,6 +172,12 @@ double value_to_real(Value v);
 void value_to_string(Value v, char* buffer, size_t size);
 
 /**
+ * @brief 打印Value值
+ * @param v 值指针
+ */
+void value_print(Value* v);
+
+/**
  * @brief 复制Value值（深拷贝）
  * @param v 源值
  * @return 新的值

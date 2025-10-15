@@ -90,7 +90,8 @@ void test_add_functions(void) {
     BytecodeModule* module = bytecode_module_create();
     
     // 添加函数
-    uint32_t func_idx = bytecode_add_function(module, "test_func", 100, 2, 3, TYPE_INT);
+    DataType params[] = {TYPE_INT, TYPE_REAL};
+    uint32_t func_idx = bytecode_add_function(module, "test_func", 100, 2, 3, TYPE_INT, params);
     assert(func_idx == 0);
     
     FunctionEntry* func = &module->functions[func_idx];

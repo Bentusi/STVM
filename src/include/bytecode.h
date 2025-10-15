@@ -116,6 +116,7 @@ typedef struct {
     int32_t param_count;    // 参数个数
     int32_t local_count;    // 局部变量个数
     DataType return_type;   // 返回类型
+    DataType* param_types;  // 参数类型数组（新增）
 } FunctionEntry;
 
 /**
@@ -229,17 +230,19 @@ uint32_t bytecode_add_bool_constant(BytecodeModule* module, bool value);
 uint32_t bytecode_add_string_constant(BytecodeModule* module, const char* value);
 
 /**
- * @brief 添加函数
+ * @brief 添加函数到函数表
  * @param module 字节码模块
  * @param name 函数名
  * @param address 函数入口地址
  * @param param_count 参数个数
  * @param local_count 局部变量个数
  * @param return_type 返回类型
+ * @param param_types 参数类型数组（可选，传NULL表示不指定）
  * @return 函数索引
  */
 uint32_t bytecode_add_function(BytecodeModule* module, const char* name, uint32_t address, 
-                                int32_t param_count, int32_t local_count, DataType return_type);
+                                int32_t param_count, int32_t local_count, DataType return_type,
+                                const DataType* param_types);
 
 /**
  * @brief 查找函数
