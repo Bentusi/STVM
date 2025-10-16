@@ -323,8 +323,26 @@ void ast_free_node(ASTNode* node) {
             break;
             
         case AST_IMPORT:
-            if (node->data.import.module_name) mmgr_free(node->data.import.module_name);
-            // TODO: 释放符号数组和别名数组
+            if (node->data.import.module_name) {
+                mmgr_free(node->data.import.module_name);
+            }
+            // 释放符号数组和别名数组
+            if (node->data.import.symbols) {
+                for (int i = 0; i < node->data.import.symbol_count; i++) {
+                    if (node->data.import.symbols[i]) {
+                        mmgr_free(node->data.import.symbols[i]);
+                    }
+                }
+                mmgr_free(node->data.import.symbols);
+            }
+            if (node->data.import.aliases) {
+                for (int i = 0; i < node->data.import.symbol_count; i++) {
+                    if (node->data.import.aliases[i]) {
+                        mmgr_free(node->data.import.aliases[i]);
+                    }
+                }
+                mmgr_free(node->data.import.aliases);
+            }
             break;
             
         case AST_ASSIGN:

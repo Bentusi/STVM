@@ -40,9 +40,9 @@ LEXER_OBJ = $(OBJ_DIR)/lex.yy.o
 HEADERS = $(wildcard $(INCLUDE_DIR)/*.h)
 
 # Targets
-.PHONY: all clean dirs test release parser
+.PHONY: all clean dirs test release parser stvm
 
-all: dirs parser test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr
+all: dirs parser stvm test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr
 
 # Create necessary directories
 dirs:
@@ -112,6 +112,11 @@ test_libmgr: dirs $(CORE_OBJS)
 	@echo "Building test_libmgr..."
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_libmgr tests/test_libmgr.c $(CORE_OBJS) $(LDFLAGS)
 
+# Main programs
+stvm: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
+	@echo "Building stvm (compiler and VM)..."
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/stvm $(OBJ_DIR)/main.o $(OBJ_DIR)/debugger.o $(filter-out $(OBJ_DIR)/main.o $(OBJ_DIR)/debugger.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
+
 # Release build
 release: CFLAGS := $(filter-out $(DEBUG_FLAGS),$(CFLAGS))
 release: CFLAGS += $(RELEASE_FLAGS)
@@ -143,8 +148,17 @@ clean:
 # Help
 help:
 	@echo "STVM Makefile - Available targets:"
-	@echo "  all           - Build all test programs (default)"
+	@echo ""
+	@echo "Main programs:"
+	@echo "  stvm          - Build STVM compiler and virtual machine"
+	@echo ""
+	@echo "Build targets:"
+	@echo "  all           - Build all programs (default)"
 	@echo "  parser        - Generate lexer and parser from Flex/Bison"
+	@echo "  release       - Build optimized release version"
+	@echo "  clean         - Remove build artifacts"
+	@echo ""
+	@echo "Test programs:"
 	@echo "  test_mmgr     - Build memory manager test"
 	@echo "  test_types    - Build types test"
 	@echo "  test_bytecode - Build bytecode test"
@@ -152,7 +166,14 @@ help:
 	@echo "  test_symtbl   - Build symbol table test"
 	@echo "  test_parser   - Build parser and type checker test"
 	@echo "  test_codegen  - Build code generator test"
+	@echo "  test_vm       - Build VM test"
+	@echo "  test_libmgr   - Build library manager test"
 	@echo "  test          - Build and run all tests"
-	@echo "  release       - Build optimized release version"
-	@echo "  clean         - Remove build artifacts"
-	@echo "  help          - Show this help message"
+	@echo ""
+	@echo "Usage examples:"
+	@echo "  make stvm                           # Build STVM"
+	@echo "  ./build/bin/stvm -c examples/hello.st   # Compile"
+	@echo "  ./build/bin/stvm -r examples/hello.stbc # Run"
+	@echo "  ./build/bin/stvm -r hello.stbc -d       # Debug"
+	@echo "  ./build/bin/stvm -i                     # REPL"
+	@echo "  ./build/bin/stvm --help                 # Show help"

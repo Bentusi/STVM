@@ -103,6 +103,13 @@ ErrorCode vm_run(VM* vm);
 ErrorCode vm_run_from(VM* vm, uint32_t entry_point);
 
 /**
+ * @brief 单步执行一条指令（用于调试）
+ * @param vm 虚拟机实例
+ * @return 错误码
+ */
+ErrorCode vm_step(VM* vm);
+
+/**
  * @brief 获取栈顶值
  * @param vm 虚拟机实例
  * @param result 输出参数，保存栈顶值

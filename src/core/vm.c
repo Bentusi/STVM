@@ -309,6 +309,279 @@ ErrorCode vm_run(VM* vm) {
 }
 
 /**
+ * @brief 单步执行一条指令（用于调试）
+ */
+ErrorCode vm_step(VM* vm) {
+    if (!vm || !vm->module) return ERR_RUNTIME;
+    
+    // 检查是否还有指令可执行
+    if (!vm->running || vm->pc >= vm->module->instruction_count) {
+        vm->running = false;
+        return OK;
+    }
+    
+    Instruction* code = vm->module->instructions;
+    Instruction instr = code[vm->pc++];
+    vm->instruction_count++;
+    
+    // 执行单条指令
+    switch (instr.opcode) {
+        // === 栈操作 ===
+        case OP_PUSH: {
+            if (instr.operand >= vm->module->const_count) {
+                vm->error_code = ERR_OUT_OF_BOUNDS;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Invalid constant index %u at PC=%u", instr.operand, vm->pc-1);
+                return ERR_OUT_OF_BOUNDS;
+            }
+            Constant* c = &vm->module->constants[instr.operand];
+            Value v;
+            switch (c->type) {
+                case CONST_INT: 
+                    v.type = TYPE_INT;
+                    v.int_val = c->int_val; 
+                    break;
+                case CONST_REAL: 
+                    v.type = TYPE_REAL;
+                    v.real_val = c->real_val; 
+                    break;
+                case CONST_BOOL: 
+                    v.type = TYPE_BOOL;
+                    v.bool_val = c->bool_val; 
+                    break;
+                case CONST_STRING: 
+                    v.type = TYPE_STRING;
+                    v.string_val = c->string_val; 
+                    break;
+                default:
+                    v.type = TYPE_VOID;
+                    break;
+            }
+            PUSH(v);
+            break;
+        }
+        
+        case OP_POP:
+            CHECK_STACK(1);
+            POP();
+            break;
+        
+        case OP_DUP:
+            CHECK_STACK(1);
+            {
+                Value top = PEEK();
+                PUSH(top);
+            }
+            break;
+        
+        case OP_LOAD: {
+            bool is_global = (instr.flags & FLAG_GLOBAL) != 0;
+            Value* var = vm_get_variable(vm, instr.operand, is_global);
+            if (!var) return vm->error_code;
+            PUSH(*var);
+            break;
+        }
+        
+        case OP_STORE: {
+            CHECK_STACK(1);
+            bool is_global = (instr.flags & FLAG_GLOBAL) != 0;
+            Value* var = vm_get_variable(vm, instr.operand, is_global);
+            if (!var) return vm->error_code;
+            *var = POP();
+            break;
+        }
+        
+        // === 算术运算 ===
+        case OP_ADD:
+        case OP_SUB:
+        case OP_MUL:
+        case OP_DIV:
+        case OP_MOD: {
+            ErrorCode err = vm_execute_arithmetic(vm, instr.opcode);
+            if (err != OK) return err;
+            break;
+        }
+        
+        case OP_NEG: {
+            CHECK_STACK(1);
+            Value a = POP();
+            if (a.type == TYPE_REAL) {
+                a.real_val = -a.real_val;
+            } else {
+                a.int_val = -a.int_val;
+            }
+            PUSH(a);
+            break;
+        }
+        
+        // === 比较运算 ===
+        case OP_EQ:
+        case OP_NE:
+        case OP_LT:
+        case OP_LE:
+        case OP_GT:
+        case OP_GE: {
+            ErrorCode err = vm_execute_comparison(vm, instr.opcode);
+            if (err != OK) return err;
+            break;
+        }
+        
+        // === 逻辑运算 ===
+        case OP_AND:
+        case OP_OR:
+        case OP_NOT: {
+            ErrorCode err = vm_execute_logical(vm, instr.opcode);
+            if (err != OK) return err;
+            break;
+        }
+        
+        // === 控制流 ===
+        case OP_JMP:
+            vm->pc = instr.operand;
+            break;
+        
+        case OP_JZ: {
+            CHECK_STACK(1);
+            Value cond = POP();
+            if (!cond.bool_val && cond.int_val == 0) {
+                vm->pc = instr.operand;
+            }
+            break;
+        }
+        
+        case OP_JNZ: {
+            CHECK_STACK(1);
+            Value cond = POP();
+            if (cond.bool_val || cond.int_val != 0) {
+                vm->pc = instr.operand;
+            }
+            break;
+        }
+        
+        case OP_CALL: {
+            // 函数调用
+            if (vm->call_sp + 1 >= vm->call_stack_size) {
+                vm->error_code = ERR_CALL_STACK_OVERFLOW;
+                return ERR_CALL_STACK_OVERFLOW;
+            }
+            
+            // 通过地址查找函数
+            FunctionEntry* func = NULL;
+            uint32_t target_addr = instr.operand;
+            for (uint32_t i = 0; i < vm->module->function_count; i++) {
+                if (vm->module->functions[i].address == target_addr) {
+                    func = &vm->module->functions[i];
+                    break;
+                }
+            }
+            
+            if (!func) {
+                vm->error_code = ERR_RUNTIME;
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                        "Function not found at address %u", target_addr);
+                return ERR_RUNTIME;
+            }
+            
+            CallFrame frame;
+            frame.return_address = vm->pc;
+            frame.base_pointer = vm->sp - func->param_count + 1;
+            frame.local_count = func->local_count;
+            frame.function = func;
+            
+            vm->call_stack[++vm->call_sp] = frame;
+            vm->pc = instr.operand;
+            break;
+        }
+        
+        case OP_RET: {
+            if (vm->call_sp < 0) {
+                // 主程序返回，停止执行
+                vm->running = false;
+                break;
+            }
+            
+            CallFrame frame = vm->call_stack[vm->call_sp--];
+            vm->pc = frame.return_address;
+            
+            // 清理局部变量（保留返回值）
+            Value return_val = (vm->sp >= 0) ? POP() : (Value){.type=TYPE_VOID};
+            vm->sp = frame.base_pointer - 1;
+            
+            if (return_val.type != TYPE_VOID) {
+                PUSH(return_val);
+            }
+            break;
+        }
+        
+        // === 其他 ===
+        case OP_HALT:
+            vm->running = false;
+            break;
+        
+        case OP_CALL_EXT: {
+            // 外部函数调用
+            uint32_t func_idx = instr.operand;
+            int32_t argc = instr.flags;
+            
+            if (func_idx >= vm->module->function_count) {
+                vm->error_code = ERR_OUT_OF_BOUNDS;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Invalid function index %u at PC=%u", func_idx, vm->pc-1);
+                return ERR_OUT_OF_BOUNDS;
+            }
+            
+            const char* func_name = vm->module->functions[func_idx].name;
+            ExternalFunction* ext_func = find_external_function(vm, func_name);
+            
+            if (!ext_func) {
+                vm->error_code = ERR_RUNTIME;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "External function '%s' not registered at PC=%u", func_name, vm->pc-1);
+                return ERR_RUNTIME;
+            }
+            
+            // 检查参数个数
+            if (ext_func->param_count >= 0 && argc != ext_func->param_count) {
+                vm->error_code = ERR_RUNTIME;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Function '%s' expects %d args, got %d at PC=%u",
+                        func_name, ext_func->param_count, argc, vm->pc-1);
+                return ERR_RUNTIME;
+            }
+            
+            CHECK_STACK(argc);
+            
+            // 调用外部函数
+            Value result = ext_func->callback(vm, argc);
+            
+            // 弹出参数
+            for (int32_t i = 0; i < argc; i++) {
+                POP();
+            }
+            
+            // 压入返回值
+            if (result.type != TYPE_VOID) {
+                PUSH(result);
+            }
+            
+            break;
+        }
+        
+        case OP_NOP:
+            // 空操作
+            break;
+        
+        default:
+            vm->error_code = ERR_INVALID_INSTRUCTION;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                    "Invalid opcode %u at PC=%u", instr.opcode, vm->pc-1);
+            return ERR_INVALID_INSTRUCTION;
+    }
+    
+    return OK;
+}
+
+/**
  * @brief 从指定入口点执行
  */
 ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
@@ -467,9 +740,20 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
                     return ERR_CALL_STACK_OVERFLOW;
                 }
                 
-                FunctionEntry* func = bytecode_find_function(vm->module, NULL);  // TODO: 通过地址查找
+                // 通过地址查找函数
+                FunctionEntry* func = NULL;
+                uint32_t target_addr = instr.operand;
+                for (uint32_t i = 0; i < vm->module->function_count; i++) {
+                    if (vm->module->functions[i].address == target_addr) {
+                        func = &vm->module->functions[i];
+                        break;
+                    }
+                }
+                
                 if (!func) {
                     vm->error_code = ERR_RUNTIME;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg),
+                            "Function not found at address %u", target_addr);
                     return ERR_RUNTIME;
                 }
                 

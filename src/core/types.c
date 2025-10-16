@@ -336,12 +336,26 @@ Value value_copy(Value v) {
         new_val.string_val = mmgr_strdup(v.string_val);
     }
     
-    // 数组需要深拷贝（这里简化处理，实际可能需要更复杂的逻辑）
-    if (v.type == TYPE_ARRAY && v.array_val.data) {
-        // TODO: 实现数组深拷贝
-        // 当前版本暂不支持
-        new_val.array_val.data = NULL;
-        new_val.array_val.length = 0;
+    // 数组需要深拷贝
+    if (v.type == TYPE_ARRAY && v.array_val.data && v.array_val.length > 0) {
+        // 分配新的数组空间
+        size_t elem_size = sizeof(Value);  // 假设数组元素是Value类型
+        size_t total_size = elem_size * v.array_val.length;
+        
+        new_val.array_val.data = mmgr_alloc(total_size);
+        if (new_val.array_val.data) {
+            // 逐个拷贝元素（如果元素也包含引用类型，需要递归拷贝）
+            Value* src = (Value*)v.array_val.data;
+            Value* dst = (Value*)new_val.array_val.data;
+            for (int i = 0; i < v.array_val.length; i++) {
+                dst[i] = value_copy(src[i]);  // 递归拷贝每个元素
+            }
+            new_val.array_val.length = v.array_val.length;
+        } else {
+            // 内存分配失败
+            new_val.array_val.data = NULL;
+            new_val.array_val.length = 0;
+        }
     }
     
     return new_val;

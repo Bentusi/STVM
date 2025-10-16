@@ -483,8 +483,49 @@ static ErrorCode generate_function_call(CodeGenContext* ctx, ASTNode* node) {
     // 查找函数
     FunctionEntry* func = bytecode_find_function(ctx->module, node->data.function_call.name);
     if (!func) {
-        // 可能是外部函数，使用CALL_EXT
-        // TODO: 实现外部函数表
+        // 可能是外部函数
+        // 在符号表中查找
+        Symbol* sym = symtbl_lookup(ctx->symtbl, node->data.function_call.name);
+        if (sym && sym->kind == SYM_FUNCTION) {
+            // 假设未找到的函数是外部函数
+            // 添加到函数表（如果还没有）
+            func = bytecode_find_function(ctx->module, node->data.function_call.name);
+            if (!func) {
+                // 添加到函数表
+                // 外部函数地址设为0，返回类型默认为VOID
+                uint32_t func_idx = bytecode_add_function(ctx->module,
+                                                          node->data.function_call.name,
+                                                          0,  // 外部函数地址为0
+                                                          node->data.function_call.arg_count,
+                                                          0,  // 无局部变量
+                                                          TYPE_VOID,  // 返回类型（简化为VOID）
+                                                          NULL);  // 无参数类型（简化）
+                if (func_idx == (uint32_t)-1) {
+                    ctx->error_code = ERR_RUNTIME;
+                    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                            "Failed to add external function: %s", node->data.function_call.name);
+                    return ERR_RUNTIME;
+                }
+                func = &ctx->module->functions[func_idx];
+            }
+            
+            // 发射CALL_EXT指令
+            // operand是函数索引，flags是参数个数
+            Instruction instr;
+            instr.opcode = OP_CALL_EXT;
+            instr.operand = func - ctx->module->functions;  // 函数索引
+            instr.flags = node->data.function_call.arg_count;
+            
+            if (ctx->module->instruction_count >= ctx->module->instruction_capacity) {
+                ctx->error_code = ERR_RUNTIME;
+                return ERR_RUNTIME;
+            }
+            ctx->module->instructions[ctx->module->instruction_count++] = instr;
+            
+            return OK;
+        }
+        
+        // 函数未定义
         snprintf(ctx->error_msg, sizeof(ctx->error_msg),
                 "Undefined function: %s", node->data.function_call.name);
         ctx->error_code = ERR_NAME;
@@ -503,20 +544,75 @@ static ErrorCode generate_function_call(CodeGenContext* ctx, ASTNode* node) {
 static ErrorCode generate_array_access(CodeGenContext* ctx, ASTNode* node) {
     ErrorCode err;
     
-    // 数组基址
-    err = codegen_expr(ctx, node->data.array_access.array);
-    if (err != OK) return err;
+    // 数组访问：array[index]
+    // 策略：将其转换为普通变量访问，索引必须是编译时常量
     
-    // 索引
-    err = codegen_expr(ctx, node->data.array_access.index);
-    if (err != OK) return err;
+    // 检查数组基址是否是标识符
+    if (node->data.array_access.array->type != AST_IDENTIFIER) {
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                "Array base must be an identifier");
+        ctx->error_code = ERR_RUNTIME;
+        return ERR_RUNTIME;
+    }
     
-    // TODO: 发射数组访问指令（当前字节码系统未定义）
-    // 暂时返回错误
-    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-            "Array access not yet implemented");
-    ctx->error_code = ERR_RUNTIME;
-    return ERR_RUNTIME;
+    // 获取数组符号
+    const char* array_name = node->data.array_access.array->data.identifier.name;
+    Symbol* array_sym = symtbl_lookup(ctx->symtbl, array_name);
+    if (!array_sym) {
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                "Undefined array: %s", array_name);
+        ctx->error_code = ERR_NAME;
+        return ERR_NAME;
+    }
+    
+    // 检查索引是否是字面量（编译时常量）
+    if (node->data.array_access.index->type != AST_LITERAL) {
+        // 运行时数组索引需要更复杂的支持
+        // 当前版本：生成索引表达式，然后使用基址+偏移
+        
+        // 加载数组基址（变量索引）
+        codegen_emit(ctx, OP_PUSH, 
+                    bytecode_add_int_constant(ctx->module, array_sym->offset));
+        
+        // 计算索引
+        err = codegen_expr(ctx, node->data.array_access.index);
+        if (err != OK) return err;
+        
+        // 计算实际地址：base + index
+        codegen_emit(ctx, OP_ADD, 0);
+        
+        // 注意：这里需要一个"间接加载"指令，当前暂不支持
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                "Dynamic array indexing not yet fully implemented");
+        ctx->error_code = ERR_RUNTIME;
+        return ERR_RUNTIME;
+    }
+    
+    // 编译时常量索引
+    // 从 literal value 中获取整数值
+    Value idx_val = node->data.array_access.index->data.literal.value;
+    if (idx_val.type != TYPE_INT) {
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                "Array index must be an integer");
+        ctx->error_code = ERR_TYPE;
+        return ERR_TYPE;
+    }
+    int32_t index = idx_val.int_val;
+    
+    // TODO: 检查数组边界（需要类型系统支持）
+    
+    // 计算实际变量偏移：base_offset + index
+    uint16_t offset = array_sym->offset + index;
+    
+    // 生成LOAD指令
+    // 使用 is_global 判断全局/局部
+    codegen_emit(ctx, OP_LOAD, offset);
+    if (array_sym->is_global) {
+        // 设置全局标志
+        ctx->module->instructions[ctx->module->instruction_count - 1].flags = FLAG_GLOBAL;
+    }
+    
+    return OK;
 }
 
 /**
