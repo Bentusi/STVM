@@ -17,11 +17,12 @@
  * @brief 命令行模式
  */
 typedef enum {
-    MODE_COMPILE,       // 编译模式
-    MODE_RUN,           // 运行模式
-    MODE_REPL,          // 交互模式
-    MODE_HELP,          // 显示帮助
-    MODE_VERSION        // 显示版本
+    MODE_COMPILE,           // 编译模式
+    MODE_RUN,               // 运行模式
+    MODE_COMPILE_AND_RUN,   // 编译并运行模式
+    MODE_REPL,              // 交互模式
+    MODE_HELP,              // 显示帮助
+    MODE_VERSION            // 显示版本
 } CliMode;
 
 /**
@@ -73,6 +74,13 @@ int cli_compile(const CliOptions* options);
  * @return 成功返回0，失败返回错误码
  */
 int cli_run(const CliOptions* options);
+
+/**
+ * @brief 编译并运行模式入口
+ * @param options 命令行选项
+ * @return 成功返回0，失败返回错误码
+ */
+int cli_compile_and_run(const CliOptions* options);
 
 /**
  * @brief REPL模式入口

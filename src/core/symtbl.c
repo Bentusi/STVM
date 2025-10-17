@@ -63,7 +63,8 @@ static void scope_free(Scope* scope) {
             if (sym->name) mmgr_free(sym->name);
             if (sym->qualified_name) mmgr_free(sym->qualified_name);
             if (sym->library_name) mmgr_free(sym->library_name);
-            if (sym->type) type_info_free(sym->type);
+            // 只有当符号拥有类型信息时才释放
+            if (sym->type && sym->owns_type) type_info_free(sym->type);
             
             // 释放常量值
             if (sym->kind == SYM_CONSTANT) {
@@ -198,16 +199,29 @@ Symbol* symtbl_define_variable(SymbolTable* symtbl, const char* name, TypeInfo* 
     Symbol* sym = symbol_create(name, is_const ? SYM_CONSTANT : SYM_VARIABLE, type);
     if (!sym) return NULL;
     
+    sym->owns_type = false; // TypeInfo通常来自AST，不由符号拥有
     sym->scope_level = symtbl->current_level;
+    
+    // 计算需要分配的空间大小
+    int32_t var_size = 1;  // 默认为1
+    if (type->base_type == TYPE_ARRAY && type->array_info.dimensions > 0 && type->array_info.sizes) {
+        // 对于数组类型，计算总大小
+        var_size = type->array_info.sizes[0];
+        for (int32_t i = 1; i < type->array_info.dimensions; i++) {
+            var_size *= type->array_info.sizes[i];
+        }
+    }
     
     if (symtbl->current_level == 0) {
         // 全局变量
         sym->is_global = true;
-        sym->index = symtbl->global_var_count++;
+        sym->index = symtbl->global_var_count;
+        symtbl->global_var_count += var_size;  // 数组占用多个槽位
     } else {
         // 局部变量
         sym->is_global = false;
-        sym->offset = symtbl->local_var_offset++;
+        sym->offset = symtbl->local_var_offset;
+        symtbl->local_var_offset += var_size;  // 数组占用多个槽位
     }
     
     if (!scope_add_symbol(symtbl->current_scope, sym)) {
@@ -237,6 +251,7 @@ Symbol* symtbl_define_function(SymbolTable* symtbl, const char* name, TypeInfo* 
         return NULL;
     }
     
+    sym->owns_type = true; // 函数符号拥有其创建的func_type
     sym->scope_level = 0; // 函数总是在全局作用域
     sym->param_count = param_count;
     sym->local_count = 0; // 将在代码生成时更新
@@ -261,6 +276,7 @@ Symbol* symtbl_define_parameter(SymbolTable* symtbl, const char* name, TypeInfo*
     Symbol* sym = symbol_create(name, SYM_PARAMETER, type);
     if (!sym) return NULL;
     
+    sym->owns_type = false; // TypeInfo来自AST，不由符号拥有
     sym->scope_level = symtbl->current_level;
     sym->is_global = false;
     sym->offset = symtbl->local_var_offset++;
@@ -290,6 +306,7 @@ Symbol* symtbl_define_constant(SymbolTable* symtbl, const char* name, Value valu
         return NULL;
     }
     
+    sym->owns_type = true; // 常量符号拥有其创建的type
     sym->scope_level = symtbl->current_level;
     sym->const_value = value_copy(value);
     

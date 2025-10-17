@@ -24,7 +24,7 @@ const char* opcode_to_string(Opcode opcode) {
         "EQ", "NE", "LT", "LE", "GT", "GE",
         "AND", "OR", "NOT",
         "JMP", "JZ", "JNZ", "CALL", "RET",
-        "HALT", "CALL_EXT", "NOP"
+        "HALT", "CALL_EXT", "NOP", "LOAD_INDEXED", "STORE_INDEXED"
     };
     
     if (opcode >= 0 && opcode < OP_COUNT) {

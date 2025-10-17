@@ -10,7 +10,6 @@ VAR
     i : INT;
 END_VAR
 
-BEGIN
     (* IF-THEN-ELSE 语句 *)
     IF x > y THEN
         max := x;

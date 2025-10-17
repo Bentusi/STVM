@@ -7,3 +7,4 @@ st_parser.tab.h
 stvm
 *.bak
 build/
+*.stbc

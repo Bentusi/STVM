@@ -12,6 +12,7 @@
 
 #include "vm.h"
 #include "mmgr.h"
+#include "builtins.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,6 +99,11 @@ VM* vm_create(BytecodeModule* module) {
     // 初始化外部函数表
     vm->external_functions = NULL;
     vm->external_function_count = 0;
+    
+    // 注册内置函数
+    if (!builtins_register_all(vm)) {
+        fprintf(stderr, "警告：内置函数注册失败\n");
+    }
     
     return vm;
 }
@@ -305,7 +311,8 @@ static ErrorCode vm_execute_logical(VM* vm, Opcode op) {
  * @brief 主解释循环
  */
 ErrorCode vm_run(VM* vm) {
-    return vm_run_from(vm, vm->module->entry_point);
+    // 从指令0开始执行（包括全局变量初始化）
+    return vm_run_from(vm, 0);
 }
 
 /**
@@ -443,7 +450,9 @@ ErrorCode vm_step(VM* vm) {
         case OP_JZ: {
             CHECK_STACK(1);
             Value cond = POP();
-            if (!cond.bool_val && cond.int_val == 0) {
+            // 跳转如果为假：检查bool_val或int_val
+            bool is_false = (cond.type == TYPE_BOOL) ? !cond.bool_val : (cond.int_val == 0);
+            if (is_false) {
                 vm->pc = instr.operand;
             }
             break;
@@ -452,7 +461,9 @@ ErrorCode vm_step(VM* vm) {
         case OP_JNZ: {
             CHECK_STACK(1);
             Value cond = POP();
-            if (cond.bool_val || cond.int_val != 0) {
+            // 跳转如果为真：检查bool_val或int_val
+            bool is_true = (cond.type == TYPE_BOOL) ? cond.bool_val : (cond.int_val != 0);
+            if (is_true) {
                 vm->pc = instr.operand;
             }
             break;
@@ -465,22 +476,16 @@ ErrorCode vm_step(VM* vm) {
                 return ERR_CALL_STACK_OVERFLOW;
             }
             
-            // 通过地址查找函数
-            FunctionEntry* func = NULL;
-            uint32_t target_addr = instr.operand;
-            for (uint32_t i = 0; i < vm->module->function_count; i++) {
-                if (vm->module->functions[i].address == target_addr) {
-                    func = &vm->module->functions[i];
-                    break;
-                }
+            // operand是函数索引（不是地址）
+            uint32_t func_idx = instr.operand;
+            if (func_idx >= vm->module->function_count) {
+                vm->error_code = ERR_OUT_OF_BOUNDS;
+                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                        "Invalid function index %u at PC=%u", func_idx, vm->pc-1);
+                return ERR_OUT_OF_BOUNDS;
             }
             
-            if (!func) {
-                vm->error_code = ERR_RUNTIME;
-                snprintf(vm->error_msg, sizeof(vm->error_msg),
-                        "Function not found at address %u", target_addr);
-                return ERR_RUNTIME;
-            }
+            FunctionEntry* func = &vm->module->functions[func_idx];
             
             CallFrame frame;
             frame.return_address = vm->pc;
@@ -489,7 +494,16 @@ ErrorCode vm_step(VM* vm) {
             frame.function = func;
             
             vm->call_stack[++vm->call_sp] = frame;
-            vm->pc = instr.operand;
+            
+            // 为局部变量（参数之外的）在栈上分配空间
+            // local_count 包括参数和局部变量，参数已经在栈上了
+            int32_t locals_only = func->local_count - func->param_count;
+            for (int32_t i = 0; i < locals_only; i++) {
+                Value v = {.type = TYPE_VOID};
+                PUSH(v);
+            }
+            
+            vm->pc = func->address;
             break;
         }
         
@@ -570,6 +584,94 @@ ErrorCode vm_step(VM* vm) {
         case OP_NOP:
             // 空操作
             break;
+        
+        case OP_LOAD_INDEXED: {
+            // 从栈顶弹出索引，使用 operand 作为基地址，压入数组元素
+            if (vm->sp < 1) {
+                vm->error_code = ERR_STACK_UNDERFLOW;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in LOAD_INDEXED");
+                return ERR_STACK_UNDERFLOW;
+            }
+            
+            Value index_val = vm->stack[--vm->sp];
+            if (index_val.type != TYPE_INT) {
+                vm->error_code = ERR_TYPE;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "Array index must be INT");
+                return ERR_TYPE;
+            }
+            
+            int32_t index = index_val.int_val;
+            int32_t base_offset = instr.operand;
+            int32_t actual_offset = base_offset + index;
+            
+            // 根据标志位确定是全局还是局部变量
+            if (instr.flags & FLAG_GLOBAL) {
+                if (actual_offset >= vm->global_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Global array index out of bounds: %d", actual_offset);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                vm->stack[vm->sp++] = vm->globals[actual_offset];
+            } else {
+                // 获取当前调用栈帧的基指针
+                int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                int32_t local_addr = bp + actual_offset;
+                if (local_addr < 0 || local_addr >= vm->sp) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Local array index out of bounds: %d", local_addr);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                vm->stack[vm->sp++] = vm->stack[local_addr];
+            }
+            break;
+        }
+        
+        case OP_STORE_INDEXED: {
+            // 从栈顶弹出值和索引，使用 operand 作为基地址，存储到数组元素
+            if (vm->sp < 2) {
+                vm->error_code = ERR_STACK_UNDERFLOW;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in STORE_INDEXED");
+                return ERR_STACK_UNDERFLOW;
+            }
+            
+            Value index_val = vm->stack[--vm->sp];
+            Value value = vm->stack[--vm->sp];
+            
+            if (index_val.type != TYPE_INT) {
+                vm->error_code = ERR_TYPE;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "Array index must be INT");
+                return ERR_TYPE;
+            }
+            
+            int32_t index = index_val.int_val;
+            int32_t base_offset = instr.operand;
+            int32_t actual_offset = base_offset + index;
+            
+            // 根据标志位确定是全局还是局部变量
+            if (instr.flags & FLAG_GLOBAL) {
+                if (actual_offset >= vm->global_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Global array index out of bounds: %d", actual_offset);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                vm->globals[actual_offset] = value;
+            } else {
+                // 获取当前调用栈帧的基指针
+                int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                int32_t local_addr = bp + actual_offset;
+                if (local_addr < 0 || local_addr >= vm->sp) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Local array index out of bounds: %d", local_addr);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                vm->stack[local_addr] = value;
+            }
+            break;
+        }
         
         default:
             vm->error_code = ERR_INVALID_INSTRUCTION;
@@ -718,7 +820,9 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             case OP_JZ: {
                 CHECK_STACK(1);
                 Value cond = POP();
-                if (!cond.bool_val && cond.int_val == 0) {
+                // 跳转如果为假：检查bool_val或int_val
+                bool is_false = (cond.type == TYPE_BOOL) ? !cond.bool_val : (cond.int_val == 0);
+                if (is_false) {
                     vm->pc = instr.operand;
                 }
                 break;
@@ -727,35 +831,31 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             case OP_JNZ: {
                 CHECK_STACK(1);
                 Value cond = POP();
-                if (cond.bool_val || cond.int_val != 0) {
+                // 跳转如果为真：检查bool_val或int_val
+                bool is_true = (cond.type == TYPE_BOOL) ? cond.bool_val : (cond.int_val != 0);
+                if (is_true) {
                     vm->pc = instr.operand;
                 }
                 break;
             }
             
             case OP_CALL: {
-                // 函数调用：保存返回地址和建立栈帧
+                // 函数调用
                 if (vm->call_sp + 1 >= vm->call_stack_size) {
                     vm->error_code = ERR_CALL_STACK_OVERFLOW;
                     return ERR_CALL_STACK_OVERFLOW;
                 }
                 
-                // 通过地址查找函数
-                FunctionEntry* func = NULL;
-                uint32_t target_addr = instr.operand;
-                for (uint32_t i = 0; i < vm->module->function_count; i++) {
-                    if (vm->module->functions[i].address == target_addr) {
-                        func = &vm->module->functions[i];
-                        break;
-                    }
+                // operand是函数索引（不是地址）
+                uint32_t func_idx = instr.operand;
+                if (func_idx >= vm->module->function_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg),
+                            "Invalid function index %u at PC=%u", func_idx, vm->pc-1);
+                    return ERR_OUT_OF_BOUNDS;
                 }
                 
-                if (!func) {
-                    vm->error_code = ERR_RUNTIME;
-                    snprintf(vm->error_msg, sizeof(vm->error_msg),
-                            "Function not found at address %u", target_addr);
-                    return ERR_RUNTIME;
-                }
+                FunctionEntry* func = &vm->module->functions[func_idx];
                 
                 CallFrame frame;
                 frame.return_address = vm->pc;
@@ -764,7 +864,15 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
                 frame.function = func;
                 
                 vm->call_stack[++vm->call_sp] = frame;
-                vm->pc = instr.operand;
+                
+                // 为局部变量（参数之外的）在栈上分配空间
+                int32_t locals_only = func->local_count - func->param_count;
+                for (int32_t i = 0; i < locals_only; i++) {
+                    Value v = {.type = TYPE_VOID};
+                    PUSH(v);
+                }
+                
+                vm->pc = func->address;
                 break;
             }
             
@@ -848,6 +956,106 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             case OP_NOP:
                 // 空操作
                 break;
+            
+            case OP_LOAD_INDEXED: {
+                // 从栈顶弹出索引，使用 operand 作为基地址，压入数组元素
+                if (vm->sp < 0) {
+                    vm->error_code = ERR_STACK_UNDERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in LOAD_INDEXED");
+                    return ERR_STACK_UNDERFLOW;
+                }
+                
+                Value index_val = POP();
+                if (index_val.type != TYPE_INT) {
+                    vm->error_code = ERR_TYPE;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Array index must be INT");
+                    return ERR_TYPE;
+                }
+                
+                int32_t index = index_val.int_val;
+                int32_t base_offset = instr.operand;
+                int32_t actual_offset = base_offset + index;
+                
+                // 根据标志位确定是全局还是局部变量
+                Value elem_val;
+                elem_val.type = TYPE_INT;  // 目前只支持 INT 数组
+                
+                if (instr.flags & FLAG_GLOBAL) {
+                    if (actual_offset >= vm->global_count) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Global array index out of bounds: %d", actual_offset);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    elem_val.int_val = vm->globals[actual_offset].int_val;
+                } else {
+                    // 获取当前调用栈帧的基指针
+                    int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                    int32_t local_addr = bp + actual_offset;
+                    if (local_addr < 0 || local_addr > vm->sp) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Local array index out of bounds: %d", local_addr);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    elem_val.int_val = vm->stack[local_addr].int_val;
+                }
+                
+                PUSH(elem_val);
+                break;
+            }
+            
+            case OP_STORE_INDEXED: {
+                // 从栈顶弹出值和索引，使用 operand 作为基地址，存储到数组元素
+                if (vm->sp < 1) {
+                    vm->error_code = ERR_STACK_UNDERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in STORE_INDEXED");
+                    return ERR_STACK_UNDERFLOW;
+                }
+                
+                Value index_val = POP();
+                Value value_val = POP();
+                
+                if (index_val.type != TYPE_INT) {
+                    vm->error_code = ERR_TYPE;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Array index must be INT");
+                    return ERR_TYPE;
+                }
+                
+                if (value_val.type != TYPE_INT) {
+                    vm->error_code = ERR_TYPE;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Array element must be INT");
+                    return ERR_TYPE;
+                }
+                
+                int32_t index = index_val.int_val;
+                int32_t base_offset = instr.operand;
+                int32_t actual_offset = base_offset + index;
+                
+                // 根据标志位确定是全局还是局部变量
+                if (instr.flags & FLAG_GLOBAL) {
+                    if (actual_offset >= vm->global_count) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Global array index out of bounds: %d", actual_offset);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    vm->globals[actual_offset] = value_val;
+                } else {
+                    // 获取当前调用栈帧的基指针
+                    int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                    int32_t local_addr = bp + actual_offset;
+                    if (local_addr < 0 || local_addr > vm->sp) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Local array index out of bounds: %d", local_addr);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    vm->stack[local_addr] = value_val;
+                }
+                
+                break;
+            }
             
             default:
                 vm->error_code = ERR_INVALID_INSTRUCTION;

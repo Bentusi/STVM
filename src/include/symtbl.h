@@ -28,6 +28,7 @@ typedef struct Symbol {
     char* qualified_name;           // 完全限定名（如：module.function）
     SymbolKind kind;                // 符号类型
     TypeInfo* type;                 // 类型信息
+    bool owns_type;                 // 是否拥有类型信息（决定是否在释放时free type）
     
     // 作用域信息
     int scope_level;                // 作用域层级（0=全局）

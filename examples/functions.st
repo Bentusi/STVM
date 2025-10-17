@@ -14,7 +14,6 @@ VAR_INPUT
     x : INT;
     y : INT;
 END_VAR
-BEGIN
     Add := x + y;
 END_FUNCTION
 
@@ -27,7 +26,6 @@ VAR
     i : INT;
     temp : INT;
 END_VAR
-BEGIN
     temp := 1;
     FOR i := 1 TO n DO
         temp := temp * i;
@@ -35,7 +33,6 @@ BEGIN
     Factorial := temp;
 END_FUNCTION
 
-BEGIN
     (* 调用函数 *)
     result := Add(a, b);
     fact := Factorial(5);

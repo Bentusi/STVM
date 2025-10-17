@@ -2,13 +2,12 @@
 
 PROGRAM Arrays
 VAR
-    numbers : ARRAY[0..9] OF INT;
+    numbers : ARRAY[9] OF INT;
     sum : INT := 0;
     max : INT;
     i : INT;
 END_VAR
 
-BEGIN
     (* 初始化数组 *)
     FOR i := 0 TO 9 DO
         numbers[i] := i * 10;

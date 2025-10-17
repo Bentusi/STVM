@@ -56,10 +56,12 @@ typedef enum {
     OP_CALL,            // 调用函数 operand: 函数地址
     OP_RET,             // 返回
     
-    // === 其他（3个）===
+    // === 其他（5个）===
     OP_HALT,            // 停机
     OP_CALL_EXT,        // 调用外部函数 operand: 函数索引
     OP_NOP,             // 空操作（调试/对齐用）
+    OP_LOAD_INDEXED,    // 加载数组元素 operand: 数组基址，栈顶为索引
+    OP_STORE_INDEXED,   // 存储数组元素 operand: 数组基址，栈顶为值，栈次为索引
     
     OP_COUNT            // 指令总数
 } Opcode;

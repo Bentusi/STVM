@@ -8,7 +8,6 @@ VAR
     season : STRING;
 END_VAR
 
-BEGIN
     (* 根据数字显示星期几 *)
     CASE day OF
         1: day_name := 'Monday';

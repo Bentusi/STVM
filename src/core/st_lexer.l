@@ -38,8 +38,10 @@ STRING      '([^'\n]|'')*'
     /* 关键字 (不区分大小写) */
 (?i:PROGRAM)        { return TOKEN_PROGRAM; }
 (?i:END_PROGRAM)    { return TOKEN_END_PROGRAM; }
+(?i:BEGIN)          { return TOKEN_BEGIN; }
 (?i:FUNCTION)       { return TOKEN_FUNCTION; }
 (?i:END_FUNCTION)   { return TOKEN_END_FUNCTION; }
+(?i:PRINT)          { return TOKEN_PRINT; }
 (?i:VAR)            { return TOKEN_VAR; }
 (?i:VAR_INPUT)      { return TOKEN_VAR_INPUT; }
 (?i:VAR_OUTPUT)     { return TOKEN_VAR_OUTPUT; }

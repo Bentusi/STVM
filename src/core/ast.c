@@ -79,7 +79,7 @@ ASTNode* ast_create_var_decl(const char* name, TypeInfo* type, ASTNode* initiali
     if (!node) return NULL;
     
     node->data.var_decl.name = name ? mmgr_strdup(name) : NULL;
-    node->data.var_decl.type = type;
+    node->data.var_decl.type = type ? type_info_retain(type) : NULL;
     node->data.var_decl.initializer = initializer;
     node->data.var_decl.is_const = is_const;
     
@@ -96,7 +96,7 @@ ASTNode* ast_create_function_decl(const char* name, ASTNode* parameters, TypeInf
     
     node->data.function_decl.name = name ? mmgr_strdup(name) : NULL;
     node->data.function_decl.params = parameters;
-    node->data.function_decl.return_type = return_type;
+    node->data.function_decl.return_type = return_type ? type_info_retain(return_type) : NULL;
     node->data.function_decl.declarations = declarations;
     node->data.function_decl.body = body;
     

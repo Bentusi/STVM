@@ -86,6 +86,27 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
         }
     }
     
+    // 自动检测模式：如果没有显式指定模式且提供了输入文件
+    if (options->mode == MODE_HELP && options->input_file != NULL) {
+        const char* ext = strrchr(options->input_file, '.');
+        if (ext) {
+            if (strcmp(ext, ".st") == 0) {
+                // .st 文件：编译并运行
+                options->mode = MODE_COMPILE_AND_RUN;
+            } else if (strcmp(ext, ".stbc") == 0) {
+                // .stbc 文件：直接运行
+                options->mode = MODE_RUN;
+            } else {
+                fprintf(stderr, "错误：不支持的文件类型 '%s'\n", ext);
+                fprintf(stderr, "支持的文件类型: .st (源代码), .stbc (字节码)\n");
+                return false;
+            }
+        } else {
+            fprintf(stderr, "错误：无法识别文件类型（缺少扩展名）\n");
+            return false;
+        }
+    }
+    
     // 验证参数
     if (options->mode == MODE_COMPILE && options->input_file == NULL) {
         fprintf(stderr, "错误：编译模式需要指定输入文件\n");
@@ -94,6 +115,11 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
     
     if (options->mode == MODE_RUN && options->input_file == NULL) {
         fprintf(stderr, "错误：运行模式需要指定输入文件\n");
+        return false;
+    }
+    
+    if (options->mode == MODE_COMPILE_AND_RUN && options->input_file == NULL) {
+        fprintf(stderr, "错误：需要指定输入文件\n");
         return false;
     }
     
@@ -107,8 +133,10 @@ void cli_print_help(void) {
     printf("STVM - ST Language Compiler and Virtual Machine\n\n");
     printf("用法: stvm [选项] [文件]\n\n");
     printf("模式:\n");
-    printf("  -c, --compile <file>    编译ST源文件为字节码\n");
-    printf("  -r, --run <file>        运行字节码文件\n");
+    printf("  <file.st>               编译并运行ST源文件 (默认)\n");
+    printf("  <file.stbc>             运行字节码文件 (默认)\n");
+    printf("  -c, --compile <file>    仅编译ST源文件为字节码\n");
+    printf("  -r, --run <file>        仅运行字节码文件\n");
     printf("  -i, --repl              启动交互式REPL\n");
     printf("  -h, --help              显示帮助信息\n");
     printf("  -v, --version           显示版本信息\n\n");
@@ -122,10 +150,12 @@ void cli_print_help(void) {
     printf("  --dump-ast              打印抽象语法树\n");
     printf("  --dump-bytecode         打印字节码\n\n");
     printf("示例:\n");
-    printf("  stvm -c program.st               # 编译program.st\n");
+    printf("  stvm program.st                  # 编译并运行program.st\n");
+    printf("  stvm program.stbc                # 运行字节码\n");
+    printf("  stvm -c program.st               # 仅编译program.st\n");
     printf("  stvm -c program.st -o prog.stbc  # 编译并指定输出文件\n");
     printf("  stvm -r prog.stbc                # 运行字节码\n");
-    printf("  stvm -r prog.stbc -d             # 调试模式运行\n");
+    printf("  stvm program.st -d               # 调试模式运行\n");
     printf("  stvm -i                          # 启动REPL\n");
 }
 
@@ -426,6 +456,209 @@ int cli_run(const CliOptions* options) {
 }
 
 /**
+ * @brief 编译并运行模式
+ */
+int cli_compile_and_run(const CliOptions* options) {
+    int exit_code = 0;
+    
+    if (options->verbose) {
+        printf("编译并运行文件: %s\n", options->input_file);
+    }
+    
+    // 初始化内存管理器
+    if (!mmgr_init()) {
+        fprintf(stderr, "错误：无法初始化内存管理器\n");
+        return 1;
+    }
+    
+    // 1. 语法分析阶段
+    if (options->verbose) {
+        printf("开始语法分析...\n");
+    }
+    
+    FILE* input = fopen(options->input_file, "r");
+    if (!input) {
+        fprintf(stderr, "错误：无法打开文件 '%s': %s\n", 
+                options->input_file, strerror(errno));
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    yyin = input;
+    yyrestart(yyin);
+    parse_result = NULL;
+    
+    int parse_status = yyparse();
+    fclose(input);
+    
+    if (parse_status != 0 || parse_result == NULL) {
+        fprintf(stderr, "错误：语法分析失败\n");
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    if (options->verbose) {
+        printf("语法分析完成\n");
+    }
+    
+    // 打印AST（如果需要）
+    if (options->dump_ast) {
+        printf("\n=== 抽象语法树 ===\n");
+        ast_print(parse_result, 0);
+        printf("\n");
+    }
+    
+    // 2. 类型检查阶段
+    if (options->verbose) {
+        printf("开始类型检查...\n");
+    }
+    
+    SymbolTable* symtbl = symtbl_init();
+    if (!symtbl) {
+        fprintf(stderr, "错误：无法创建符号表\n");
+        ast_free_node(parse_result);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    TypeChecker typechecker;
+    ErrorCode err = typecheck_init(&typechecker, symtbl);
+    if (err != OK) {
+        fprintf(stderr, "错误：无法创建类型检查器\n");
+        symtbl_free(symtbl);
+        ast_free_node(parse_result);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    err = typecheck_program(&typechecker, parse_result);
+    if (err != OK) {
+        fprintf(stderr, "错误：类型检查失败\n");
+        typecheck_cleanup(&typechecker);
+        symtbl_free(symtbl);
+        ast_free_node(parse_result);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    if (options->verbose) {
+        printf("类型检查完成\n");
+    }
+    
+    typecheck_cleanup(&typechecker);
+    
+    // 3. 代码生成阶段
+    if (options->verbose) {
+        printf("开始代码生成...\n");
+    }
+    
+    BytecodeModule* module = bytecode_module_create();
+    if (!module) {
+        fprintf(stderr, "错误：无法创建字节码模块\n");
+        symtbl_free(symtbl);
+        ast_free_node(parse_result);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    CodeGenContext* codegen = codegen_create(module, symtbl);
+    if (!codegen) {
+        fprintf(stderr, "错误：无法创建代码生成器\n");
+        bytecode_module_free(module);
+        symtbl_free(symtbl);
+        ast_free_node(parse_result);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    err = codegen_generate(codegen, parse_result);
+    if (err != OK) {
+        fprintf(stderr, "错误：代码生成失败: %s\n", codegen->error_msg);
+        codegen_free(codegen);
+        bytecode_module_free(module);
+        symtbl_free(symtbl);
+        ast_free_node(parse_result);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    if (options->verbose) {
+        printf("代码生成完成\n");
+    }
+    
+    codegen_free(codegen);
+    symtbl_free(symtbl);
+    ast_free_node(parse_result);
+    
+    // 打印字节码（如果需要）
+    if (options->dump_bytecode) {
+        printf("\n=== 字节码 ===\n");
+        bytecode_print_module(module);
+        printf("\n");
+    }
+    
+    // 4. 执行阶段
+    if (options->verbose) {
+        printf("开始执行...\n");
+    }
+    
+    // 创建虚拟机
+    VM* vm = vm_create(module);
+    if (!vm) {
+        fprintf(stderr, "错误：无法创建虚拟机\n");
+        bytecode_module_free(module);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    // 调试模式
+    if (options->debug) {
+        if (options->verbose) {
+            printf("启动调试器...\n");
+        }
+        
+        Debugger* debugger = debugger_create(vm);
+        if (!debugger) {
+            fprintf(stderr, "错误：无法创建调试器\n");
+            vm_free(vm);
+            bytecode_module_free(module);
+            mmgr_cleanup();
+            return 1;
+        }
+        
+        exit_code = debugger_run(debugger);
+        debugger_free(debugger);
+    } else {
+        // 正常执行
+        err = vm_run(vm);
+        if (err != OK) {
+            fprintf(stderr, "运行时错误: %s\n", vm->error_msg);
+            exit_code = 1;
+        } else if (options->verbose) {
+            printf("执行完成\n");
+        }
+        
+        // 显示统计信息
+        if (options->statistics) {
+            printf("\n=== 统计信息 ===\n");
+            printf("指令数量: %d\n", module->instruction_count);
+            printf("执行指令数: %lu\n", (unsigned long)vm->instruction_count);
+            
+            const MemoryStats* stats = mmgr_get_stats();
+            printf("内存使用: %zu 字节\n", stats->total_allocated);
+            printf("内存峰值: %zu 字节\n", stats->peak_usage);
+        }
+    }
+    
+    // 清理
+    vm_free(vm);
+    bytecode_module_free(module);
+    mmgr_cleanup();
+    
+    return exit_code;
+}
+
+/**
  * @brief REPL模式
  */
 int cli_repl(const CliOptions* options) {
@@ -567,6 +800,9 @@ int main(int argc, char** argv) {
             
         case MODE_RUN:
             return cli_run(&options);
+            
+        case MODE_COMPILE_AND_RUN:
+            return cli_compile_and_run(&options);
             
         case MODE_REPL:
             return cli_repl(&options);

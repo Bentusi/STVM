@@ -8,7 +8,6 @@ VAR
     result : REAL;
 END_VAR
 
-BEGIN
     (* 打印消息 *)
     counter := 42;
     result := 3.14159;

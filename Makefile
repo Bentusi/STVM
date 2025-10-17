@@ -83,34 +83,34 @@ test_types: dirs $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o
 	@echo "Building test_types..."
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_types tests/test_types.c $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o $(LDFLAGS)
 
-test_bytecode: dirs $(CORE_OBJS)
+test_bytecode: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
 	@echo "Building test_bytecode..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_bytecode tests/test_bytecode.c $(CORE_OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_bytecode tests/test_bytecode.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
 
-test_ast: dirs $(CORE_OBJS)
+test_ast: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
 	@echo "Building test_ast..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_ast tests/test_ast.c $(CORE_OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_ast tests/test_ast.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
 
 test_symtbl: dirs $(CORE_OBJS)
 	@echo "Building test_symtbl..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_symtbl tests/test_symtbl.c $(CORE_OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_symtbl tests/test_symtbl.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
 
 test_parser: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
 	@echo "Building test_parser..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_parser tests/test_parser.c $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_parser tests/test_parser.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
 
-test_codegen: dirs $(CORE_OBJS)
+test_codegen: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
 	@echo "Building test_codegen..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_codegen tests/test_codegen.c $(CORE_OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_codegen tests/test_codegen.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
 
 # VM and Library Manager tests
 test_vm: dirs $(CORE_OBJS)
 	@echo "Building test_vm..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_vm tests/test_vm.c $(CORE_OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_vm tests/test_vm.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
 
 test_libmgr: dirs $(CORE_OBJS)
 	@echo "Building test_libmgr..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_libmgr tests/test_libmgr.c $(CORE_OBJS) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_libmgr tests/test_libmgr.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
 
 # Main programs
 stvm: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)

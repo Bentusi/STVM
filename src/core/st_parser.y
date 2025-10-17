@@ -47,8 +47,9 @@ ASTNode* parse_result = NULL;
 }
 
 /* Token声明 */
-%token TOKEN_PROGRAM TOKEN_END_PROGRAM
+%token TOKEN_PROGRAM TOKEN_END_PROGRAM TOKEN_BEGIN
 %token TOKEN_FUNCTION TOKEN_END_FUNCTION
+%token TOKEN_PRINT
 %token TOKEN_VAR TOKEN_VAR_INPUT TOKEN_VAR_OUTPUT TOKEN_END_VAR
 %token TOKEN_IF TOKEN_THEN TOKEN_ELSIF TOKEN_ELSE TOKEN_END_IF
 %token TOKEN_CASE TOKEN_OF TOKEN_END_CASE
@@ -77,9 +78,9 @@ ASTNode* parse_result = NULL;
 /* 非终结符类型声明 */
 %type <ast_node> program import_list import_decl
 %type <ast_node> var_decl_list var_decl var_decl_item
-%type <ast_node> function_list function_decl
+%type <ast_node> function_list function_decl function_params function_local_vars
 %type <ast_node> statement_list statement
-%type <ast_node> assignment_stmt if_stmt elsif_list while_stmt for_stmt case_stmt return_stmt
+%type <ast_node> assignment_stmt if_stmt elsif_list while_stmt for_stmt case_stmt return_stmt print_stmt
 %type <ast_node> expression or_expr xor_expr and_expr comparison_expr
 %type <ast_node> add_expr mult_expr unary_expr primary_expr
 %type <ast_node> argument_list
@@ -112,6 +113,18 @@ program:
         // ast_create_program(name, declarations, functions, statements)
         // 注意：import_list暂时被忽略，因为AST结构中没有单独的imports字段
         $$ = ast_create_program($2, $4, $5, $6);
+        parse_result = $$;
+    }
+    | TOKEN_PROGRAM TOKEN_IDENTIFIER
+    import_list
+    var_decl_list
+    function_list
+    TOKEN_BEGIN
+    statement_list
+    TOKEN_END_PROGRAM
+    {
+        // 带 BEGIN 的程序结构
+        $$ = ast_create_program($2, $4, $5, $7);
         parse_result = $$;
     }
     ;
@@ -220,9 +233,18 @@ type_spec:
     {
         // type_info_create_array(elem_type, dimensions, sizes)
         int32_t size = (int32_t)($5 - $3 + 1);
-        int32_t* sizes = (int32_t*)malloc(sizeof(int32_t));
+        int32_t* sizes = (int32_t*)mmgr_alloc(sizeof(int32_t));
         sizes[0] = size;
         $$ = type_info_create_array($8, 1, sizes);
+    }
+    | TOKEN_ARRAY TOKEN_LBRACKET TOKEN_INTEGER_LITERAL TOKEN_RBRACKET TOKEN_OF type_spec
+    {
+        // 单索引数组语法: ARRAY[N] OF type
+        // 范围为 0..N-1（但我们直接使用 N 作为大小）
+        int32_t size = (int32_t)$3;
+        int32_t* sizes = (int32_t*)mmgr_alloc(sizeof(int32_t));
+        sizes[0] = size;
+        $$ = type_info_create_array($6, 1, sizes);
     }
     ;
 
@@ -243,24 +265,73 @@ function_list:
     ;
 
 function_decl:
-    TOKEN_FUNCTION TOKEN_IDENTIFIER
-    var_decl_list
-    TOKEN_COLON type_spec
-    var_decl_list
+    TOKEN_FUNCTION TOKEN_IDENTIFIER TOKEN_COLON type_spec
+    function_params
+    function_local_vars
+    TOKEN_BEGIN
     statement_list
     TOKEN_END_FUNCTION
     {
+        // 标准语法: FUNCTION name : return_type
+        // function_params (参数 VAR_INPUT - 单独的块)
+        // function_local_vars (局部变量 VAR - 单独的块)
+        // BEGIN statement_list END_FUNCTION
         // ast_create_function_decl(name, parameters, return_type, declarations, body)
-        $$ = ast_create_function_decl($2, $3, $5, $6, $7);
+        $$ = ast_create_function_decl($2, $5, $4, $6, $8);
+    }
+    | TOKEN_FUNCTION TOKEN_IDENTIFIER TOKEN_COLON type_spec
+    function_params
+    function_local_vars
+    statement_list
+    TOKEN_END_FUNCTION
+    {
+        // 不带 BEGIN 的版本
+        $$ = ast_create_function_decl($2, $5, $4, $6, $7);
     }
     | TOKEN_FUNCTION TOKEN_IDENTIFIER
-    var_decl_list
-    var_decl_list
+    function_params
+    function_local_vars
+    TOKEN_BEGIN
     statement_list
     TOKEN_END_FUNCTION
     {
-        // 无返回类型的函数
+        // 无返回类型的函数（PROCEDURE风格）
+        $$ = ast_create_function_decl($2, $3, NULL, $4, $6);
+    }
+    | TOKEN_FUNCTION TOKEN_IDENTIFIER
+    function_params
+    function_local_vars
+    statement_list
+    TOKEN_END_FUNCTION
+    {
+        // 无返回类型，不带 BEGIN
         $$ = ast_create_function_decl($2, $3, NULL, $4, $5);
+    }
+    ;
+
+/* 函数参数（VAR_INPUT块，可选） */
+function_params:
+    /* 空 */ { $$ = NULL; }
+    | TOKEN_VAR_INPUT var_decl_item TOKEN_END_VAR
+    {
+        $$ = $2;  // 返回参数链表
+    }
+    ;
+
+/* 函数局部变量（VAR块，可以有多个） */
+function_local_vars:
+    /* 空 */ { $$ = NULL; }
+    | function_local_vars TOKEN_VAR var_decl_item TOKEN_END_VAR
+    {
+        if ($1 == NULL) {
+            $$ = $3;
+        } else {
+            // 连接到现有的局部变量链表
+            ASTNode* last = $1;
+            while (last->next) last = last->next;
+            last->next = $3;
+            $$ = $1;
+        }
     }
     ;
 
@@ -288,6 +359,7 @@ statement:
     | for_stmt      { $$ = $1; }
     | case_stmt     { $$ = $1; }
     | return_stmt   { $$ = $1; }
+    | print_stmt    { $$ = $1; }
     | TOKEN_SEMICOLON { $$ = NULL; } /* 空语句 */
     ;
 
@@ -394,6 +466,34 @@ return_stmt:
     | TOKEN_RETURN expression TOKEN_SEMICOLON
     {
         $$ = ast_create_return($2);
+    }
+    ;
+
+/* PRINT语句 - 格式化输出 */
+print_stmt:
+    TOKEN_PRINT TOKEN_LPAREN argument_list TOKEN_RPAREN TOKEN_SEMICOLON
+    {
+        // 将参数链表转换为数组
+        int arg_count = 0;
+        ASTNode* arg = $3;
+        while (arg) {
+            arg_count++;
+            arg = arg->next;
+        }
+        
+        ASTNode** args = NULL;
+        if (arg_count > 0) {
+            args = (ASTNode**)mmgr_alloc(sizeof(ASTNode*) * arg_count);
+            arg = $3;
+            for (int i = 0; i < arg_count; i++) {
+                args[i] = arg;
+                arg = arg->next;
+                args[i]->next = NULL;  // 断开链表连接
+            }
+        }
+        
+        // 创建函数调用节点来表示 PRINT
+        $$ = ast_create_function_call("PRINT", args, arg_count);
     }
     ;
 
@@ -536,9 +636,26 @@ primary_expr:
     }
     | TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN
     {
-        // 需要将链表转换为数组
-        // 简化版：假设参数不多，暂时传NULL
-        $$ = ast_create_function_call($1, NULL, 0);
+        // 将参数链表转换为数组
+        int arg_count = 0;
+        ASTNode* arg = $3;
+        while (arg) {
+            arg_count++;
+            arg = arg->next;
+        }
+        
+        ASTNode** args = NULL;
+        if (arg_count > 0) {
+            args = (ASTNode**)mmgr_alloc(sizeof(ASTNode*) * arg_count);
+            arg = $3;
+            for (int i = 0; i < arg_count; i++) {
+                args[i] = arg;
+                arg = arg->next;
+                args[i]->next = NULL;  // 断开链表连接
+            }
+        }
+        
+        $$ = ast_create_function_call($1, args, arg_count);
     }
     | TOKEN_IDENTIFIER TOKEN_LPAREN TOKEN_RPAREN
     {

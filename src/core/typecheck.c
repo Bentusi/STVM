@@ -23,6 +23,14 @@ ErrorCode typecheck_init(TypeChecker* checker, SymbolTable* symtbl) {
     checker->current_function = NULL;
     checker->error_count = 0;
     
+    // 注册内置函数 PRINT (可变参数函数)
+    // 创建一个 VOID 返回类型的函数签名
+    TypeInfo* void_type = type_info_create(TYPE_VOID);
+    Symbol* print_sym = symtbl_define_function(symtbl, "PRINT", void_type, NULL, -1);
+    if (print_sym) {
+        print_sym->param_count = -1;  // -1 表示可变参数
+    }
+    
     return OK;
 }
 
@@ -215,6 +223,23 @@ static TypeInfo* check_statement(TypeChecker* checker, ASTNode* stmt) {
             // 检查赋值语句
             TypeInfo* target_type = check_expression(checker, stmt->data.assign.target);
             TypeInfo* value_type = check_expression(checker, stmt->data.assign.value);
+            
+            // 特殊处理：函数体内对函数名的赋值是设置返回值
+            if (target_type && target_type->base_type == TYPE_FUNCTION && 
+                checker->current_function && 
+                stmt->data.assign.target->type == AST_IDENTIFIER) {
+                
+                const char* target_name = stmt->data.assign.target->data.identifier.name;
+                if (strcmp(target_name, checker->current_function->name) == 0) {
+                    // 检查返回值类型是否匹配
+                    TypeInfo* return_type = target_type->func_info.return_type;
+                    if (return_type && value_type && !type_info_can_convert(return_type, value_type)) {
+                        fprintf(stderr, "Type error: Return value type mismatch\n");
+                        checker->error_count++;
+                    }
+                    return NULL;
+                }
+            }
             
             if (target_type && value_type && !type_info_can_convert(target_type, value_type)) {
                 fprintf(stderr, "Type error: Assignment type mismatch\n");
@@ -440,14 +465,18 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             
             // 检查参数数量
             int arg_count = expr->data.function_call.arg_count;
-            if (arg_count != func_sym->param_count) {
+            // -1 表示可变参数函数，跳过参数数量检查
+            if (func_sym->param_count != -1 && arg_count != func_sym->param_count) {
                 fprintf(stderr, "Type error: Function '%s' expects %d arguments, got %d\n",
                         func_name, func_sym->param_count, arg_count);
                 checker->error_count++;
             }
             
             // 简化版: 不检查每个参数类型
-            // 返回函数返回类型
+            // 返回函数返回类型（而不是函数类型本身）
+            if (func_sym->type && func_sym->type->base_type == TYPE_FUNCTION) {
+                return func_sym->type->func_info.return_type;
+            }
             return func_sym->type;
         }
         

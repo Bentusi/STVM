@@ -188,13 +188,22 @@ ErrorCode codegen_generate(CodeGenContext* ctx, ASTNode* program) {
 static ErrorCode generate_program(CodeGenContext* ctx, ASTNode* program) {
     ErrorCode err;
     
-    // 1. 生成全局变量声明
+    // 设置模块的全局变量计数（typecheck已定义全局变量，symtbl保存了计数）
+    ctx->module->global_count = ctx->symtbl->global_var_count;
+    
+    // 设置入口点为0（从头开始执行）
+    ctx->module->entry_point = 0;
+    
+    // 1. 生成全局变量声明（初始化代码）
     if (program->data.program.var_decls) {
         err = generate_var_decls(ctx, program->data.program.var_decls);
         if (err != OK) return err;
     }
     
-    // 2. 生成函数定义
+    // 2. 发射跳转指令跳过函数定义到主程序体
+    int32_t jump_to_main = codegen_emit(ctx, OP_JMP, 0);
+    
+    // 3. 生成函数定义
     ASTNode* func = program->data.program.functions;
     while (func) {
         err = codegen_function(ctx, func);
@@ -202,17 +211,18 @@ static ErrorCode generate_program(CodeGenContext* ctx, ASTNode* program) {
         func = func->next;
     }
     
-    // 3. 生成主程序体（作为隐式的main函数）
+    // 4. 回填跳转目标到主程序体起始位置
+    uint32_t main_start = codegen_current_position(ctx);
+    codegen_patch_jump(ctx, jump_to_main, main_start);
+    
+    // 5. 生成主程序体
     if (program->data.program.body) {
-        // 设置入口点
-        ctx->module->entry_point = codegen_current_position(ctx);
-        
         err = generate_block(ctx, program->data.program.body, NULL);
         if (err != OK) return err;
-        
-        // 主程序结束，发射HALT
-        codegen_emit(ctx, OP_HALT, 0);
     }
+    
+    // 主程序结束，发射HALT
+    codegen_emit(ctx, OP_HALT, 0);
     
     return OK;
 }
@@ -239,16 +249,15 @@ static ErrorCode generate_var_decls(CodeGenContext* ctx, ASTNode* var_decls) {
                     return ERR_NAME;
                 }
                 
-                // 生成STORE指令
+                // 生成STORE指令：使用正确的索引/偏移
                 uint8_t flags = sym->is_global ? 0x01 : 0x00;
-                codegen_emit_with_flags(ctx, OP_STORE, flags, sym->offset);
+                uint16_t addr = sym->is_global ? sym->index : sym->offset;
+                codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
             }
             
-            if (ctx->current_function) {
-                ctx->local_var_count++;
-            } else {
-                ctx->module->global_count++;
-            }
+            /* 变量计数由调用者（codegen_function 或程序级别）负责
+             * 这里仅负责生成初始化代码（如果有）。
+             */
         }
         
         decl = decl->next;
@@ -281,28 +290,76 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
     // 记录函数入口地址
     uint32_t entry_address = codegen_current_position(ctx);
     
-    // 计算参数数量
+    // 进入函数作用域
+    symtbl_enter_scope(ctx->symtbl);
+    
+    // 重置局部变量偏移（参数和局部变量一起计数）
+    symtbl_reset_local_offset(ctx->symtbl);
+    
+    // 注册参数到符号表并计数
     int32_t param_count = 0;
     ASTNode* param = func_decl->data.function_decl.params;
     while (param) {
-        param_count++;
+        if (param->type == AST_VAR_DECL) {
+            const char* param_name = param->data.var_decl.name;
+            TypeInfo* param_type = param->data.var_decl.type;
+            // 参数作为局部变量，偏移量从0开始
+            if (!symtbl_define_parameter(ctx->symtbl, param_name, param_type)) {
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                        "Cannot define parameter: %s", param_name);
+                ctx->error_code = ERR_NAME;
+                symtbl_leave_scope(ctx->symtbl);
+                return ERR_NAME;
+            }
+            param_count++;
+            ctx->local_var_count++;
+        }
         param = param->next;
     }
     
-    // 生成局部变量声明
+    // 注册局部变量到符号表（在生成初始化代码之前）
+    ASTNode* decl = func_decl->data.function_decl.declarations;
+    while (decl) {
+        if (decl->type == AST_VAR_DECL) {
+            const char* var_name = decl->data.var_decl.name;
+            TypeInfo* var_type = decl->data.var_decl.type;
+            bool is_const = decl->data.var_decl.is_const;
+            
+            if (!symtbl_define_variable(ctx->symtbl, var_name, var_type, is_const)) {
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                        "Cannot define local variable: %s", var_name);
+                ctx->error_code = ERR_NAME;
+                symtbl_leave_scope(ctx->symtbl);
+                return ERR_NAME;
+            }
+            ctx->local_var_count++;
+        }
+        decl = decl->next;
+    }
+    
+    // 生成局部变量初始化代码
     if (func_decl->data.function_decl.declarations) {
         ErrorCode err = generate_var_decls(ctx, func_decl->data.function_decl.declarations);
-        if (err != OK) return err;
+        if (err != OK) {
+            symtbl_leave_scope(ctx->symtbl);
+            return err;
+        }
     }
     
     // 生成函数体
     if (func_decl->data.function_decl.body) {
         ErrorCode err = generate_block(ctx, func_decl->data.function_decl.body, NULL);
-        if (err != OK) return err;
+        if (err != OK) {
+            symtbl_leave_scope(ctx->symtbl);
+            return err;
+        }
     }
     
     // 函数结束，如果没有显式return，添加隐式return
     codegen_emit(ctx, OP_RET, 0);
+    
+    // 离开函数作用域
+    symtbl_leave_scope(ctx->symtbl);
     
     // 添加函数到函数表
     // 提取返回类型
@@ -398,9 +455,10 @@ static ErrorCode generate_identifier(CodeGenContext* ctx, ASTNode* node) {
         return ERR_NAME;
     }
     
-    // LOAD指令：flags指示全局/局部
+    // LOAD指令：flags指示全局/局部，使用正确的索引/偏移
     uint8_t flags = sym->is_global ? 0x01 : 0x00;
-    codegen_emit_with_flags(ctx, OP_LOAD, flags, sym->offset);
+    uint16_t addr = sym->is_global ? sym->index : sym->offset;
+    codegen_emit_with_flags(ctx, OP_LOAD, flags, addr);
     
     return OK;
 }
@@ -480,62 +538,60 @@ static ErrorCode generate_function_call(CodeGenContext* ctx, ASTNode* node) {
         if (err != OK) return err;
     }
     
-    // 查找函数
+    // 首先检查符号表，判断是内部函数还是外部函数
+    Symbol* sym = symtbl_lookup(ctx->symtbl, node->data.function_call.name);
+    
+    // 检查是否是内部定义的函数（有地址）
     FunctionEntry* func = bytecode_find_function(ctx->module, node->data.function_call.name);
-    if (!func) {
-        // 可能是外部函数
-        // 在符号表中查找
-        Symbol* sym = symtbl_lookup(ctx->symtbl, node->data.function_call.name);
-        if (sym && sym->kind == SYM_FUNCTION) {
-            // 假设未找到的函数是外部函数
-            // 添加到函数表（如果还没有）
-            func = bytecode_find_function(ctx->module, node->data.function_call.name);
-            if (!func) {
-                // 添加到函数表
-                // 外部函数地址设为0，返回类型默认为VOID
-                uint32_t func_idx = bytecode_add_function(ctx->module,
-                                                          node->data.function_call.name,
-                                                          0,  // 外部函数地址为0
-                                                          node->data.function_call.arg_count,
-                                                          0,  // 无局部变量
-                                                          TYPE_VOID,  // 返回类型（简化为VOID）
-                                                          NULL);  // 无参数类型（简化）
-                if (func_idx == (uint32_t)-1) {
-                    ctx->error_code = ERR_RUNTIME;
-                    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                            "Failed to add external function: %s", node->data.function_call.name);
-                    return ERR_RUNTIME;
-                }
-                func = &ctx->module->functions[func_idx];
-            }
-            
-            // 发射CALL_EXT指令
-            // operand是函数索引，flags是参数个数
-            Instruction instr;
-            instr.opcode = OP_CALL_EXT;
-            instr.operand = func - ctx->module->functions;  // 函数索引
-            instr.flags = node->data.function_call.arg_count;
-            
-            if (ctx->module->instruction_count >= ctx->module->instruction_capacity) {
-                ctx->error_code = ERR_RUNTIME;
-                return ERR_RUNTIME;
-            }
-            ctx->module->instructions[ctx->module->instruction_count++] = instr;
-            
-            return OK;
-        }
-        
-        // 函数未定义
-        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                "Undefined function: %s", node->data.function_call.name);
-        ctx->error_code = ERR_NAME;
-        return ERR_NAME;
+    if (func && func->address != 0) {
+        // 这是一个内部函数（有实际地址）
+        uint32_t func_index = func - ctx->module->functions;
+        codegen_emit(ctx, OP_CALL, (uint16_t)func_index);
+        return OK;
     }
     
-    // 发射CALL指令，operand是函数地址
-    codegen_emit(ctx, OP_CALL, (uint16_t)func->address);
+    // 这是外部函数或未定义函数
+    if (sym && sym->kind == SYM_FUNCTION) {
+        // 确保函数在函数表中（用于 CALL_EXT 查找）
+        if (!func) {
+            // 添加到函数表
+            uint32_t func_idx = bytecode_add_function(ctx->module,
+                                                      node->data.function_call.name,
+                                                      0,  // 外部函数地址为0
+                                                      sym->param_count,
+                                                      0,  // 无局部变量
+                                                      TYPE_VOID,  // 返回类型
+                                                      NULL);  // 无参数类型
+            if (func_idx == (uint32_t)-1) {
+                ctx->error_code = ERR_RUNTIME;
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                        "Failed to add external function: %s", node->data.function_call.name);
+                return ERR_RUNTIME;
+            }
+            func = &ctx->module->functions[func_idx];
+        }
+        
+        // 发射CALL_EXT指令
+        uint32_t func_index = func - ctx->module->functions;
+        Instruction instr;
+        instr.opcode = OP_CALL_EXT;
+        instr.operand = func_index;  // 函数索引
+        instr.flags = node->data.function_call.arg_count;
+        
+        if (ctx->module->instruction_count >= ctx->module->instruction_capacity) {
+            ctx->error_code = ERR_RUNTIME;
+            return ERR_RUNTIME;
+        }
+        ctx->module->instructions[ctx->module->instruction_count++] = instr;
+        
+        return OK;
+    }
     
-    return OK;
+    // 函数未定义
+    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+            "Undefined function: %s", node->data.function_call.name);
+    ctx->error_code = ERR_NAME;
+    return ERR_NAME;
 }
 
 /**
@@ -567,25 +623,19 @@ static ErrorCode generate_array_access(CodeGenContext* ctx, ASTNode* node) {
     
     // 检查索引是否是字面量（编译时常量）
     if (node->data.array_access.index->type != AST_LITERAL) {
-        // 运行时数组索引需要更复杂的支持
-        // 当前版本：生成索引表达式，然后使用基址+偏移
+        // 运行时数组索引 - 使用 OP_LOAD_INDEXED
         
-        // 加载数组基址（变量索引）
-        codegen_emit(ctx, OP_PUSH, 
-                    bytecode_add_int_constant(ctx->module, array_sym->offset));
-        
-        // 计算索引
+        // 计算索引表达式并压入栈
         err = codegen_expr(ctx, node->data.array_access.index);
         if (err != OK) return err;
         
-        // 计算实际地址：base + index
-        codegen_emit(ctx, OP_ADD, 0);
+        // 发出 OP_LOAD_INDEXED 指令
+        // operand = 数组基地址，flags 标识全局/局部
+        uint8_t flags = array_sym->is_global ? FLAG_GLOBAL : 0x00;
+        uint16_t base_offset = array_sym->is_global ? array_sym->index : array_sym->offset;
+        codegen_emit_with_flags(ctx, OP_LOAD_INDEXED, flags, base_offset);
         
-        // 注意：这里需要一个"间接加载"指令，当前暂不支持
-        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                "Dynamic array indexing not yet fully implemented");
-        ctx->error_code = ERR_RUNTIME;
-        return ERR_RUNTIME;
+        return OK;
     }
     
     // 编译时常量索引
@@ -658,28 +708,91 @@ static ErrorCode generate_assign(CodeGenContext* ctx, ASTNode* node) {
     err = codegen_expr(ctx, node->data.assign.value);
     if (err != OK) return err;
     
-    // 获取左值（变量）
+    // 获取左值（变量或数组元素）
     ASTNode* target = node->data.assign.target;
-    if (target->type != AST_IDENTIFIER) {
+    
+    if (target->type == AST_IDENTIFIER) {
+        // 简单变量赋值
+        Symbol* sym = symtbl_lookup(ctx->symtbl, target->data.identifier.name);
+        if (!sym) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                    "Undefined variable: %s", target->data.identifier.name);
+            ctx->error_code = ERR_NAME;
+            return ERR_NAME;
+        }
+        
+        // 生成STORE指令
+        uint8_t flags = sym->is_global ? 0x01 : 0x00;
+        uint16_t addr = sym->is_global ? sym->index : sym->offset;
+        codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
+        
+        return OK;
+        
+    } else if (target->type == AST_ARRAY_ACCESS) {
+        // 数组元素赋值
+        
+        // 检查数组基址是否是标识符
+        if (target->data.array_access.array->type != AST_IDENTIFIER) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                    "Array base must be an identifier");
+            ctx->error_code = ERR_RUNTIME;
+            return ERR_RUNTIME;
+        }
+        
+        // 获取数组符号
+        const char* array_name = target->data.array_access.array->data.identifier.name;
+        Symbol* array_sym = symtbl_lookup(ctx->symtbl, array_name);
+        if (!array_sym) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                    "Undefined array: %s", array_name);
+            ctx->error_code = ERR_NAME;
+            return ERR_NAME;
+        }
+        
+        // 检查索引是否是字面量（编译时常量）
+        if (target->data.array_access.index->type == AST_LITERAL) {
+            // 编译时常量索引
+            Value idx_val = target->data.array_access.index->data.literal.value;
+            if (idx_val.type != TYPE_INT) {
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                        "Array index must be an integer");
+                ctx->error_code = ERR_TYPE;
+                return ERR_TYPE;
+            }
+            int32_t index = idx_val.int_val;
+            
+            // TODO: 检查数组边界（需要类型系统支持）
+            
+            // 计算实际变量偏移：base_offset + index
+            uint16_t offset = (array_sym->is_global ? array_sym->index : array_sym->offset) + index;
+            
+            // 生成STORE指令
+            uint8_t flags = array_sym->is_global ? 0x01 : 0x00;
+            codegen_emit_with_flags(ctx, OP_STORE, flags, offset);
+            
+            return OK;
+        } else {
+            // 运行时索引 - 使用 OP_STORE_INDEXED
+            // 栈布局：[... value, index]，其中 value 已经在栈上（之前计算的右值）
+            // 现在需要计算索引并将其也压入栈
+            err = codegen_expr(ctx, target->data.array_access.index);
+            if (err != OK) return err;
+            
+            // 发出 OP_STORE_INDEXED 指令
+            // operand = 数组基地址，flags 标识全局/局部
+            uint8_t flags = array_sym->is_global ? FLAG_GLOBAL : 0x00;
+            uint16_t base_offset = array_sym->is_global ? array_sym->index : array_sym->offset;
+            codegen_emit_with_flags(ctx, OP_STORE_INDEXED, flags, base_offset);
+            
+            return OK;
+        }
+        
+    } else {
         snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                "Assignment target must be identifier");
+                "Invalid assignment target");
         ctx->error_code = ERR_RUNTIME;
         return ERR_RUNTIME;
     }
-    
-    Symbol* sym = symtbl_lookup(ctx->symtbl, target->data.identifier.name);
-    if (!sym) {
-        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                "Undefined variable: %s", target->data.identifier.name);
-        ctx->error_code = ERR_NAME;
-        return ERR_NAME;
-    }
-    
-    // 生成STORE指令
-    uint8_t flags = sym->is_global ? 0x01 : 0x00;
-    codegen_emit_with_flags(ctx, OP_STORE, flags, sym->offset);
-    
-    return OK;
 }
 
 /**
@@ -793,13 +906,14 @@ static ErrorCode generate_for(CodeGenContext* ctx, ASTNode* node, LoopContext* p
     if (err != OK) return err;
     
     uint8_t flags = loop_var->is_global ? 0x01 : 0x00;
-    codegen_emit_with_flags(ctx, OP_STORE, flags, loop_var->offset);
+    uint16_t addr = loop_var->is_global ? loop_var->index : loop_var->offset;
+    codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
     
     // 循环开始
     int32_t loop_start = codegen_current_position(ctx);
     
     // 加载循环变量
-    codegen_emit_with_flags(ctx, OP_LOAD, flags, loop_var->offset);
+    codegen_emit_with_flags(ctx, OP_LOAD, flags, addr);
     
     // 加载结束值
     err = codegen_expr(ctx, node->data.for_stmt.end);
@@ -816,7 +930,7 @@ static ErrorCode generate_for(CodeGenContext* ctx, ASTNode* node, LoopContext* p
     if (err != OK) return err;
     
     // 更新循环变量：var := var + step
-    codegen_emit_with_flags(ctx, OP_LOAD, flags, loop_var->offset);
+    codegen_emit_with_flags(ctx, OP_LOAD, flags, addr);
     
     if (node->data.for_stmt.step) {
         err = codegen_expr(ctx, node->data.for_stmt.step);
@@ -831,7 +945,7 @@ static ErrorCode generate_for(CodeGenContext* ctx, ASTNode* node, LoopContext* p
     }
     
     codegen_emit(ctx, OP_ADD, 0);
-    codegen_emit_with_flags(ctx, OP_STORE, flags, loop_var->offset);
+    codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
     
     // 跳回循环开始
     codegen_emit(ctx, OP_JMP, loop_start);
