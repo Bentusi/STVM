@@ -489,7 +489,13 @@ ErrorCode vm_step(VM* vm) {
             
             CallFrame frame;
             frame.return_address = vm->pc;
-            frame.base_pointer = vm->sp - func->param_count + 1;
+            // 对于有参数的函数，base_pointer 指向第一个参数
+            // 对于无参数的函数，base_pointer 指向即将分配的第一个局部变量
+            if (func->param_count > 0) {
+                frame.base_pointer = vm->sp - func->param_count + 1;
+            } else {
+                frame.base_pointer = vm->sp + 1;
+            }
             frame.local_count = func->local_count;
             frame.function = func;
             
@@ -517,10 +523,20 @@ ErrorCode vm_step(VM* vm) {
             CallFrame frame = vm->call_stack[vm->call_sp--];
             vm->pc = frame.return_address;
             
-            // 清理局部变量（保留返回值）
-            Value return_val = (vm->sp >= 0) ? POP() : (Value){.type=TYPE_VOID};
+            // 获取返回值（函数名变量位于参数之后的第一个局部变量）
+            Value return_val = {.type = TYPE_VOID};
+            if (frame.function && frame.function->return_type != TYPE_VOID) {
+                // 返回值存储在 base_pointer + param_count 位置
+                int32_t return_var_pos = frame.base_pointer + frame.function->param_count;
+                if (return_var_pos <= vm->sp) {
+                    return_val = vm->stack[return_var_pos];
+                }
+            }
+            
+            // 清理局部变量和参数
             vm->sp = frame.base_pointer - 1;
             
+            // 将返回值压入栈顶
             if (return_val.type != TYPE_VOID) {
                 PUSH(return_val);
             }
@@ -886,10 +902,20 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
                 CallFrame frame = vm->call_stack[vm->call_sp--];
                 vm->pc = frame.return_address;
                 
-                // 清理局部变量（保留返回值）
-                Value return_val = (vm->sp >= 0) ? POP() : (Value){.type=TYPE_VOID};
+                // 获取返回值（函数名变量位于参数之后的第一个局部变量）
+                Value return_val = {.type = TYPE_VOID};
+                if (frame.function && frame.function->return_type != TYPE_VOID) {
+                    // 返回值存储在 base_pointer + param_count 位置
+                    int32_t return_var_pos = frame.base_pointer + frame.function->param_count;
+                    if (return_var_pos <= vm->sp) {
+                        return_val = vm->stack[return_var_pos];
+                    }
+                }
+                
+                // 清理局部变量和参数
                 vm->sp = frame.base_pointer - 1;
                 
+                // 将返回值压入栈顶
                 if (return_val.type != TYPE_VOID) {
                     PUSH(return_val);
                 }

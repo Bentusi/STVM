@@ -317,6 +317,21 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
         param = param->next;
     }
     
+    // 注册函数名作为返回值变量（IEC 61131-3 特性）
+    // 在参数之后定义
+    const char* func_name = func_decl->data.function_decl.name;
+    TypeInfo* return_type = func_sym->type->func_info.return_type;
+    if (!symtbl_define_variable(ctx->symtbl, func_name, return_type, false)) {
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                "Cannot define return value variable: %s", func_name);
+        ctx->error_code = ERR_NAME;
+        symtbl_leave_scope(ctx->symtbl);
+        return ERR_NAME;
+    }
+    // 记录返回值变量的 offset
+    int32_t return_var_offset = ctx->symtbl->local_var_offset - 1;  // 刚刚定义的变量
+    ctx->local_var_count++;
+    
     // 注册局部变量到符号表（在生成初始化代码之前）
     ASTNode* decl = func_decl->data.function_decl.declarations;
     while (decl) {
@@ -363,9 +378,9 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
     
     // 添加函数到函数表
     // 提取返回类型
-    DataType return_type = TYPE_VOID;
+    DataType ret_type = TYPE_VOID;
     if (func_decl->data.function_decl.return_type) {
-        return_type = func_decl->data.function_decl.return_type->base_type;
+        ret_type = func_decl->data.function_decl.return_type->base_type;
     }
     
     // 提取参数类型
@@ -381,8 +396,11 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
         }
     }
     
+    // 使用符号表的 local_var_offset 作为局部变量总数（已考虑数组大小）
+    int32_t total_local_vars = ctx->symtbl->local_var_offset;
+    
     bytecode_add_function(ctx->module, func_decl->data.function_decl.name, 
-                         entry_address, param_count, ctx->local_var_count, return_type, param_types);
+                         entry_address, param_count, total_local_vars, ret_type, param_types);
     
     // 释放参数类型数组
     if (param_types) {

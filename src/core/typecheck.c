@@ -164,6 +164,13 @@ ErrorCode typecheck_function(TypeChecker* checker, ASTNode* func_decl) {
         p = p->next;
     }
     
+    // 注册函数名作为返回值变量（IEC 61131-3 特性）
+    // 在参数之后定义
+    if (!symtbl_define_variable(checker->symtbl, func_name, return_type, false)) {
+        fprintf(stderr, "Type error: Cannot define return value variable '%s'\n", func_name);
+        checker->error_count++;
+    }
+    
     // 检查局部变量声明
     if (func_decl->data.function_decl.declarations) {
         ASTNode* decl = func_decl->data.function_decl.declarations;

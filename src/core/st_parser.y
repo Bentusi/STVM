@@ -50,7 +50,7 @@ ASTNode* parse_result = NULL;
 %token TOKEN_PROGRAM TOKEN_END_PROGRAM TOKEN_BEGIN
 %token TOKEN_FUNCTION TOKEN_END_FUNCTION
 %token TOKEN_PRINT
-%token TOKEN_VAR TOKEN_VAR_INPUT TOKEN_VAR_OUTPUT TOKEN_END_VAR
+%token TOKEN_VAR TOKEN_VAR_INPUT TOKEN_VAR_OUTPUT TOKEN_VAR_LOCAL TOKEN_END_VAR
 %token TOKEN_IF TOKEN_THEN TOKEN_ELSIF TOKEN_ELSE TOKEN_END_IF
 %token TOKEN_CASE TOKEN_OF TOKEN_END_CASE
 %token TOKEN_FOR TOKEN_TO TOKEN_BY TOKEN_DO TOKEN_END_FOR
@@ -318,10 +318,15 @@ function_params:
     }
     ;
 
-/* 函数局部变量（VAR块，可以有多个） */
+/* 函数局部变量（VAR_LOCAL块，可以有多个） */
 function_local_vars:
     /* 空 */ { $$ = NULL; }
-    | function_local_vars TOKEN_VAR var_decl_item TOKEN_END_VAR
+    | function_local_vars TOKEN_VAR_LOCAL TOKEN_END_VAR
+    {
+        // 空的 VAR_LOCAL 块
+        $$ = $1;
+    }
+    | function_local_vars TOKEN_VAR_LOCAL var_decl_item TOKEN_END_VAR
     {
         if ($1 == NULL) {
             $$ = $3;

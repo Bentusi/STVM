@@ -45,6 +45,7 @@ STRING      '([^'\n]|'')*'
 (?i:VAR)            { return TOKEN_VAR; }
 (?i:VAR_INPUT)      { return TOKEN_VAR_INPUT; }
 (?i:VAR_OUTPUT)     { return TOKEN_VAR_OUTPUT; }
+(?i:VAR_LOCAL)      { return TOKEN_VAR_LOCAL; }
 (?i:END_VAR)        { return TOKEN_END_VAR; }
 (?i:IF)             { return TOKEN_IF; }
 (?i:THEN)           { return TOKEN_THEN; }
