@@ -113,22 +113,19 @@ bool libmgr_add_search_path(LibraryManager* mgr, const char* path) {
 static char* find_library_file(LibraryManager* mgr, const char* filename) {
     static char fullpath[1024];
     
-    // 如果是绝对路径，直接返回
-    if (filename[0] == '/') {
-        FILE* f = fopen(filename, "rb");
-        if (f) {
-            fclose(f);
-            strncpy(fullpath, filename, 1023);
-            fullpath[1023] = '\0';
-            return fullpath;
-        }
-        return NULL;
+    // 首先尝试直接打开文件（可能是相对路径或绝对路径）
+    FILE* f = fopen(filename, "rb");
+    if (f) {
+        fclose(f);
+        strncpy(fullpath, filename, 1023);
+        fullpath[1023] = '\0';
+        return fullpath;
     }
     
     // 在搜索路径中查找
     for (int i = 0; i < mgr->search_path_count; i++) {
         snprintf(fullpath, sizeof(fullpath), "%s/%s", mgr->search_paths[i], filename);
-        FILE* f = fopen(fullpath, "rb");
+        f = fopen(fullpath, "rb");
         if (f) {
             fclose(f);
             return fullpath;
@@ -273,8 +270,8 @@ ErrorCode libmgr_load_library(LibraryManager* mgr, const char* filename) {
     lib->next = mgr->libraries;
     mgr->libraries = lib;
     
-    printf("[libmgr] Loaded library: %s (%u functions)\n", 
-           lib_name, module->function_count);
+    // printf("[libmgr] Loaded library: %s (%u functions)\n", 
+    //        lib_name, module->function_count);
     
     return OK;
 }
@@ -303,12 +300,18 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
                                 const char* symbol_name, const char* alias) {
     if (!mgr || !library_name || !symbol_name) return ERR_RUNTIME;
     
+    // 提取库名（去除路径和扩展名）
+    char* lib_name = extract_library_name(library_name);
+    
     // 查找库
-    LoadedLibrary* lib = libmgr_find_library(mgr, library_name);
+    LoadedLibrary* lib = libmgr_find_library(mgr, lib_name);
     if (!lib) {
         fprintf(stderr, "Error: Library not loaded: %s\n", library_name);
+        mmgr_free(lib_name);
         return ERR_NAME;
     }
+    
+    mmgr_free(lib_name);
     
     // 在库的符号表中查找符号
     Symbol* symbol = symtbl_lookup(lib->symbols, symbol_name);
@@ -320,6 +323,10 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
     
     // 使用的名称（别名或原名）
     const char* import_name = alias ? alias : symbol_name;
+    
+    // 构建完全限定名（library_path.symbol_name）
+    char qualified_name[512];
+    snprintf(qualified_name, sizeof(qualified_name), "%s.%s", library_name, symbol_name);
     
     // 检查是否已导入
     if (libmgr_find_import(mgr, import_name)) {
@@ -338,7 +345,7 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
     ImportedSymbol* import = (ImportedSymbol*)mmgr_alloc(sizeof(ImportedSymbol));
     if (!import) return ERR_OUT_OF_MEMORY;
     
-    import->name = mmgr_strdup(import_name);
+    import->name = mmgr_strdup(qualified_name);  // 使用完全限定名
     import->original_name = mmgr_strdup(symbol_name);
     import->library = lib;
     import->symbol = symbol;
@@ -346,13 +353,15 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
     mgr->imports = import;
     
     // 将符号注册到全局符号表
-    // 复制符号信息，增加类型引用计数
+    // 使用完全限定名，这样代码生成器会生成正确的函数名
     TypeInfo* type_copy = type_info_retain(symbol->type);
-    Symbol* global_sym = symtbl_define_variable(mgr->global_symtbl, import_name, 
+    Symbol* global_sym = symtbl_define_variable(mgr->global_symtbl, qualified_name, 
                                                  type_copy, false);
     if (global_sym) {
         global_sym->kind = symbol->kind;
         global_sym->address = symbol->address;
+        global_sym->param_count = symbol->param_count;
+        global_sym->local_count = symbol->local_count;
         global_sym->is_library = true;
         global_sym->library_name = mmgr_strdup(library_name);
     } else {
@@ -360,10 +369,10 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
         type_info_free(type_copy);
     }
     
-    printf("[libmgr] Imported: %s.%s%s\n", 
-           library_name, symbol_name, 
-           alias ? " as " : "");
-    if (alias) printf("%s\n", alias);
+    // printf("[libmgr] Imported: %s\n", qualified_name);
+    // if (alias) {
+    //     printf("         as %s\n", alias);
+    // }
     
     return OK;
 }
@@ -374,11 +383,17 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
 ErrorCode libmgr_import_all(LibraryManager* mgr, const char* library_name) {
     if (!mgr || !library_name) return ERR_RUNTIME;
     
-    LoadedLibrary* lib = libmgr_find_library(mgr, library_name);
+    // 提取库名（去除路径和扩展名）
+    char* lib_name = extract_library_name(library_name);
+    
+    LoadedLibrary* lib = libmgr_find_library(mgr, lib_name);
     if (!lib) {
         fprintf(stderr, "Error: Library not loaded: %s\n", library_name);
+        mmgr_free(lib_name);
         return ERR_NAME;
     }
+    
+    mmgr_free(lib_name);
     
     // 遍历库的符号表，导入所有符号
     // 注意：这里需要符号表提供遍历接口

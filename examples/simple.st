@@ -1,0 +1,5 @@
+PROGRAM SimpleTest
+VAR
+    x : INT := 42;
+END_VAR
+END_PROGRAM

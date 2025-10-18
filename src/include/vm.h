@@ -55,6 +55,9 @@ typedef struct VM {
     // 外部函数表
     struct ExternalFunction* external_functions;
     int32_t external_function_count;
+    
+    // 库管理器（用于查找导入的库函数）
+    struct LibraryManager* libmgr;
 } VM;
 
 /**
@@ -80,6 +83,13 @@ typedef struct ExternalFunction {
  * @return 虚拟机实例，失败返回NULL
  */
 VM* vm_create(BytecodeModule* module);
+
+/**
+ * @brief 设置虚拟机的库管理器
+ * @param vm 虚拟机实例
+ * @param libmgr 库管理器实例
+ */
+void vm_set_library_manager(VM* vm, struct LibraryManager* libmgr);
 
 /**
  * @brief 释放虚拟机实例

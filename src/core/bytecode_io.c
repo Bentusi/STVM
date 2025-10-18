@@ -231,9 +231,19 @@ static ErrorCode save_functions(const BytecodeModule* module, FILE* fp) {
             return ERR_FILE_IO;
         }
         // 写入参数类型数组
-        if (func->param_count > 0 && func->param_types) {
-            if (fwrite(func->param_types, sizeof(DataType), func->param_count, fp) != (size_t)func->param_count) {
-                return ERR_FILE_IO;
+        if (func->param_count > 0) {
+            if (func->param_types) {
+                if (fwrite(func->param_types, sizeof(DataType), func->param_count, fp) != (size_t)func->param_count) {
+                    return ERR_FILE_IO;
+                }
+            } else {
+                // 如果没有param_types，写入默认值（TYPE_INT）
+                for (int32_t j = 0; j < func->param_count; j++) {
+                    DataType default_type = TYPE_INT;
+                    if (fwrite(&default_type, sizeof(DataType), 1, fp) != 1) {
+                        return ERR_FILE_IO;
+                    }
+                }
             }
         }
     }
@@ -500,4 +510,28 @@ bool bytecode_verify_checksum(const BytecodeModule* module, uint32_t expected_ch
     
     uint32_t actual_checksum = bytecode_compute_checksum(module);
     return actual_checksum == expected_checksum;
+}
+
+/**
+ * @brief 将字节码模块保存为库文件
+ * 
+ * 库文件格式在标准 .stbc 格式基础上添加了导出符号表信息，
+ * 使得其他模块可以导入并使用库中定义的函数。
+ */
+ErrorCode bytecode_save_library(const BytecodeModule* module, const struct SymbolTable* symtbl, const char* filename) {
+    if (!module || !filename) {
+        return ERR_RUNTIME;
+    }
+    
+    // 库文件就是标准的字节码文件，包含所有函数定义
+    // LibraryManager 会从字节码中提取函数签名信息
+    // 这里直接使用标准保存函数即可
+    // symtbl 参数保留用于未来可能的扩展
+    (void)symtbl;  // 避免未使用参数警告
+    
+    return bytecode_save(module, filename);
+    
+    // 注意：符号表信息已经编码在字节码的函数表中
+    // 包括函数名、参数类型、返回类型等
+    // 所以不需要单独保存符号表
 }

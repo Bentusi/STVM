@@ -57,7 +57,7 @@ ASTNode* parse_result = NULL;
 %token TOKEN_WHILE TOKEN_END_WHILE
 %token TOKEN_REPEAT TOKEN_UNTIL TOKEN_END_REPEAT
 %token TOKEN_RETURN TOKEN_EXIT
-%token TOKEN_IMPORT TOKEN_AS
+%token TOKEN_IMPORT TOKEN_FROM TOKEN_AS
 
 %token TOKEN_BOOL TOKEN_INT TOKEN_REAL TOKEN_STRING TOKEN_ARRAY
 
@@ -110,9 +110,8 @@ program:
     statement_list
     TOKEN_END_PROGRAM
     {
-        // ast_create_program(name, declarations, functions, statements)
-        // 注意：import_list暂时被忽略，因为AST结构中没有单独的imports字段
-        $$ = ast_create_program($2, $4, $5, $6);
+        // ast_create_program(name, imports, declarations, functions, statements)
+        $$ = ast_create_program($2, $3, $4, $5, $6);
         parse_result = $$;
     }
     | TOKEN_PROGRAM TOKEN_IDENTIFIER
@@ -124,7 +123,7 @@ program:
     TOKEN_END_PROGRAM
     {
         // 带 BEGIN 的程序结构
-        $$ = ast_create_program($2, $4, $5, $7);
+        $$ = ast_create_program($2, $3, $4, $5, $7);
         parse_result = $$;
     }
     ;
@@ -146,18 +145,38 @@ import_list:
     ;
 
 import_decl:
+    /* IMPORT 'module.stbc'; - 导入整个库 */
     TOKEN_IMPORT TOKEN_STRING_LITERAL TOKEN_SEMICOLON
     {
-        // ast_create_import(module_name, symbols, symbol_count, aliases)
         $$ = ast_create_import($2, NULL, 0, NULL);
     }
+    /* IMPORT 'module.stbc' AS alias; - 导入库并使用前缀 */
     | TOKEN_IMPORT TOKEN_STRING_LITERAL TOKEN_AS TOKEN_IDENTIFIER TOKEN_SEMICOLON
     {
-        // 简化实现：使用别名作为单个符号导入
-        char** symbols = (char**)malloc(sizeof(char*));
-        symbols[0] = $4;
-        $$ = ast_create_import($2, symbols, 1, NULL);
+        // 使用别名作为模块别名（存在symbols[0]中）
+        char** symbols = (char**)malloc(sizeof(char*) * 1);
+        char** aliases = (char**)malloc(sizeof(char*) * 1);
+        symbols[0] = strdup("*");  // 特殊标记表示所有符号
+        aliases[0] = $4;
+        $$ = ast_create_import($2, symbols, 1, aliases);
     }
+    /* IMPORT func FROM 'module.stbc'; - 导入单个函数 */
+    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_FROM TOKEN_STRING_LITERAL TOKEN_SEMICOLON
+    {
+        char** symbols = (char**)malloc(sizeof(char*) * 1);
+        symbols[0] = $2;
+        $$ = ast_create_import($4, symbols, 1, NULL);
+    }
+    /* IMPORT func AS alias FROM 'module.stbc'; - 导入带别名 */
+    | TOKEN_IMPORT TOKEN_IDENTIFIER TOKEN_AS TOKEN_IDENTIFIER TOKEN_FROM TOKEN_STRING_LITERAL TOKEN_SEMICOLON
+    {
+        char** symbols = (char**)malloc(sizeof(char*) * 1);
+        char** aliases = (char**)malloc(sizeof(char*) * 1);
+        symbols[0] = $2;
+        aliases[0] = $4;
+        $$ = ast_create_import($6, symbols, 1, aliases);
+    }
+    /* TODO: 支持多个符号导入 IMPORT func1, func2 FROM 'module.stbc'; */
     ;
 
 /* 变量声明列表 */

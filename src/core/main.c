@@ -229,15 +229,30 @@ int cli_compile(const CliOptions* options) {
         return 1;
     }
     
+    // 创建库管理器
+    LibraryManager* libmgr = libmgr_create(symtbl);
+    if (!libmgr) {
+        fprintf(stderr, "错误：无法创建库管理器\n");
+        symtbl_free(symtbl);
+        ast_free_node(parse_result);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    // 添加库搜索路径
+    libmgr_add_search_path(libmgr, ".");
+    libmgr_add_search_path(libmgr, "examples");
+    
     // 类型检查
     if (options->verbose) {
         printf("开始类型检查...\n");
     }
     
     TypeChecker typechecker;
-    ErrorCode err = typecheck_init(&typechecker, symtbl);
+    ErrorCode err = typecheck_init(&typechecker, symtbl, libmgr);
     if (err != OK) {
         fprintf(stderr, "错误：无法创建类型检查器\n");
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -248,6 +263,7 @@ int cli_compile(const CliOptions* options) {
     if (err != OK) {
         fprintf(stderr, "错误：类型检查失败\n");
         typecheck_cleanup(&typechecker);
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -264,6 +280,7 @@ int cli_compile(const CliOptions* options) {
     BytecodeModule* module = bytecode_module_create();
     if (!module) {
         fprintf(stderr, "错误：无法创建字节码模块\n");
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -279,6 +296,7 @@ int cli_compile(const CliOptions* options) {
     if (!codegen) {
         fprintf(stderr, "错误：无法创建代码生成器\n");
         bytecode_module_free(module);
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -290,6 +308,7 @@ int cli_compile(const CliOptions* options) {
         fprintf(stderr, "错误：代码生成失败: %s\n", codegen->error_msg);
         codegen_free(codegen);
         bytecode_module_free(module);
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -352,6 +371,7 @@ int cli_compile(const CliOptions* options) {
     
     // 清理
     bytecode_module_free(module);
+    libmgr_free(libmgr);
     symtbl_free(symtbl);
     ast_free_node(parse_result);
     mmgr_cleanup();
@@ -521,10 +541,25 @@ int cli_compile_and_run(const CliOptions* options) {
         return 1;
     }
     
+    // 创建库管理器（用于处理IMPORT语句）
+    LibraryManager* libmgr = libmgr_create(symtbl);
+    if (!libmgr) {
+        fprintf(stderr, "错误：无法创建库管理器\n");
+        symtbl_free(symtbl);
+        ast_free_node(parse_result);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    // 添加库搜索路径
+    libmgr_add_search_path(libmgr, ".");      // 当前目录
+    libmgr_add_search_path(libmgr, "examples"); // examples目录
+    
     TypeChecker typechecker;
-    ErrorCode err = typecheck_init(&typechecker, symtbl);
+    ErrorCode err = typecheck_init(&typechecker, symtbl, libmgr);
     if (err != OK) {
         fprintf(stderr, "错误：无法创建类型检查器\n");
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -535,6 +570,7 @@ int cli_compile_and_run(const CliOptions* options) {
     if (err != OK) {
         fprintf(stderr, "错误：类型检查失败\n");
         typecheck_cleanup(&typechecker);
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -555,6 +591,7 @@ int cli_compile_and_run(const CliOptions* options) {
     BytecodeModule* module = bytecode_module_create();
     if (!module) {
         fprintf(stderr, "错误：无法创建字节码模块\n");
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -565,6 +602,7 @@ int cli_compile_and_run(const CliOptions* options) {
     if (!codegen) {
         fprintf(stderr, "错误：无法创建代码生成器\n");
         bytecode_module_free(module);
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -576,6 +614,7 @@ int cli_compile_and_run(const CliOptions* options) {
         fprintf(stderr, "错误：代码生成失败: %s\n", codegen->error_msg);
         codegen_free(codegen);
         bytecode_module_free(module);
+        libmgr_free(libmgr);
         symtbl_free(symtbl);
         ast_free_node(parse_result);
         mmgr_cleanup();
@@ -607,9 +646,13 @@ int cli_compile_and_run(const CliOptions* options) {
     if (!vm) {
         fprintf(stderr, "错误：无法创建虚拟机\n");
         bytecode_module_free(module);
+        libmgr_free(libmgr);
         mmgr_cleanup();
         return 1;
     }
+    
+    // 设置库管理器（用于运行时查找库函数）
+    vm_set_library_manager(vm, libmgr);
     
     // 调试模式
     if (options->debug) {
@@ -653,6 +696,7 @@ int cli_compile_and_run(const CliOptions* options) {
     // 清理
     vm_free(vm);
     bytecode_module_free(module);
+    libmgr_free(libmgr);
     mmgr_cleanup();
     
     return exit_code;

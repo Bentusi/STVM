@@ -13,6 +13,7 @@
 #include "vm.h"
 #include "mmgr.h"
 #include "builtins.h"
+#include "libmgr.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,12 +101,24 @@ VM* vm_create(BytecodeModule* module) {
     vm->external_functions = NULL;
     vm->external_function_count = 0;
     
+    // 初始化库管理器（默认为NULL）
+    vm->libmgr = NULL;
+    
     // 注册内置函数
     if (!builtins_register_all(vm)) {
         fprintf(stderr, "警告：内置函数注册失败\n");
     }
     
     return vm;
+}
+
+/**
+ * @brief 设置虚拟机的库管理器
+ */
+void vm_set_library_manager(VM* vm, struct LibraryManager* libmgr) {
+    if (vm) {
+        vm->libmgr = libmgr;
+    }
 }
 
 /**
@@ -561,6 +574,110 @@ ErrorCode vm_step(VM* vm) {
             }
             
             const char* func_name = vm->module->functions[func_idx].name;
+            
+            // 首先尝试作为库函数查找
+            // 库函数名格式：<library_path>.stbc.<function_name>
+            if (vm->libmgr && strstr(func_name, ".stbc.")) {
+                // 提取真实函数名（最后一个点之后）
+                const char* real_name = strrchr(func_name, '.');
+                if (real_name) {
+                    real_name++;  // 跳过点号
+                    
+                    // 提取库文件路径（.stbc. 之前的部分）
+                    char lib_path[256];
+                    const char* stbc_pos = strstr(func_name, ".stbc.");
+                    size_t lib_path_len = stbc_pos - func_name + 5; // 包含 ".stbc"
+                    if (lib_path_len < sizeof(lib_path)) {
+                        strncpy(lib_path, func_name, lib_path_len);
+                        lib_path[lib_path_len] = '\0';
+                        
+                        // 从库管理器查找库
+                        LoadedLibrary* lib = vm->libmgr->libraries;
+                        while (lib) {
+                            // 检查路径是否匹配（lib->path 可能是完整路径，检查是否以 lib_path 结尾）
+                            bool path_match = false;
+                            size_t lib_full_path_len = strlen(lib->path);
+                            if (lib_full_path_len >= lib_path_len) {
+                                // 检查结尾是否匹配
+                                const char* path_end = lib->path + (lib_full_path_len - lib_path_len);
+                                if (strcmp(path_end, lib_path) == 0) {
+                                    path_match = true;
+                                }
+                            }
+                            
+                            if (path_match) {
+                                // 找到库，搜索函数
+                                for (uint32_t i = 0; i < lib->module->function_count; i++) {
+                                    if (strcmp(lib->module->functions[i].name, real_name) == 0) {
+                                        FunctionEntry* lib_func = &lib->module->functions[i];
+                                        
+                                        // 检查是否有函数实现
+                                        if (lib_func->address > 0 && lib_func->address < lib->module->instruction_count) {
+                                            // 找到了库函数实现，创建调用帧
+                                            CHECK_STACK(argc);
+                                            
+                                            if (vm->call_sp + 1 >= vm->call_stack_size) {
+                                                vm->error_code = ERR_STACK_OVERFLOW;
+                                                snprintf(vm->error_msg, sizeof(vm->error_msg),
+                                                        "Call stack overflow at PC=%u", vm->pc-1);
+                                                return ERR_STACK_OVERFLOW;
+                                            }
+                                            
+                                            CallFrame* frame = &vm->call_stack[++vm->call_sp];
+                                            frame->return_address = vm->pc;
+                                            frame->base_pointer = vm->sp - argc + 1;
+                                            frame->local_count = lib_func->local_count;
+                                            frame->function = lib_func;
+                                            
+                                            // 为局部变量分配空间
+                                            for (int32_t j = 0; j < lib_func->local_count; j++) {
+                                                Value local = {.type = TYPE_INT, .int_val = 0};
+                                                PUSH(local);
+                                            }
+                                            
+                                            // 临时保存当前模块和PC
+                                            BytecodeModule* saved_module = vm->module;
+                                            uint32_t saved_pc = vm->pc;
+                                            
+                                            // 切换到库模块
+                                            vm->module = lib->module;
+                                            vm->pc = lib_func->address;
+                                            
+                                            // 执行库函数直到返回
+                                            bool lib_call_complete = false;
+                                            while (!lib_call_complete && vm->running) {
+                                                ErrorCode err = vm_step(vm);
+                                                if (err != OK) {
+                                                    // 恢复原模块
+                                                    vm->module = saved_module;
+                                                    return err;
+                                                }
+                                                
+                                                // 检查是否返回（调用栈已弹出）
+                                                if (vm->call_sp < (int32_t)(saved_module == vm->module ? 
+                                                    vm->call_stack[0].function->local_count : 0)) {
+                                                    lib_call_complete = true;
+                                                }
+                                            }
+                                            
+                                            // 恢复原模块和PC
+                                            vm->module = saved_module;
+                                            vm->pc = saved_pc;
+                                            
+                                            goto call_ext_done;
+                                        }
+                                        break;
+                                    }
+                                }
+                                break;
+                            }
+                            lib = lib->next;
+                        }
+                    }
+                }
+            }
+            
+            // 如果不是库函数或未找到，尝试作为C外部函数
             ExternalFunction* ext_func = find_external_function(vm, func_name);
             
             if (!ext_func) {
@@ -594,6 +711,7 @@ ErrorCode vm_step(VM* vm) {
                 PUSH(result);
             }
             
+        call_ext_done:
             break;
         }
         
@@ -942,6 +1060,106 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
                 }
                 
                 const char* func_name = vm->module->functions[func_idx].name;
+                
+                // 首先尝试作为库函数查找
+                // 库函数名格式：<library_path>.stbc.<function_name>
+                if (vm->libmgr && strstr(func_name, ".stbc.")) {
+                    // 提取真实函数名（最后一个点之后）
+                    const char* real_name = strrchr(func_name, '.');
+                    if (real_name) {
+                        real_name++;  // 跳过点号
+                        
+                        // 提取库文件路径（.stbc. 之前的部分）
+                        char lib_path[256];
+                        const char* stbc_pos = strstr(func_name, ".stbc.");
+                        size_t lib_path_len = stbc_pos - func_name + 5; // 包含 ".stbc"
+                        if (lib_path_len < sizeof(lib_path)) {
+                            strncpy(lib_path, func_name, lib_path_len);
+                            lib_path[lib_path_len] = '\0';
+                            
+                            // 从库管理器查找库
+                            LoadedLibrary* lib = vm->libmgr->libraries;
+                            while (lib) {
+                                // 检查路径是否匹配（lib->path 可能是完整路径，检查是否以 lib_path 结尾）
+                                bool path_match = false;
+                                size_t lib_full_path_len = strlen(lib->path);
+                                if (lib_full_path_len >= lib_path_len) {
+                                    // 检查结尾是否匹配
+                                    const char* path_end = lib->path + (lib_full_path_len - lib_path_len);
+                                    if (strcmp(path_end, lib_path) == 0) {
+                                        path_match = true;
+                                    }
+                                }
+                                
+                                if (path_match) {
+                                    // 找到库，搜索函数
+                                    for (uint32_t i = 0; i < lib->module->function_count; i++) {
+                                        if (strcmp(lib->module->functions[i].name, real_name) == 0) {
+                                            FunctionEntry* lib_func = &lib->module->functions[i];
+                                            
+                                            // 检查是否有函数实现（地址 >= 0 就行，因为库函数地址从0开始也有效）
+                                            if (lib_func->address < lib->module->instruction_count) {
+                                                // 找到了库函数实现，创建调用帧
+                                                CHECK_STACK(argc);
+                                                
+                                                if (vm->call_sp + 1 >= vm->call_stack_size) {
+                                                    vm->error_code = ERR_STACK_OVERFLOW;
+                                                    snprintf(vm->error_msg, sizeof(vm->error_msg),
+                                                            "Call stack overflow at PC=%u", vm->pc-1);
+                                                    return ERR_STACK_OVERFLOW;
+                                                }
+                                                
+                                                CallFrame* frame = &vm->call_stack[++vm->call_sp];
+                                                frame->return_address = vm->pc;
+                                                frame->base_pointer = vm->sp - argc + 1;
+                                                frame->local_count = lib_func->local_count;
+                                                frame->function = lib_func;
+                                                
+                                                // 为局部变量分配空间
+                                                for (int32_t j = 0; j < lib_func->local_count; j++) {
+                                                    Value local = {.type = TYPE_INT, .int_val = 0};
+                                                    PUSH(local);
+                                                }
+                                                
+                                                // 临时保存当前模块和PC
+                                                BytecodeModule* saved_module = vm->module;
+                                                uint32_t saved_pc = vm->pc;
+                                                int32_t saved_call_sp = vm->call_sp;
+                                                
+                                                // 切换到库模块
+                                                vm->module = lib->module;
+                                                vm->pc = lib_func->address;
+                                                
+                                                // 执行库函数直到返回
+                                                while (vm->running && vm->call_sp >= saved_call_sp) {
+                                                    if (vm->pc >= vm->module->instruction_count) break;
+                                                    ErrorCode err = vm_step(vm);
+                                                    if (err != OK) {
+                                                        // 恢复原模块
+                                                        vm->module = saved_module;
+                                                        return err;
+                                                    }
+                                                }
+                                                
+                                                // 恢复原模块和PC
+                                                vm->module = saved_module;
+                                                vm->pc = saved_pc;
+                                                
+                                                // 成功调用库函数，跳过后面的外部函数查找
+                                                goto call_ext_done_run;
+                                            }
+                                            break;
+                                        }
+                                    }
+                                    break;
+                                }
+                                lib = lib->next;
+                            }
+                        }
+                    }
+                }
+                
+                // 如果不是库函数或未找到，尝试作为C外部函数
                 ExternalFunction* ext_func = find_external_function(vm, func_name);
                 
                 if (!ext_func) {
@@ -976,6 +1194,7 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
                     PUSH(result);
                 }
                 
+            call_ext_done_run:
                 break;
             }
             

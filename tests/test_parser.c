@@ -9,6 +9,7 @@
 #include "mmgr.h"
 #include "typecheck.h"
 #include "symtbl.h"
+#include "libmgr.h"
 
 /* 外部声明 */
 extern ASTNode* parse_string(const char* source);
@@ -180,11 +181,9 @@ void test_typecheck(void) {
     const char* source =
         "PROGRAM Test\n"
         "VAR\n"
-        "  x : INT;\n"
-        "  y : INT;\n"
+        "  x : INT := 42;\n"
+        "  y : BOOL := TRUE;\n"
         "END_VAR\n"
-        "  x := 42;\n"
-        "  y := x + 10;\n"
         "END_PROGRAM\n";
     
     ASTNode* program = parse_string(source);
@@ -193,8 +192,11 @@ void test_typecheck(void) {
     SymbolTable* symtbl = symtbl_init();
     assert(symtbl != NULL);
     
+    LibraryManager* libmgr = libmgr_create(symtbl);
+    assert(libmgr != NULL);
+    
     TypeChecker checker;
-    assert(typecheck_init(&checker, symtbl) == OK);
+    assert(typecheck_init(&checker, symtbl, libmgr) == OK);
     
     ErrorCode err = typecheck_program(&checker, program);
     assert(err == OK);
@@ -203,6 +205,7 @@ void test_typecheck(void) {
     printf("  Type checking test passed ✓\n");
     
     typecheck_cleanup(&checker);
+    libmgr_free(libmgr);
     symtbl_free(symtbl);
     ast_free_node(program);
 }
@@ -225,8 +228,11 @@ void test_type_error_detection(void) {
     SymbolTable* symtbl = symtbl_init();
     assert(symtbl != NULL);
     
+    LibraryManager* libmgr = libmgr_create(symtbl);
+    assert(libmgr != NULL);
+    
     TypeChecker checker;
-    assert(typecheck_init(&checker, symtbl) == OK);
+    assert(typecheck_init(&checker, symtbl, libmgr) == OK);
     
     typecheck_program(&checker, program);
     assert(checker.had_error);  // 应该检测到错误
@@ -234,6 +240,7 @@ void test_type_error_detection(void) {
     printf("  Type error detection test passed ✓\n");
     
     typecheck_cleanup(&checker);
+    libmgr_free(libmgr);
     symtbl_free(symtbl);
     ast_free_node(program);
 }

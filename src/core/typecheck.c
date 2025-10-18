@@ -14,12 +14,13 @@ static TypeInfo* check_statement(TypeChecker* checker, ASTNode* stmt);
 static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr);
 static TypeInfo* check_statement_list(TypeChecker* checker, ASTNode* stmt);
 
-ErrorCode typecheck_init(TypeChecker* checker, SymbolTable* symtbl) {
+ErrorCode typecheck_init(TypeChecker* checker, SymbolTable* symtbl, LibraryManager* libmgr) {
     if (!checker || !symtbl) {
         return ERR_TYPE;
     }
     
     checker->symtbl = symtbl;
+    checker->libmgr = libmgr;
     checker->current_function = NULL;
     checker->error_count = 0;
     
@@ -55,6 +56,58 @@ ErrorCode typecheck_program(TypeChecker* checker, ASTNode* program) {
     if (program->type != AST_PROGRAM) {
         fprintf(stderr, "Type error: Expected program node\n");
         return ERR_TYPE;
+    }
+    
+    // 处理导入
+    if (program->data.program.imports && checker->libmgr) {
+        ASTNode* import = program->data.program.imports;
+        while (import) {
+            if (import->type == AST_IMPORT) {
+                const char* module = import->data.import.module_name;
+                char** symbols = import->data.import.symbols;
+                int count = import->data.import.symbol_count;
+                char** aliases = import->data.import.aliases;
+                
+                // 加载库
+                ErrorCode err = libmgr_load_library(checker->libmgr, module);
+                if (err != OK) {
+                    fprintf(stderr, "Type error: Failed to load library '%s'\n", module);
+                    checker->error_count++;
+                    import = import->next;
+                    continue;
+                }
+                
+                // 导入符号
+                if (symbols == NULL || count == 0) {
+                    // 导入所有符号
+                    err = libmgr_import_all(checker->libmgr, module);
+                    if (err != OK) {
+                        fprintf(stderr, "Type error: Failed to import from library '%s'\n", module);
+                        checker->error_count++;
+                    }
+                } else {
+                    // 导入指定符号
+                    for (int i = 0; i < count; i++) {
+                        const char* symbol = symbols[i];
+                        const char* alias = (aliases && aliases[i]) ? aliases[i] : NULL;
+                        
+                        // 检查是否是模块别名（"*"）
+                        if (strcmp(symbol, "*") == 0 && alias) {
+                            // 这是模块别名，暂时跳过（需要在libmgr中实现）
+                            printf("[typecheck] Module alias not yet implemented: %s\n", alias);
+                        } else {
+                            err = libmgr_import_symbol(checker->libmgr, module, symbol, alias);
+                            if (err != OK) {
+                                fprintf(stderr, "Type error: Failed to import symbol '%s' from '%s'\n", 
+                                        symbol, module);
+                                checker->error_count++;
+                            }
+                        }
+                    }
+                }
+            }
+            import = import->next;
+        }
     }
     
     // 检查声明
@@ -464,6 +517,23 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             // 函数调用
             const char* func_name = expr->data.function_call.name;
             Symbol* func_sym = symtbl_lookup(checker->symtbl, func_name);
+            
+            // 如果在本地符号表中没找到，尝试从导入的符号中查找
+            if (!func_sym && checker->libmgr) {
+                ImportedSymbol* import = checker->libmgr->imports;
+                while (import) {
+                    // 检查原始名是否匹配
+                    if (strcmp(import->original_name, func_name) == 0) {
+                        func_sym = import->symbol;
+                        // 重要：将AST中的函数名替换为完全限定名
+                        // 这样代码生成器会使用正确的名称
+                        mmgr_free((void*)expr->data.function_call.name);
+                        expr->data.function_call.name = mmgr_strdup(import->name);
+                        break;
+                    }
+                    import = import->next;
+                }
+            }
             
             if (!func_sym) {
                 fprintf(stderr, "Type error: Undefined function '%s'\n", func_name);

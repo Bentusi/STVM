@@ -68,6 +68,7 @@ STRING      '([^'\n]|'')*'
 (?i:RETURN)         { return TOKEN_RETURN; }
 (?i:EXIT)           { return TOKEN_EXIT; }
 (?i:IMPORT)         { return TOKEN_IMPORT; }
+(?i:FROM)           { return TOKEN_FROM; }
 (?i:AS)             { return TOKEN_AS; }
 
     /* 数据类型关键字 */

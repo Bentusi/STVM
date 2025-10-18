@@ -27,7 +27,7 @@ void test_simple_expression(void) {
     ASTNode* add = ast_create_binary_op(BINOP_ADD, lit2, lit3);
     
     // 创建程序节点
-    ASTNode* program = ast_create_program("test", NULL, NULL, add);
+    ASTNode* program = ast_create_program("test", NULL, NULL, NULL, add);
     
     // 创建字节码模块和符号表
     BytecodeModule* module = bytecode_module_create();
@@ -85,7 +85,7 @@ void test_variable_assignment(void) {
     ASTNode* ident_x = ast_create_identifier("x");
     ASTNode* assign = ast_create_assign(ident_x, lit42);
     
-    ASTNode* program = ast_create_program("test", NULL, NULL, assign);
+    ASTNode* program = ast_create_program("test", NULL, NULL, NULL, assign);
     
     // 生成代码
     BytecodeModule* module = bytecode_module_create();
@@ -154,7 +154,7 @@ void test_if_statement(void) {
     ASTNode* else_stmt = ast_create_assign(y_else, lit0_else);
     
     ASTNode* if_stmt = ast_create_if(condition, then_stmt, else_stmt);
-    ASTNode* program = ast_create_program("test", NULL, NULL, if_stmt);
+    ASTNode* program = ast_create_program("test", NULL, NULL, NULL, if_stmt);
     
     // 生成代码
     BytecodeModule* module = bytecode_module_create();
@@ -210,7 +210,7 @@ void test_while_loop(void) {
     ASTNode* assign = ast_create_assign(x2, sub);
     
     ASTNode* while_stmt = ast_create_while(condition, assign);
-    ASTNode* program = ast_create_program("test", NULL, NULL, while_stmt);
+    ASTNode* program = ast_create_program("test", NULL, NULL, NULL, while_stmt);
     
     // 生成代码
     BytecodeModule* module = bytecode_module_create();
@@ -243,7 +243,7 @@ void test_bytecode_save_load(void) {
     val42.type = TYPE_INT;
     val42.int_val = 42;
     ASTNode* lit = ast_create_literal(val42);
-    ASTNode* program = ast_create_program("test", NULL, NULL, lit);
+    ASTNode* program = ast_create_program("test", NULL, NULL, NULL, lit);
     
     BytecodeModule* module1 = bytecode_module_create();
     SymbolTable* symtbl = symtbl_init();

@@ -10,11 +10,13 @@
 
 #include "ast.h"
 #include "symtbl.h"
+#include "libmgr.h"
 #include "error.h"
 
 // 类型检查器上下文
 typedef struct {
     SymbolTable* symtbl;        // 符号表
+    LibraryManager* libmgr;     // 库管理器
     Symbol* current_function;   // 当前函数（用于检查return）
     int error_count;            // 错误计数
     bool had_error;             // 是否有错误
@@ -24,9 +26,10 @@ typedef struct {
  * @brief 初始化类型检查器
  * @param checker 类型检查器指针
  * @param symtbl 符号表指针
+ * @param libmgr 库管理器指针
  * @return 错误码
  */
-ErrorCode typecheck_init(TypeChecker* checker, SymbolTable* symtbl);
+ErrorCode typecheck_init(TypeChecker* checker, SymbolTable* symtbl, LibraryManager* libmgr);
 
 /**
  * @brief 清理类型检查器资源

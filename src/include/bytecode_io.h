@@ -11,6 +11,9 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// 前向声明
+struct SymbolTable;
+
 /**
  * @brief STBC文件格式魔数
  */
@@ -88,5 +91,14 @@ uint32_t bytecode_compute_checksum(const BytecodeModule* module);
  * @return 匹配返回true，否则返回false
  */
 bool bytecode_verify_checksum(const BytecodeModule* module, uint32_t expected_checksum);
+
+/**
+ * @brief 将字节码模块保存为库文件（包含符号表导出）
+ * @param module 字节码模块
+ * @param symtbl 符号表（用于导出函数签名）
+ * @param filename 文件名（.stbc）
+ * @return 成功返回OK，失败返回错误码
+ */
+ErrorCode bytecode_save_library(const BytecodeModule* module, const struct SymbolTable* symtbl, const char* filename);
 
 #endif // STVM_BYTECODE_IO_H

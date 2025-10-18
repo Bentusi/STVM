@@ -59,11 +59,12 @@ static ASTNode* ast_create_node(ASTNodeType type) {
 /**
  * @brief 创建程序节点
  */
-ASTNode* ast_create_program(const char* name, ASTNode* declarations, ASTNode* functions, ASTNode* statements) {
+ASTNode* ast_create_program(const char* name, ASTNode* imports, ASTNode* declarations, ASTNode* functions, ASTNode* statements) {
     ASTNode* node = ast_create_node(AST_PROGRAM);
     if (!node) return NULL;
     
     node->data.program.name = name ? mmgr_strdup(name) : NULL;
+    node->data.program.imports = imports;
     node->data.program.var_decls = declarations;
     node->data.program.functions = functions;
     node->data.program.body = statements;

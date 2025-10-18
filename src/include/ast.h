@@ -94,9 +94,10 @@ typedef union {
     // 程序节点
     struct {
         char* name;                 // 程序名
+        ASTNode* imports;           // 导入语句列表
         ASTNode* var_decls;         // 变量声明列表
         ASTNode* functions;         // 函数列表
-        ASTNode* body;        // 主程序语句
+        ASTNode* body;              // 主程序语句
     } program;
     
     // 变量声明
@@ -223,7 +224,7 @@ struct ASTNode {
 /**
  * @brief 创建程序节点
  */
-ASTNode* ast_create_program(const char* name, ASTNode* declarations, ASTNode* functions, ASTNode* statements);
+ASTNode* ast_create_program(const char* name, ASTNode* imports, ASTNode* declarations, ASTNode* functions, ASTNode* statements);
 
 /**
  * @brief 创建变量声明节点
