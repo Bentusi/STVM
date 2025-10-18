@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "types.h"
+#include "error.h"
 
 /**
  * @brief 操作码枚举（精简到28个核心指令）
@@ -270,9 +271,18 @@ uint32_t bytecode_current_position(BytecodeModule* module);
 void bytecode_disassemble_instruction(Instruction instr, char* buffer, size_t size);
 
 /**
- * @brief 打印字节码模块（调试用）
+ * @brief 打印字节码模块(调试用)
  * @param module 字节码模块
  */
 void bytecode_print_module(BytecodeModule* module);
+
+/**
+ * @brief 将库模块合并到主模块(静态链接)
+ * @param main 主模块
+ * @param library 库模块
+ * @param library_name 库名(用于限定符)
+ * @return 错误码
+ */
+ErrorCode bytecode_merge_library(BytecodeModule* main, BytecodeModule* library, const char* library_name);
 
 #endif // STVM_BYTECODE_H

@@ -511,3 +511,62 @@ void libmgr_dump_imports(LibraryManager* mgr) {
     printf("Total: %d symbols\n", count);
     printf("========================\n");
 }
+
+/**
+ * @brief 获取已加载库的数量
+ */
+uint32_t libmgr_get_library_count(LibraryManager* mgr) {
+    if (!mgr) return 0;
+    
+    uint32_t count = 0;
+    LoadedLibrary* lib = mgr->libraries;
+    while (lib) {
+        count++;
+        lib = lib->next;
+    }
+    return count;
+}
+
+/**
+ * @brief 根据索引获取库名称
+ */
+const char* libmgr_get_library_name(LibraryManager* mgr, uint32_t index) {
+    if (!mgr) return NULL;
+    
+    uint32_t i = 0;
+    LoadedLibrary* lib = mgr->libraries;
+    while (lib) {
+        if (i == index) {
+            return lib->name;
+        }
+        i++;
+        lib = lib->next;
+    }
+    return NULL;
+}
+
+/**
+ * @brief 获取库的字节码模块
+ */
+BytecodeModule* libmgr_get_library_module(LibraryManager* mgr, const char* name) {
+    if (!mgr || !name) return NULL;
+    
+    LoadedLibrary* lib = libmgr_find_library(mgr, name);
+    if (lib) {
+        return lib->module;
+    }
+    return NULL;
+}
+
+/**
+ * @brief 获取库的完整路径
+ */
+const char* libmgr_get_library_path(LibraryManager* mgr, const char* name) {
+    if (!mgr || !name) return NULL;
+    
+    LoadedLibrary* lib = libmgr_find_library(mgr, name);
+    if (lib) {
+        return lib->path;
+    }
+    return NULL;
+}

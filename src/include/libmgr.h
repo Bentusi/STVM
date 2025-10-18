@@ -142,4 +142,35 @@ void libmgr_dump_libraries(LibraryManager* mgr);
  */
 void libmgr_dump_imports(LibraryManager* mgr);
 
+/**
+ * @brief 获取已加载库的数量
+ * @param mgr 库管理器实例
+ * @return 库数量
+ */
+uint32_t libmgr_get_library_count(LibraryManager* mgr);
+
+/**
+ * @brief 根据索引获取库名称
+ * @param mgr 库管理器实例
+ * @param index 索引（0到count-1）
+ * @return 库名称，索引无效返回NULL
+ */
+const char* libmgr_get_library_name(LibraryManager* mgr, uint32_t index);
+
+/**
+ * @brief 获取库的字节码模块
+ * @param mgr 库管理器实例
+ * @param name 库名称
+ * @return 字节码模块指针，未找到返回NULL
+ */
+BytecodeModule* libmgr_get_library_module(LibraryManager* mgr, const char* name);
+
+/**
+ * @brief 获取库的完整路径
+ * @param mgr 库管理器实例
+ * @param name 库名称
+ * @return 库路径，未找到返回NULL
+ */
+const char* libmgr_get_library_path(LibraryManager* mgr, const char* name);
+
 #endif // STVM_LIBMGR_H

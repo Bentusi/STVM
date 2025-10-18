@@ -505,3 +505,203 @@ void bytecode_print_module(BytecodeModule* module) {
     
     printf("======================\n\n");
 }
+
+/**
+ * @brief 将库模块合并到主模块(静态链接)
+ * 
+ * 合并过程:
+ * 1. 合并常量池 - 库常量添加到主模块,更新库指令中的常量索引
+ * 2. 合并函数表 - 库函数添加到主模块,更新地址偏移
+ * 3. 合并指令流 - 库指令追加到主模块,更新跳转地址和调用地址
+ * 4. 更新外部调用 - 将主模块中的 CALL_EXT 改为 CALL
+ */
+ErrorCode bytecode_merge_library(BytecodeModule* main, BytecodeModule* library, const char* library_name) {
+    if (!main || !library || !library_name) {
+        return ERR_RUNTIME;
+    }
+    
+    // 保存当前主模块的偏移量,用于地址重定位
+    uint32_t func_offset = main->function_count;
+    uint32_t instr_offset = main->instruction_count;
+    
+    // === 1. 合并常量池 - 建立索引映射 ===
+    // 分配索引映射表 (库常量索引 -> 主模块常量索引)
+    uint32_t* const_map = (uint32_t*)mmgr_alloc(sizeof(uint32_t) * library->const_count);
+    if (!const_map) {
+        return ERR_OUT_OF_MEMORY;
+    }
+    
+    for (uint32_t i = 0; i < library->const_count; i++) {
+        Constant* lib_const = &library->constants[i];
+        uint32_t new_idx;
+        
+        switch (lib_const->type) {
+            case CONST_INT:
+                new_idx = bytecode_add_int_constant(main, lib_const->int_val);
+                break;
+            case CONST_REAL:
+                new_idx = bytecode_add_real_constant(main, lib_const->real_val);
+                break;
+            case CONST_BOOL:
+                new_idx = bytecode_add_bool_constant(main, lib_const->bool_val);
+                break;
+            case CONST_STRING:
+                new_idx = bytecode_add_string_constant(main, lib_const->string_val);
+                break;
+            default:
+                mmgr_free(const_map);
+                return ERR_INVALID_BYTECODE;
+        }
+        
+        // 记录索引映射
+        const_map[i] = new_idx;
+    }
+    
+    // === 2. 合并函数表 ===
+    for (uint32_t i = 0; i < library->function_count; i++) {
+        FunctionEntry* lib_func = &library->functions[i];
+        
+        // 构建完全限定名 (例如: mathlib::Add)
+        char qualified_name[256];
+        snprintf(qualified_name, sizeof(qualified_name), "%s::%s", library_name, lib_func->name);
+        
+        // 添加函数,地址需要重定位
+        uint32_t new_address = lib_func->address + instr_offset;
+        uint32_t new_idx = bytecode_add_function(
+            main,
+            qualified_name,
+            new_address,
+            lib_func->param_count,
+            lib_func->local_count,
+            lib_func->return_type,
+            lib_func->param_types
+        );
+        
+        // 验证索引连续性
+        if (new_idx != func_offset + i) {
+            fprintf(stderr, "Error: Function index mismatch during merge\n");
+            return ERR_INVALID_BYTECODE;
+        }
+    }
+    
+    // === 3. 合并指令流 ===
+    // 先扩展指令数组容量
+    uint32_t new_instr_count = main->instruction_count + library->instruction_count;
+    if (new_instr_count > main->instruction_capacity) {
+        uint32_t new_capacity = main->instruction_capacity;
+        while (new_capacity < new_instr_count) {
+            new_capacity *= 2;
+        }
+        Instruction* new_instructions = (Instruction*)mmgr_realloc(
+            main->instructions,
+            sizeof(Instruction) * new_capacity
+        );
+        if (!new_instructions) {
+            return ERR_OUT_OF_MEMORY;
+        }
+        main->instructions = new_instructions;
+        main->instruction_capacity = new_capacity;
+    }
+    
+    // 复制并重定位库指令
+    for (uint32_t i = 0; i < library->instruction_count; i++) {
+        Instruction instr = library->instructions[i];
+        Opcode op = instr.opcode;
+        uint16_t operand = instr.operand;
+        uint8_t flags = instr.flags;
+        
+        // 根据操作码类型重定位操作数
+        switch (op) {
+            case OP_PUSH:
+                // 常量索引需要使用映射表重定位
+                if (operand < library->const_count) {
+                    operand = const_map[operand];
+                }
+                break;
+                
+            case OP_CALL:
+                // 函数索引需要重定位
+                operand += func_offset;
+                break;
+                
+            case OP_JMP:
+            case OP_JZ:
+            case OP_JNZ:
+                // 跳转地址需要重定位
+                operand += instr_offset;
+                break;
+                
+            case OP_CALL_EXT:
+                // 外部调用需要转换为普通调用
+                // 函数索引已经在函数表合并时处理
+                operand += func_offset;
+                op = OP_CALL;  // 改为普通CALL
+                break;
+                
+            // 其他指令不需要重定位
+            default:
+                break;
+        }
+        
+        // 创建重定位后的指令
+        main->instructions[instr_offset + i].opcode = op;
+        main->instructions[instr_offset + i].flags = flags;
+        main->instructions[instr_offset + i].operand = operand;
+    }
+    
+    main->instruction_count = new_instr_count;
+    
+    // 释放映射表
+    mmgr_free(const_map);
+    
+    // === 4. 更新主模块中的外部调用 ===
+    // 遍历主模块原有指令,将对库函数的 CALL_EXT 改为 CALL,并修正函数索引
+    size_t lib_name_len = strlen(library_name);
+    for (uint32_t i = 0; i < instr_offset; i++) {
+        Instruction* instr = &main->instructions[i];
+        Opcode op = instr->opcode;
+        
+        if (op == OP_CALL_EXT) {
+            uint16_t old_func_idx = instr->operand;
+            
+            // 检查是否是对库函数的调用
+            if (old_func_idx < func_offset) {  // 只检查主模块原有的函数
+                FunctionEntry* func = &main->functions[old_func_idx];
+                
+                // 检查函数名是否以库路径为前缀 (例如 "examples/mathlib.stbc.")
+                // 限定名格式: library_path.symbol_name
+                if (strncmp(func->name, library_name, lib_name_len) == 0 &&
+                    func->name[lib_name_len] == '.') {
+                    // 这是对库函数的调用,需要找到合并后的实际函数索引
+                    // 主模块中的名称: "examples/mathlib.stbc.Power"
+                    // 合并后的名称: "examples/mathlib.stbc::Power"
+                    const char* symbol_name = func->name + lib_name_len + 1;  // 跳过 "."
+                    
+                    // 查找合并后的函数
+                    bool found = false;
+                    for (uint32_t j = func_offset; j < main->function_count; j++) {
+                        FunctionEntry* lib_func = &main->functions[j];
+                        
+                        // 构建期望的名称: library_path::symbol_name
+                        char expected_name[512];
+                        snprintf(expected_name, sizeof(expected_name), "%s::%s", library_name, symbol_name);
+                        
+                        if (strcmp(lib_func->name, expected_name) == 0) {
+                            // 找到匹配的函数,更新指令
+                            instr->opcode = OP_CALL;
+                            instr->operand = j;
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found) {
+                        fprintf(stderr, "Warning: Cannot find library function for '%s'\n", func->name);
+                    }
+                }
+            }
+        }
+    }
+    
+    return OK;
+}

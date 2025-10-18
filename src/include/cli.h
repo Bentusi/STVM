@@ -39,6 +39,7 @@ typedef struct {
     bool dump_bytecode;             // 打印字节码
     bool statistics;                // 显示统计信息
     bool compile_library;           // 编译为库文件
+    bool static_link;               // 静态链接库（将库代码合并到输出）
     char* library_paths[16];        // 库搜索路径
     int library_path_count;         // 库路径数量
 } CliOptions;

@@ -77,6 +77,8 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
             options->dump_bytecode = true;
         } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--stats") == 0) {
             options->statistics = true;
+        } else if (strcmp(argv[i], "--static") == 0) {
+            options->static_link = true;
         } else if (strcmp(argv[i], "-L") == 0) {
             if (i + 1 < argc && options->library_path_count < 16) {
                 options->library_paths[options->library_path_count++] = argv[++i];
@@ -146,6 +148,7 @@ void cli_print_help(void) {
     printf("  -V, --verbose           详细输出\n");
     printf("  -O, --optimize          启用优化\n");
     printf("  -s, --stats             显示统计信息\n");
+    printf("  --static                静态链接库（将库代码合并到输出）\n");
     printf("  -L <path>               添加库搜索路径\n");
     printf("  --dump-ast              打印抽象语法树\n");
     printf("  --dump-bytecode         打印字节码\n\n");
@@ -320,6 +323,48 @@ int cli_compile(const CliOptions* options) {
     }
     
     codegen_free(codegen);
+    
+    // 静态链接库(如果启用)
+    if (options->static_link) {
+        if (options->verbose) {
+            printf("开始静态链接库...\n");
+        }
+        
+        // 获取所有已加载的库
+        uint32_t lib_count = libmgr_get_library_count(libmgr);
+        
+        if (lib_count > 0) {
+            for (uint32_t i = 0; i < lib_count; i++) {
+                const char* lib_name = libmgr_get_library_name(libmgr, i);
+                const char* lib_path = libmgr_get_library_path(libmgr, lib_name);
+                BytecodeModule* lib_module = libmgr_get_library_module(libmgr, lib_name);
+                
+                if (lib_module && lib_path) {
+                    if (options->verbose) {
+                        printf("  合并库: %s (%u 函数, %u 指令)\n", 
+                               lib_name, lib_module->function_count, lib_module->instruction_count);
+                    }
+                    
+                    // 使用库路径而不是名称来匹配函数前缀
+                    err = bytecode_merge_library(module, lib_module, lib_path);
+                    if (err != OK) {
+                        fprintf(stderr, "警告：合并库 '%s' 失败\n", lib_name);
+                    }
+                } else {
+                    fprintf(stderr, "警告：无法获取库模块 '%s'\n", lib_name);
+                }
+            }
+            
+            if (options->verbose) {
+                printf("静态链接完成，最终: %u 函数, %u 指令\n",
+                       module->function_count, module->instruction_count);
+            }
+        } else {
+            if (options->verbose) {
+                printf("没有库需要链接\n");
+            }
+        }
+    }
     
     // 打印字节码（如果需要）
     if (options->dump_bytecode) {
