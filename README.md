@@ -380,6 +380,91 @@ make help
 
 详细说明请查看 `examples/README.md`。
 
+## 内置函数
+
+STVM 提供以下内置函数：
+
+### 1. PRINT - 格式化输出
+
+**功能**: 格式化输出数据到标准输出
+
+**语法**: 
+```st
+PRINT(format_string [, arg1, arg2, ...]);
+```
+
+**格式说明符**:
+- `%d` - 整数 (INT)
+- `%f` - 浮点数 (REAL)
+- `%s` - 字符串 (STRING)
+- `%b` - 布尔值 (BOOL)
+- `%%` - 字面 % 符号
+
+**转义序列**:
+- `\n` - 换行
+- `\t` - 制表符
+- `\r` - 回车
+- `\\` - 反斜杠
+
+**示例**:
+```st
+PRINT('Hello, World!\n');
+PRINT('x = %d, y = %f\n', 42, 3.14);
+PRINT('Status: %b\n', TRUE);
+```
+
+### 2. SYSTEM - 调用系统命令
+
+**功能**: 执行操作系统命令并返回退出状态码
+
+**语法**:
+```st
+result := SYSTEM(command_string);
+```
+
+**参数**:
+- `command_string` (STRING) - 要执行的系统命令
+
+**返回值**:
+- `INT` - 命令的退出状态码
+  - `0` : 成功
+  - 非零值 : 失败（具体含义取决于命令）
+  - `-1` : SYSTEM 调用失败
+
+**示例**:
+```st
+VAR
+    exit_code: INT;
+END_VAR
+
+(* 执行简单命令 *)
+exit_code := SYSTEM('echo Hello from STVM!');
+
+(* 文件操作 *)
+exit_code := SYSTEM('mkdir -p /tmp/test');
+IF exit_code = 0 THEN
+    PRINT('Directory created successfully\n');
+END_IF;
+
+(* 列出文件 *)
+exit_code := SYSTEM('ls -la');
+
+(* 管道和重定向 *)
+exit_code := SYSTEM('date > timestamp.txt');
+```
+
+**安全注意**:
+- ⚠️ 避免使用不可信的输入构造命令
+- ⚠️ 命令以当前用户权限执行
+- ⚠️ 注意跨平台命令差异（Linux/Windows）
+
+**支持平台**:
+- ✅ Linux/Unix (使用 `/bin/sh`)
+- ✅ Windows (使用 `cmd.exe`)
+- ✅ macOS (使用默认 shell)
+
+详细文档和更多示例请查看 [SYSTEM_FUNCTION_COMPLETION.md](SYSTEM_FUNCTION_COMPLETION.md)。
+
 ## 调试器使用
 
 调试器支持以下命令：

@@ -31,6 +31,13 @@ ErrorCode typecheck_init(TypeChecker* checker, SymbolTable* symtbl) {
         print_sym->param_count = -1;  // -1 表示可变参数
     }
     
+    // 注册内置函数 SYSTEM (1个参数：STRING，返回 INT)
+    TypeInfo* int_type = type_info_create(TYPE_INT);
+    Symbol* system_sym = symtbl_define_function(symtbl, "SYSTEM", int_type, NULL, 1);
+    if (system_sym) {
+        system_sym->param_count = 1;  // 1个参数
+    }
+    
     return OK;
 }
 

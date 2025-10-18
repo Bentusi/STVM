@@ -6,6 +6,10 @@
 #include "builtins.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#ifndef _WIN32
+#include <sys/wait.h>
+#endif
 #include "vm.h"
 
 /**
@@ -139,6 +143,58 @@ Value builtin_print(VM* vm, int32_t argc) {
 }
 
 /**
+ * @brief SYSTEM 函数实现
+ * 
+ * 调用操作系统命令并返回退出状态码
+ * 使用 system() C 标准库函数执行命令
+ */
+Value builtin_system(VM* vm, int32_t argc) {
+    Value result = {.type = TYPE_INT, .int_val = -1};
+    
+    // 检查参数个数
+    if (argc != 1) {
+        fprintf(stderr, "SYSTEM: 需要恰好1个参数（命令字符串）\n");
+        return result;
+    }
+    
+    // 获取命令字符串参数
+    Value cmd_val = vm_get_arg(vm, 0);
+    if (cmd_val.type != TYPE_STRING || !cmd_val.string_val) {
+        fprintf(stderr, "SYSTEM: 参数必须是字符串类型\n");
+        return result;
+    }
+    
+    const char* command = cmd_val.string_val;
+    
+    // 执行系统命令
+    int exit_code = system(command);
+    
+    // 在 POSIX 系统上，system() 返回值需要通过 WEXITSTATUS 宏提取
+    // 成功通常是 0，失败是非 0
+#ifdef _WIN32
+    // Windows: 直接返回退出码
+    result.int_val = exit_code;
+#else
+    // POSIX: 需要检查返回值
+    if (exit_code == -1) {
+        // system() 调用失败
+        fprintf(stderr, "SYSTEM: 无法执行命令 '%s'\n", command);
+        result.int_val = -1;
+    } else {
+        // 提取实际的退出状态
+        if (WIFEXITED(exit_code)) {
+            result.int_val = WEXITSTATUS(exit_code);
+        } else {
+            // 进程异常终止
+            result.int_val = -1;
+        }
+    }
+#endif
+    
+    return result;
+}
+
+/**
  * @brief 注册所有内置函数到虚拟机
  */
 bool builtins_register_all(VM* vm) {
@@ -146,6 +202,11 @@ bool builtins_register_all(VM* vm) {
     
     // 注册 PRINT 函数（可变参数，使用 -1 表示）
     if (!vm_register_external_function(vm, "PRINT", builtin_print, -1)) {
+        return false;
+    }
+    
+    // 注册 SYSTEM 函数（1个参数）
+    if (!vm_register_external_function(vm, "SYSTEM", builtin_system, 1)) {
         return false;
     }
     

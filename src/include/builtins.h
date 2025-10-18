@@ -42,4 +42,20 @@ bool builtins_register_all(VM* vm);
  */
 Value builtin_print(VM* vm, int32_t argc);
 
+/**
+ * @brief SYSTEM 函数 - 调用操作系统命令
+ * 
+ * 执行系统命令并返回退出状态码
+ * 
+ * 用法示例：
+ *   result := SYSTEM('ls -l');
+ *   result := SYSTEM('echo Hello World');
+ *   result := SYSTEM('mkdir test_dir');
+ * 
+ * @param vm 虚拟机实例
+ * @param argc 参数个数（必须为1个：命令字符串）
+ * @return TYPE_INT - 命令的退出状态码（0表示成功）
+ */
+Value builtin_system(VM* vm, int32_t argc);
+
 #endif // STVM_BUILTINS_H
