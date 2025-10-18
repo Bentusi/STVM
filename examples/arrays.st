@@ -2,7 +2,7 @@
 
 PROGRAM Arrays
 VAR
-    numbers : ARRAY[9] OF INT;
+    numbers : ARRAY[0..9] OF INT;
     sum : INT := 0;
     max : INT;
     i : INT;
@@ -17,6 +17,7 @@ END_VAR
     FOR i := 0 TO 9 DO
         sum := sum + numbers[i];
     END_FOR;
+    PRINT('Sum of array elements = %d (expected 450)\n', sum);
     
     (* 查找最大值 *)
     max := numbers[0];
@@ -25,4 +26,5 @@ END_VAR
             max := numbers[i];
         END_IF;
     END_FOR;
+    PRINT('Max of array elements = %d (expected 90)\n', max);
 END_PROGRAM
