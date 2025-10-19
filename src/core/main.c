@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <getopt.h>
 
 // 版本信息
 #define STVM_VERSION_MAJOR 1
@@ -42,50 +43,102 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
         return true; // 显示帮助
     }
     
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
-            options->mode = MODE_HELP;
-            return true;
-        } else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0) {
-            options->mode = MODE_VERSION;
-            return true;
-        } else if (strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--compile") == 0) {
-            options->mode = MODE_COMPILE;
-            if (i + 1 < argc) {
-                options->input_file = argv[++i];
-            }
-        } else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--run") == 0) {
-            options->mode = MODE_RUN;
-            if (i + 1 < argc) {
-                options->input_file = argv[++i];
-            }
-        } else if (strcmp(argv[i], "-i") == 0 || strcmp(argv[i], "--repl") == 0) {
-            options->mode = MODE_REPL;
-        } else if (strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--output") == 0) {
-            if (i + 1 < argc) {
-                options->output_file = argv[++i];
-            }
-        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
-            options->debug = true;
-        } else if (strcmp(argv[i], "-V") == 0 || strcmp(argv[i], "--verbose") == 0) {
-            options->verbose = true;
-        } else if (strcmp(argv[i], "-O") == 0 || strcmp(argv[i], "--optimize") == 0) {
-            options->optimize = true;
-        } else if (strcmp(argv[i], "--dump-ast") == 0) {
-            options->dump_ast = true;
-        } else if (strcmp(argv[i], "--dump-bytecode") == 0) {
-            options->dump_bytecode = true;
-        } else if (strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--stats") == 0) {
-            options->statistics = true;
-        } else if (strcmp(argv[i], "--static") == 0) {
-            options->static_link = true;
-        } else if (strcmp(argv[i], "-L") == 0) {
-            if (i + 1 < argc && options->library_path_count < 16) {
-                options->library_paths[options->library_path_count++] = argv[++i];
-            }
-        } else if (options->input_file == NULL) {
-            options->input_file = argv[i];
+    // 定义长选项
+    static struct option long_options[] = {
+        {"help",          no_argument,       0, 'h'},
+        {"version",       no_argument,       0, 'v'},
+        {"compile",       required_argument, 0, 'c'},
+        {"run",           required_argument, 0, 'r'},
+        {"repl",          no_argument,       0, 'i'},
+        {"output",        required_argument, 0, 'o'},
+        {"debug",         no_argument,       0, 'd'},
+        {"verbose",       no_argument,       0, 'V'},
+        {"optimize",      no_argument,       0, 'O'},
+        {"dump-ast",      no_argument,       0, 'A'},
+        {"dump-bytecode", no_argument,       0, 'B'},
+        {"stats",         no_argument,       0, 's'},
+        {"static",        no_argument,       0, 'S'},
+        {0, 0, 0, 0}
+    };
+    
+    int option_index = 0;
+    int c;
+    
+    // 解析选项
+    while ((c = getopt_long(argc, argv, "hvc:r:io:dVOsL:", long_options, &option_index)) != -1) {
+        switch (c) {
+            case 'h':
+                options->mode = MODE_HELP;
+                return true;
+                
+            case 'v':
+                options->mode = MODE_VERSION;
+                return true;
+                
+            case 'c':
+                options->mode = MODE_COMPILE;
+                options->input_file = optarg;
+                break;
+                
+            case 'r':
+                options->mode = MODE_RUN;
+                options->input_file = optarg;
+                break;
+                
+            case 'i':
+                options->mode = MODE_REPL;
+                break;
+                
+            case 'o':
+                options->output_file = optarg;
+                break;
+                
+            case 'd':
+                options->debug = true;
+                break;
+                
+            case 'V':
+                options->verbose = true;
+                break;
+                
+            case 'O':
+                options->optimize = true;
+                break;
+                
+            case 'A':
+                options->dump_ast = true;
+                break;
+                
+            case 'B':
+                options->dump_bytecode = true;
+                break;
+                
+            case 's':
+                options->statistics = true;
+                break;
+                
+            case 'S':
+                options->static_link = true;
+                break;
+                
+            case 'L':
+                if (options->library_path_count < 16) {
+                    options->library_paths[options->library_path_count++] = optarg;
+                }
+                break;
+                
+            case '?':
+                // getopt_long 已经打印了错误消息
+                return false;
+                
+            default:
+                return false;
         }
+    }
+    
+    // 处理非选项参数（输入文件）
+    if (optind < argc) {
+        options->input_file = argv[optind];
     }
     
     // 自动检测模式：如果没有显式指定模式且提供了输入文件
@@ -167,6 +220,8 @@ void cli_print_help(void) {
  */
 void cli_print_version(void) {
     printf("STVM v%d.%d.%d\n", STVM_VERSION_MAJOR, STVM_VERSION_MINOR, STVM_VERSION_PATCH);
+    printf("Copyright (c) 2025 JIANG Wei\n");
+    printf("Designed and Developed by JIANG Wei\n");
     printf("IEC 61131-3 Structured Text Compiler and Virtual Machine\n");
     printf("Built on %s %s\n", __DATE__, __TIME__);
 }
