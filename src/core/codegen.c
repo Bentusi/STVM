@@ -680,8 +680,15 @@ static ErrorCode generate_function_call(CodeGenContext* ctx, ASTNode* node) {
     // 首先检查符号表，判断是内部函数还是外部函数
     Symbol* sym = symtbl_lookup(ctx->symtbl, node->data.function_call.name);
     
+    // 获取函数名（对于库函数使用完全限定名）
+    const char* func_name = node->data.function_call.name;
+    if (sym && sym->is_library && sym->qualified_name) {
+        // 这是导入的库函数，使用完全限定名
+        func_name = sym->qualified_name;
+    }
+    
     // 检查是否是内部定义的函数（有地址）
-    FunctionEntry* func = bytecode_find_function(ctx->module, node->data.function_call.name);
+    FunctionEntry* func = bytecode_find_function(ctx->module, func_name);
     if (func && func->address != 0) {
         // 这是一个内部函数（有实际地址）
         uint32_t func_index = func - ctx->module->functions;
@@ -693,9 +700,9 @@ static ErrorCode generate_function_call(CodeGenContext* ctx, ASTNode* node) {
     if (sym && sym->kind == SYM_FUNCTION) {
         // 确保函数在函数表中（用于 CALL_EXT 查找）
         if (!func) {
-            // 添加到函数表
+            // 添加到函数表（使用完全限定名）
             uint32_t func_idx = bytecode_add_function(ctx->module,
-                                                      node->data.function_call.name,
+                                                      func_name,  // 使用完全限定名
                                                       0,  // 外部函数地址为0
                                                       sym->param_count,
                                                       0,  // 无局部变量
@@ -704,7 +711,7 @@ static ErrorCode generate_function_call(CodeGenContext* ctx, ASTNode* node) {
             if (func_idx == (uint32_t)-1) {
                 ctx->error_code = ERR_RUNTIME;
                 snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                        "Failed to add external function: %s", node->data.function_call.name);
+                        "Failed to add external function: %s", func_name);
                 return ERR_RUNTIME;
             }
             func = &ctx->module->functions[func_idx];
