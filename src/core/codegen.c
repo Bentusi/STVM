@@ -200,11 +200,42 @@ static ErrorCode generate_program(CodeGenContext* ctx, ASTNode* program) {
         if (err != OK) return err;
     }
     
+    // 1.5. 生成函数内定义的全局变量的初始化代码
+    ASTNode* func = program->data.program.functions;
+    while (func) {
+        if (func->type == AST_FUNCTION_DECL && func->data.function_decl.declarations) {
+            ASTNode* decl = func->data.function_decl.declarations;
+            while (decl) {
+                if (decl->type == AST_VAR_DECL && decl->data.var_decl.is_global && 
+                    decl->data.var_decl.initializer) {
+                    // 生成初始化表达式
+                    err = codegen_expr(ctx, decl->data.var_decl.initializer);
+                    if (err != OK) return err;
+                    
+                    // 查找符号并生成STORE指令
+                    Symbol* sym = symtbl_lookup(ctx->symtbl, decl->data.var_decl.name);
+                    if (!sym) {
+                        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                                "Undefined global variable: %s", decl->data.var_decl.name);
+                        ctx->error_code = ERR_NAME;
+                        return ERR_NAME;
+                    }
+                    
+                    uint8_t flags = 0x01;  // 全局变量标志
+                    uint16_t addr = sym->index;
+                    codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
+                }
+                decl = decl->next;
+            }
+        }
+        func = func->next;
+    }
+    
     // 2. 发射跳转指令跳过函数定义到主程序体
     int32_t jump_to_main = codegen_emit(ctx, OP_JMP, 0);
     
     // 3. 生成函数定义
-    ASTNode* func = program->data.program.functions;
+    func = program->data.program.functions;
     while (func) {
         err = codegen_function(ctx, func);
         if (err != OK) return err;
@@ -235,6 +266,13 @@ static ErrorCode generate_var_decls(CodeGenContext* ctx, ASTNode* var_decls) {
     
     while (decl) {
         if (decl->type == AST_VAR_DECL) {
+            // 跳过函数内定义的全局变量的初始化
+            // 这些变量应该在程序初始化阶段统一处理
+            if (ctx->current_function && decl->data.var_decl.is_global) {
+                decl = decl->next;
+                continue;
+            }
+            
             // 如果有初始化表达式，生成代码
             if (decl->data.var_decl.initializer) {
                 ErrorCode err = codegen_expr(ctx, decl->data.var_decl.initializer);
@@ -333,9 +371,10 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
     ctx->local_var_count++;
     
     // 注册局部变量到符号表（在生成初始化代码之前）
+    // 跳过全局变量（is_global=true），它们已在类型检查阶段添加到全局符号表
     ASTNode* decl = func_decl->data.function_decl.declarations;
     while (decl) {
-        if (decl->type == AST_VAR_DECL) {
+        if (decl->type == AST_VAR_DECL && !decl->data.var_decl.is_global) {
             const char* var_name = decl->data.var_decl.name;
             TypeInfo* var_type = decl->data.var_decl.type;
             bool is_const = decl->data.var_decl.is_const;

@@ -207,6 +207,33 @@ ErrorCode typecheck_function(TypeChecker* checker, ASTNode* func_decl) {
     Symbol* prev_func = checker->current_function;
     checker->current_function = func_sym;
     
+    // 先处理函数内的全局变量声明（VAR块）—— 在进入作用域之前
+    if (func_decl->data.function_decl.declarations) {
+        ASTNode* decl = func_decl->data.function_decl.declarations;
+        while (decl) {
+            if (decl->type == AST_VAR_DECL && decl->data.var_decl.is_global) {
+                const char* name = decl->data.var_decl.name;
+                TypeInfo* type = decl->data.var_decl.type;
+                bool is_const = decl->data.var_decl.is_const;
+                
+                // 在全局作用域定义变量
+                if (!symtbl_define_variable(checker->symtbl, name, type, is_const)) {
+                    fprintf(stderr, "Type error: Cannot define global variable '%s' in function\n", name);
+                    checker->error_count++;
+                }
+                
+                if (decl->data.var_decl.initializer) {
+                    TypeInfo* init_type = check_expression(checker, decl->data.var_decl.initializer);
+                    if (init_type && !type_info_can_convert(type, init_type)) {
+                        fprintf(stderr, "Type error: Cannot initialize variable '%s' with incompatible type\n", name);
+                        checker->error_count++;
+                    }
+                }
+            }
+            decl = decl->next;
+        }
+    }
+    
     // 进入函数作用域
     symtbl_enter_scope(checker->symtbl);
     
@@ -231,15 +258,16 @@ ErrorCode typecheck_function(TypeChecker* checker, ASTNode* func_decl) {
         checker->error_count++;
     }
     
-    // 检查局部变量声明
+    // 处理局部变量声明（VAR_LOCAL块）
     if (func_decl->data.function_decl.declarations) {
         ASTNode* decl = func_decl->data.function_decl.declarations;
         while (decl) {
-            if (decl->type == AST_VAR_DECL) {
+            if (decl->type == AST_VAR_DECL && !decl->data.var_decl.is_global) {
                 const char* name = decl->data.var_decl.name;
                 TypeInfo* type = decl->data.var_decl.type;
                 bool is_const = decl->data.var_decl.is_const;
                 
+                // 在当前（函数）作用域定义变量
                 if (!symtbl_define_variable(checker->symtbl, name, type, is_const)) {
                     fprintf(stderr, "Type error: Cannot define local variable '%s'\n", name);
                     checker->error_count++;

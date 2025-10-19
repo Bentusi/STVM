@@ -75,7 +75,7 @@ ASTNode* ast_create_program(const char* name, ASTNode* imports, ASTNode* declara
 /**
  * @brief 创建变量声明节点
  */
-ASTNode* ast_create_var_decl(const char* name, TypeInfo* type, ASTNode* initializer, bool is_const) {
+ASTNode* ast_create_var_decl(const char* name, TypeInfo* type, ASTNode* initializer, bool is_const, bool is_global) {
     ASTNode* node = ast_create_node(AST_VAR_DECL);
     if (!node) return NULL;
     
@@ -83,6 +83,7 @@ ASTNode* ast_create_var_decl(const char* name, TypeInfo* type, ASTNode* initiali
     node->data.var_decl.type = type ? type_info_retain(type) : NULL;
     node->data.var_decl.initializer = initializer;
     node->data.var_decl.is_const = is_const;
+    node->data.var_decl.is_global = is_global;
     
     return node;
 }

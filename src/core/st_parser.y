@@ -85,7 +85,7 @@ ASTNode* parse_result = NULL;
 /* 非终结符类型声明 */
 %type <ast_node> program import_list import_decl
 %type <ast_node> var_decl_list var_decl var_decl_item
-%type <ast_node> function_list function_decl function_params function_local_vars
+%type <ast_node> function_list function_decl function_params function_local_vars function_var_decl_list
 %type <ast_node> statement_list statement
 %type <ast_node> assignment_stmt if_stmt elsif_list while_stmt for_stmt case_stmt return_stmt print_stmt
 %type <ast_node> expression or_expr xor_expr and_expr comparison_expr
@@ -225,16 +225,17 @@ var_decl:
 var_decl_item:
     TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_SEMICOLON
     {
-        // ast_create_var_decl(name, type, initializer, is_const)
-        $$ = ast_create_var_decl($1, $3, NULL, false);
+        // ast_create_var_decl(name, type, initializer, is_const, is_global)
+        // 程序级声明都是全局变量
+        $$ = ast_create_var_decl($1, $3, NULL, false, true);
     }
     | TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_ASSIGN expression TOKEN_SEMICOLON
     {
-        $$ = ast_create_var_decl($1, $3, $5, false);
+        $$ = ast_create_var_decl($1, $3, $5, false, true);
     }
     | var_decl_item TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_SEMICOLON
     {
-        ASTNode* new_decl = ast_create_var_decl($2, $4, NULL, false);
+        ASTNode* new_decl = ast_create_var_decl($2, $4, NULL, false, true);
         ASTNode* last = $1;
         while (last->next) last = last->next;
         last->next = new_decl;
@@ -242,7 +243,7 @@ var_decl_item:
     }
     | var_decl_item TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_ASSIGN expression TOKEN_SEMICOLON
     {
-        ASTNode* new_decl = ast_create_var_decl($2, $4, $6, false);
+        ASTNode* new_decl = ast_create_var_decl($2, $4, $6, false, true);
         ASTNode* last = $1;
         while (last->next) last = last->next;
         last->next = new_decl;
@@ -345,7 +346,7 @@ function_params:
     }
     ;
 
-/* 函数局部变量（VAR_LOCAL块，可以有多个） */
+/* 函数局部变量（VAR_LOCAL块，可以有多个）和全局变量（VAR块） */
 function_local_vars:
     /* 空 */ { $$ = NULL; }
     | function_local_vars TOKEN_VAR_LOCAL TOKEN_END_VAR
@@ -353,8 +354,17 @@ function_local_vars:
         // 空的 VAR_LOCAL 块
         $$ = $1;
     }
-    | function_local_vars TOKEN_VAR_LOCAL var_decl_item TOKEN_END_VAR
+    | function_local_vars TOKEN_VAR_LOCAL function_var_decl_list TOKEN_END_VAR
     {
+        // VAR_LOCAL 块中的变量标记为局部变量
+        ASTNode* decl = $3;
+        while (decl) {
+            if (decl->type == AST_VAR_DECL) {
+                decl->data.var_decl.is_global = false;
+            }
+            decl = decl->next;
+        }
+        
         if ($1 == NULL) {
             $$ = $3;
         } else {
@@ -364,6 +374,61 @@ function_local_vars:
             last->next = $3;
             $$ = $1;
         }
+    }
+    | function_local_vars TOKEN_VAR TOKEN_END_VAR
+    {
+        // 空的 VAR 块（函数内定义全局变量）
+        $$ = $1;
+    }
+    | function_local_vars TOKEN_VAR function_var_decl_list TOKEN_END_VAR
+    {
+        // VAR 块中的变量标记为全局变量（函数内定义的全局变量）
+        ASTNode* decl = $3;
+        while (decl) {
+            if (decl->type == AST_VAR_DECL) {
+                decl->data.var_decl.is_global = true;
+            }
+            decl = decl->next;
+        }
+        
+        if ($1 == NULL) {
+            $$ = $3;
+        } else {
+            // 连接到现有的变量链表
+            ASTNode* last = $1;
+            while (last->next) last = last->next;
+            last->next = $3;
+            $$ = $1;
+        }
+    }
+    ;
+
+/* 函数内变量声明列表（用于 VAR 和 VAR_LOCAL 块） */
+function_var_decl_list:
+    TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_SEMICOLON
+    {
+        // is_global 将在上层规则中设置
+        $$ = ast_create_var_decl($1, $3, NULL, false, false);
+    }
+    | TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_ASSIGN expression TOKEN_SEMICOLON
+    {
+        $$ = ast_create_var_decl($1, $3, $5, false, false);
+    }
+    | function_var_decl_list TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_SEMICOLON
+    {
+        ASTNode* new_decl = ast_create_var_decl($2, $4, NULL, false, false);
+        ASTNode* last = $1;
+        while (last->next) last = last->next;
+        last->next = new_decl;
+        $$ = $1;
+    }
+    | function_var_decl_list TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_ASSIGN expression TOKEN_SEMICOLON
+    {
+        ASTNode* new_decl = ast_create_var_decl($2, $4, $6, false, false);
+        ASTNode* last = $1;
+        while (last->next) last = last->next;
+        last->next = new_decl;
+        $$ = $1;
     }
     ;
 

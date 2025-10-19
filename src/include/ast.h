@@ -117,6 +117,7 @@ typedef union {
         TypeInfo* type;             // 类型信息
         ASTNode* initializer;       // 初始化表达式（可选）
         bool is_const;              // 是否为常量
+        bool is_global;             // 是否为全局变量（函数内VAR块）
     } var_decl;
     
     // 函数声明
@@ -240,7 +241,7 @@ ASTNode* ast_create_program(const char* name, ASTNode* imports, ASTNode* declara
 /**
  * @brief 创建变量声明节点
  */
-ASTNode* ast_create_var_decl(const char* name, TypeInfo* type, ASTNode* initializer, bool is_const);
+ASTNode* ast_create_var_decl(const char* name, TypeInfo* type, ASTNode* initializer, bool is_const, bool is_global);
 
 /**
  * @brief 创建函数声明节点
