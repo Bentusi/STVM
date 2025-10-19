@@ -235,6 +235,83 @@ Symbol* symtbl_define_variable(SymbolTable* symtbl, const char* name, TypeInfo* 
 }
 
 /**
+ * @brief 定义函数作用域的静态变量（函数内VAR块）
+ * 这些变量存储在全局区，但有函数作用域限制
+ * 使用完全限定名 "FunctionName.VarName" 避免冲突
+ */
+Symbol* symtbl_define_static_variable(SymbolTable* symtbl, const char* name, TypeInfo* type, 
+                                      bool is_const, const char* function_name) {
+    if (!symtbl || !name || !type || !function_name) return NULL;
+    
+    // 构造完全限定名: "FunctionName.VarName"
+    size_t qualified_len = strlen(function_name) + strlen(name) + 2; // +2 for '.' and '\0'
+    char* qualified_name = (char*)mmgr_alloc(qualified_len);
+    if (!qualified_name) return NULL;
+    snprintf(qualified_name, qualified_len, "%s.%s", function_name, name);
+    
+    // 创建符号，使用完全限定名
+    Symbol* sym = symbol_create(qualified_name, is_const ? SYM_CONSTANT : SYM_VARIABLE, type);
+    if (!sym) {
+        mmgr_free(qualified_name);
+        return NULL;
+    }
+    
+    sym->owns_type = false;
+    sym->scope_level = 0;  // 静态变量在全局层级存储
+    sym->is_global = true;  // 存储在全局区
+    sym->is_static = true;  // 标记为静态变量
+    sym->function_scope = mmgr_strdup(function_name);  // 记录所属函数
+    
+    // 计算变量大小
+    int32_t var_size = 1;
+    if (type->base_type == TYPE_ARRAY && type->array_info.dimensions > 0 && type->array_info.sizes) {
+        var_size = type->array_info.sizes[0];
+        for (int32_t i = 1; i < type->array_info.dimensions; i++) {
+            var_size *= type->array_info.sizes[i];
+        }
+    }
+    
+    // 分配全局索引
+    sym->index = symtbl->global_var_count;
+    symtbl->global_var_count += var_size;
+    
+    // 添加到全局作用域（使用完全限定名）
+    if (!scope_add_symbol(symtbl->global_scope, sym)) {
+        REPORT_ERROR(symtbl, ERR_NAME, "Static variable '%s' already defined", qualified_name);
+        mmgr_free(sym->function_scope);
+        mmgr_free(sym->name);
+        mmgr_free(sym);
+        mmgr_free(qualified_name);
+        return NULL;
+    }
+    
+    // 同时在当前作用域创建一个别名符号，使用短名
+    // 这样在函数内部可以直接用短名访问
+    Symbol* alias = symbol_create(name, sym->kind, type);
+    if (alias) {
+        alias->owns_type = false;
+        alias->scope_level = symtbl->current_level;
+        alias->is_global = true;
+        alias->is_static = true;
+        alias->index = sym->index;  // 使用相同的全局索引
+        alias->function_scope = mmgr_strdup(function_name);
+        alias->qualified_name = mmgr_strdup(qualified_name);
+        
+        if (!scope_add_symbol(symtbl->current_scope, alias)) {
+            // 如果在当前作用域已存在同名变量，释放别名
+            mmgr_free(alias->function_scope);
+            mmgr_free(alias->qualified_name);
+            mmgr_free(alias->name);
+            mmgr_free(alias);
+            // 但静态变量本身已成功添加到全局作用域
+        }
+    }
+    
+    mmgr_free(qualified_name);
+    return sym;
+}
+
+/**
  * @brief 定义函数符号
  */
 Symbol* symtbl_define_function(SymbolTable* symtbl, const char* name, TypeInfo* return_type,

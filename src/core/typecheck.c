@@ -207,7 +207,8 @@ ErrorCode typecheck_function(TypeChecker* checker, ASTNode* func_decl) {
     Symbol* prev_func = checker->current_function;
     checker->current_function = func_sym;
     
-    // 先处理函数内的全局变量声明（VAR块）—— 在进入作用域之前
+    // 先处理函数内的静态变量声明（VAR块）—— 在进入作用域之前
+    // 这些变量使用函数名作为命名空间，存储在全局区但有函数作用域
     if (func_decl->data.function_decl.declarations) {
         ASTNode* decl = func_decl->data.function_decl.declarations;
         while (decl) {
@@ -216,9 +217,10 @@ ErrorCode typecheck_function(TypeChecker* checker, ASTNode* func_decl) {
                 TypeInfo* type = decl->data.var_decl.type;
                 bool is_const = decl->data.var_decl.is_const;
                 
-                // 在全局作用域定义变量
-                if (!symtbl_define_variable(checker->symtbl, name, type, is_const)) {
-                    fprintf(stderr, "Type error: Cannot define global variable '%s' in function\n", name);
+                // 定义为函数作用域的静态变量
+                if (!symtbl_define_static_variable(checker->symtbl, name, type, is_const, func_name)) {
+                    fprintf(stderr, "Type error: Cannot define static variable '%s' in function '%s'\n", 
+                            name, func_name);
                     checker->error_count++;
                 }
                 

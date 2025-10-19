@@ -37,6 +37,8 @@ typedef struct Symbol {
     int32_t offset;                 // 内存偏移（局部变量/参数）
     int32_t index;                  // 全局变量索引
     bool is_global;                 // 是否为全局变量
+    bool is_static;                 // 是否为静态变量（函数内VAR块）
+    char* function_scope;           // 所属函数名（静态变量用）
     
     // 函数信息
     uint32_t address;               // 函数入口地址（字节码）
@@ -115,6 +117,18 @@ void symtbl_leave_scope(SymbolTable* symtbl);
  * @return 符号指针，失败返回NULL
  */
 Symbol* symtbl_define_variable(SymbolTable* symtbl, const char* name, TypeInfo* type, bool is_const);
+
+/**
+ * @brief 定义函数作用域的静态变量（函数内VAR块）
+ * @param symtbl 符号表
+ * @param name 变量名（短名）
+ * @param type 类型信息
+ * @param is_const 是否为常量
+ * @param function_name 所属函数名
+ * @return 符号指针，失败返回NULL
+ */
+Symbol* symtbl_define_static_variable(SymbolTable* symtbl, const char* name, TypeInfo* type, 
+                                      bool is_const, const char* function_name);
 
 /**
  * @brief 定义函数符号

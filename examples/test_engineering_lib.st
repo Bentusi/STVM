@@ -1,0 +1,492 @@
+(* ========================================================================= *)
+(* ST 工程计算库测试用例                                                     *)
+(* Test Cases for Engineering Calculation Library                           *)
+(* ========================================================================= *)
+
+PROGRAM TestEngineeringLib
+VAR
+    test_passed : INT := 0;
+    test_failed : INT := 0;
+    test_total : INT := 0;
+END_VAR
+
+(* ========================================================================= *)
+(* 辅助函数：断言检查                                                        *)
+(* ========================================================================= *)
+FUNCTION AssertBool : BOOL
+VAR_INPUT
+    condition : BOOL;
+    test_name : INT;  (* 简化为测试编号 *)
+END_VAR
+VAR
+    passed_count : INT := 0;
+    failed_count : INT := 0;
+END_VAR
+    IF condition THEN
+        PRINT('  [PASS] Test #%d\n', test_name);
+        passed_count := passed_count + 1;
+        AssertBool := TRUE;
+    ELSE
+        PRINT('  [FAIL] Test #%d\n', test_name);
+        failed_count := failed_count + 1;
+        AssertBool := FALSE;
+    END_IF;
+END_FUNCTION
+
+FUNCTION AssertReal : BOOL
+VAR_INPUT
+    actual : REAL;
+    expected : REAL;
+    tolerance : REAL;
+    test_name : INT;  (* 简化为测试编号 *)
+END_VAR
+VAR
+    passed_count : INT := 0;
+    failed_count : INT := 0;
+END_VAR
+VAR_LOCAL
+    diff : REAL;
+    abs_diff : REAL;
+    result : BOOL;
+END_VAR
+    diff := actual - expected;
+    IF diff < 0.0 THEN
+        abs_diff := -diff;
+    ELSE
+        abs_diff := diff;
+    END_IF;
+    
+    result := abs_diff <= tolerance;
+    
+    IF result THEN
+        PRINT('  [PASS] Test #%d (%.3f)\n', test_name, actual);
+        passed_count := passed_count + 1;
+        AssertReal := TRUE;
+    ELSE
+        PRINT('  [FAIL] Test #%d (expected %.3f, got %.3f)\n', test_name, expected, actual);
+        failed_count := failed_count + 1;
+        AssertReal := FALSE;
+    END_IF;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试 RS 触发器                                                           *)
+(* ========================================================================= *)
+FUNCTION TestRS : INT
+VAR_LOCAL
+    result : BOOL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test RS Trigger ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 初始状态应该为 FALSE *)
+    result := RS_Trigger(FALSE, FALSE);
+    IF AssertBool(result = FALSE, 1) THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: Set 置位 *)
+    result := RS_Trigger(TRUE, FALSE);
+    IF AssertBool(result = TRUE, 2) THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: 保持状态 *)
+    result := RS_Trigger(FALSE, FALSE);
+    IF AssertBool(result = TRUE, 3) THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: Reset 复位 *)
+    result := RS_Trigger(FALSE, TRUE);
+    IF AssertBool(result = FALSE, 4) THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试5: Reset 优先 *)
+    result := RS_Trigger(TRUE, TRUE);
+    IF AssertBool(result = FALSE, 5) THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('RS Trigger: %d/5 tests passed\n', tests_ok);
+    TestRS := tests_ok;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试 SR 触发器                                                           *)
+(* ========================================================================= *)
+FUNCTION TestSR : INT
+VAR_LOCAL
+    result : BOOL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test SR Trigger ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 初始状态 *)
+    result := SR_Trigger(FALSE, FALSE);
+    IF AssertBool(result = FALSE, 'SR initial state') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: Set 置位 *)
+    result := SR_Trigger(TRUE, FALSE);
+    IF AssertBool(result = TRUE, 'SR set high') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: Set 优先（同时Set和Reset） *)
+    result := SR_Trigger(TRUE, TRUE);
+    IF AssertBool(result = TRUE, 'SR set priority') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: Reset 复位 *)
+    result := SR_Trigger(FALSE, TRUE);
+    IF AssertBool(result = FALSE, 'SR reset low') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('SR Trigger: %d/4 tests passed\n', tests_ok);
+    TestSR := tests_ok;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试平滑滤波器                                                           *)
+(* ========================================================================= *)
+FUNCTION TestSmoothFilter : INT
+VAR_LOCAL
+    result : REAL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test Smooth Filter ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 首次调用应该直接返回输入值 *)
+    result := SmoothFilter(100.0, 0.5);
+    IF AssertReal(result, 100.0, 0.01, 'Filter first call') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: alpha=1.0 应该完全跟随输入 *)
+    result := SmoothFilter(50.0, 1.0);
+    IF AssertReal(result, 50.0, 0.01, 'Filter alpha=1.0') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: alpha=0.5 平滑过渡 *)
+    result := SmoothFilter(100.0, 0.5);
+    (* 应该是 0.5*100 + 0.5*50 = 75 *)
+    IF AssertReal(result, 75.0, 0.01, 'Filter alpha=0.5') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: alpha=0.0 应该完全不变 *)
+    result := SmoothFilter(200.0, 0.0);
+    IF AssertReal(result, 75.0, 0.01, 'Filter alpha=0.0') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('Smooth Filter: %d/4 tests passed\n', tests_ok);
+    TestSmoothFilter := tests_ok;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试 1oo2 投票逻辑                                                       *)
+(* ========================================================================= *)
+FUNCTION TestVote1oo2 : INT
+VAR_LOCAL
+    result : BOOL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test Vote 1oo2 ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 两个都是FALSE *)
+    result := Vote_1oo2(FALSE, FALSE);
+    IF AssertBool(result = FALSE, '1oo2: FF = F') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: 一个TRUE *)
+    result := Vote_1oo2(TRUE, FALSE);
+    IF AssertBool(result = TRUE, '1oo2: TF = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: 另一个TRUE *)
+    result := Vote_1oo2(FALSE, TRUE);
+    IF AssertBool(result = TRUE, '1oo2: FT = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: 两个都是TRUE *)
+    result := Vote_1oo2(TRUE, TRUE);
+    IF AssertBool(result = TRUE, '1oo2: TT = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('Vote 1oo2: %d/4 tests passed\n', tests_ok);
+    TestVote1oo2 := tests_ok;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试 2oo3 投票逻辑                                                       *)
+(* ========================================================================= *)
+FUNCTION TestVote2oo3 : INT
+VAR_LOCAL
+    result : BOOL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test Vote 2oo3 ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 全部FALSE *)
+    result := Vote_2oo3(FALSE, FALSE, FALSE);
+    IF AssertBool(result = FALSE, '2oo3: FFF = F') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: 只有一个TRUE *)
+    result := Vote_2oo3(TRUE, FALSE, FALSE);
+    IF AssertBool(result = FALSE, '2oo3: TFF = F') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: 两个TRUE *)
+    result := Vote_2oo3(TRUE, TRUE, FALSE);
+    IF AssertBool(result = TRUE, '2oo3: TTF = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: 另外两个TRUE *)
+    result := Vote_2oo3(FALSE, TRUE, TRUE);
+    IF AssertBool(result = TRUE, '2oo3: FTT = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试5: 全部TRUE *)
+    result := Vote_2oo3(TRUE, TRUE, TRUE);
+    IF AssertBool(result = TRUE, '2oo3: TTT = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('Vote 2oo3: %d/5 tests passed\n', tests_ok);
+    TestVote2oo3 := tests_ok;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试 3oo4 投票逻辑                                                       *)
+(* ========================================================================= *)
+FUNCTION TestVote3oo4 : INT
+VAR_LOCAL
+    result : BOOL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test Vote 3oo4 ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 全部FALSE *)
+    result := Vote_3oo4(FALSE, FALSE, FALSE, FALSE);
+    IF AssertBool(result = FALSE, '3oo4: FFFF = F') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: 只有两个TRUE *)
+    result := Vote_3oo4(TRUE, TRUE, FALSE, FALSE);
+    IF AssertBool(result = FALSE, '3oo4: TTFF = F') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: 三个TRUE *)
+    result := Vote_3oo4(TRUE, TRUE, TRUE, FALSE);
+    IF AssertBool(result = TRUE, '3oo4: TTTF = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: 另外三个TRUE *)
+    result := Vote_3oo4(FALSE, TRUE, TRUE, TRUE);
+    IF AssertBool(result = TRUE, '3oo4: FTTT = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试5: 全部TRUE *)
+    result := Vote_3oo4(TRUE, TRUE, TRUE, TRUE);
+    IF AssertBool(result = TRUE, '3oo4: TTTT = T') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('Vote 3oo4: %d/5 tests passed\n', tests_ok);
+    TestVote3oo4 := tests_ok;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试限幅器                                                               *)
+(* ========================================================================= *)
+FUNCTION TestLimiter : INT
+VAR_LOCAL
+    result : REAL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test Limiter ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 正常范围内 *)
+    result := Limiter(50.0, 0.0, 100.0);
+    IF AssertReal(result, 50.0, 0.01, 'Limiter in range') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: 超过上限 *)
+    result := Limiter(150.0, 0.0, 100.0);
+    IF AssertReal(result, 100.0, 0.01, 'Limiter above max') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: 低于下限 *)
+    result := Limiter(-50.0, 0.0, 100.0);
+    IF AssertReal(result, 0.0, 0.01, 'Limiter below min') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: 负数范围 *)
+    result := Limiter(-25.0, -100.0, -10.0);
+    IF AssertReal(result, -25.0, 0.01, 'Limiter negative range') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试5: min > max 自动交换 *)
+    result := Limiter(50.0, 100.0, 0.0);
+    IF AssertReal(result, 50.0, 0.01, 'Limiter auto swap') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('Limiter: %d/5 tests passed\n', tests_ok);
+    TestLimiter := tests_ok;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试死区处理器                                                           *)
+(* ========================================================================= *)
+FUNCTION TestDeadBand : INT
+VAR_LOCAL
+    result : REAL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test Dead Band ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 在死区内 *)
+    result := DeadBand(5.0, 10.0);
+    IF AssertReal(result, 0.0, 0.01, 'DeadBand inside zone') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: 超过死区（正） *)
+    result := DeadBand(25.0, 10.0);
+    IF AssertReal(result, 15.0, 0.01, 'DeadBand above zone') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: 超过死区（负） *)
+    result := DeadBand(-25.0, 10.0);
+    IF AssertReal(result, -15.0, 0.01, 'DeadBand below zone') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: 边界值 *)
+    result := DeadBand(10.0, 10.0);
+    IF AssertReal(result, 0.0, 0.01, 'DeadBand at boundary') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('Dead Band: %d/4 tests passed\n', tests_ok);
+    TestDeadBand := tests_ok;
+END_FUNCTION
+
+(* ========================================================================= *)
+(* 测试滞环比较器                                                           *)
+(* ========================================================================= *)
+FUNCTION TestHysteresis : INT
+VAR_LOCAL
+    result : BOOL;
+    tests_ok : INT;
+END_VAR
+    PRINT('\n--- Test Hysteresis ---\n');
+    tests_ok := 0;
+    
+    (* 测试1: 初始状态，低于低阈值 *)
+    result := Hysteresis(5.0, 80.0, 20.0);
+    IF AssertBool(result = FALSE, 'Hysteresis initial low') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试2: 在滞环区间内，保持低 *)
+    result := Hysteresis(50.0, 80.0, 20.0);
+    IF AssertBool(result = FALSE, 'Hysteresis in zone stay low') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试3: 超过高阈值，变为高 *)
+    result := Hysteresis(85.0, 80.0, 20.0);
+    IF AssertBool(result = TRUE, 'Hysteresis above high') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试4: 回到滞环区间，保持高 *)
+    result := Hysteresis(50.0, 80.0, 20.0);
+    IF AssertBool(result = TRUE, 'Hysteresis in zone stay high') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    (* 测试5: 低于低阈值，变为低 *)
+    result := Hysteresis(15.0, 80.0, 20.0);
+    IF AssertBool(result = FALSE, 'Hysteresis below low') THEN
+        tests_ok := tests_ok + 1;
+    END_IF;
+    
+    PRINT('Hysteresis: %d/5 tests passed\n', tests_ok);
+    TestHysteresis := tests_ok;
+END_FUNCTION
+
+    (* 主程序 *)
+    PRINT('\n');
+    PRINT('=========================================\n');
+    PRINT('   Engineering Library Test Suite\n');
+    PRINT('=========================================\n');
+    
+    test_passed := 0;
+    
+    (* 运行所有测试 *)
+    test_passed := test_passed + TestRS();
+    test_passed := test_passed + TestSR();
+    test_passed := test_passed + TestSmoothFilter();
+    test_passed := test_passed + TestVote1oo2();
+    test_passed := test_passed + TestVote2oo3();
+    test_passed := test_passed + TestVote3oo4();
+    test_passed := test_passed + TestLimiter();
+    test_passed := test_passed + TestDeadBand();
+    test_passed := test_passed + TestHysteresis();
+    
+    test_total := 41;  (* 总测试数 *)
+    test_failed := test_total - test_passed;
+    
+    (* 打印总结 *)
+    PRINT('\n');
+    PRINT('=========================================\n');
+    PRINT('   Test Summary\n');
+    PRINT('=========================================\n');
+    PRINT('Total Tests:  %d\n', test_total);
+    PRINT('Passed:       %d\n', test_passed);
+    PRINT('Failed:       %d\n', test_failed);
+    
+    IF test_failed = 0 THEN
+        PRINT('\n*** ALL TESTS PASSED! ***\n');
+    ELSE
+        PRINT('\n*** SOME TESTS FAILED ***\n');
+    END_IF;
+    PRINT('=========================================\n');
+
+END_PROGRAM

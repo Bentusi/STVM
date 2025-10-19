@@ -200,10 +200,12 @@ static ErrorCode generate_program(CodeGenContext* ctx, ASTNode* program) {
         if (err != OK) return err;
     }
     
-    // 1.5. 生成函数内定义的全局变量的初始化代码
+    // 1.5. 生成函数内定义的静态变量的初始化代码
+    // 这些变量使用完全限定名（FunctionName.VarName）存储在全局区
     ASTNode* func = program->data.program.functions;
     while (func) {
         if (func->type == AST_FUNCTION_DECL && func->data.function_decl.declarations) {
+            const char* func_name = func->data.function_decl.name;
             ASTNode* decl = func->data.function_decl.declarations;
             while (decl) {
                 if (decl->type == AST_VAR_DECL && decl->data.var_decl.is_global && 
@@ -212,14 +214,28 @@ static ErrorCode generate_program(CodeGenContext* ctx, ASTNode* program) {
                     err = codegen_expr(ctx, decl->data.var_decl.initializer);
                     if (err != OK) return err;
                     
+                    // 构造完全限定名查找符号
+                    const char* var_name = decl->data.var_decl.name;
+                    size_t qualified_len = strlen(func_name) + strlen(var_name) + 2;
+                    char* qualified_name = (char*)mmgr_alloc(qualified_len);
+                    if (!qualified_name) {
+                        ctx->error_code = ERR_RUNTIME;
+                        return ERR_RUNTIME;
+                    }
+                    snprintf(qualified_name, qualified_len, "%s.%s", func_name, var_name);
+                    
                     // 查找符号并生成STORE指令
-                    Symbol* sym = symtbl_lookup(ctx->symtbl, decl->data.var_decl.name);
+                    Symbol* sym = symtbl_lookup(ctx->symtbl, qualified_name);
+                    
                     if (!sym) {
                         snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                                "Undefined global variable: %s", decl->data.var_decl.name);
+                                "Undefined static variable: %s.%s", func_name, var_name);
+                        mmgr_free(qualified_name);
                         ctx->error_code = ERR_NAME;
                         return ERR_NAME;
                     }
+                    
+                    mmgr_free(qualified_name);
                     
                     uint8_t flags = 0x01;  // 全局变量标志
                     uint16_t addr = sym->index;
@@ -371,7 +387,8 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
     ctx->local_var_count++;
     
     // 注册局部变量到符号表（在生成初始化代码之前）
-    // 跳过全局变量（is_global=true），它们已在类型检查阶段添加到全局符号表
+    // 跳过静态变量（is_global=true），它们已在类型检查阶段添加到全局符号表
+    // 静态变量使用完全限定名存储，但在函数作用域内可通过短名访问
     ASTNode* decl = func_decl->data.function_decl.declarations;
     while (decl) {
         if (decl->type == AST_VAR_DECL && !decl->data.var_decl.is_global) {
@@ -504,10 +521,36 @@ static ErrorCode generate_literal(CodeGenContext* ctx, ASTNode* node) {
  * @brief 生成标识符（变量读取）
  */
 static ErrorCode generate_identifier(CodeGenContext* ctx, ASTNode* node) {
-    Symbol* sym = symtbl_lookup(ctx->symtbl, node->data.identifier.name);
+    const char* var_name = node->data.identifier.name;
+    Symbol* sym = NULL;
+    
+    // 如果当前在函数内，先尝试查找完全限定名（用于静态变量）
+    if (ctx->current_function) {
+        const char* func_name = ctx->current_function->name;
+        size_t qualified_len = strlen(func_name) + strlen(var_name) + 2;
+        char* qualified_name = (char*)mmgr_alloc(qualified_len);
+        if (qualified_name) {
+            snprintf(qualified_name, qualified_len, "%s.%s", func_name, var_name);
+            sym = symtbl_lookup(ctx->symtbl, qualified_name);
+            
+            if (sym && sym->is_static) {
+                // 找到静态变量
+                mmgr_free(qualified_name);
+                
+                uint8_t flags = 0x01;  // 静态变量在全局区
+                uint16_t addr = sym->index;
+                codegen_emit_with_flags(ctx, OP_LOAD, flags, addr);
+                return OK;
+            }
+            mmgr_free(qualified_name);
+        }
+    }
+    
+    // 否则使用常规查找
+    sym = symtbl_lookup(ctx->symtbl, var_name);
     if (!sym) {
         snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                "Undefined variable: %s", node->data.identifier.name);
+                "Undefined variable: %s", var_name);
         ctx->error_code = ERR_NAME;
         return ERR_NAME;
     }
@@ -809,10 +852,36 @@ static ErrorCode generate_assign(CodeGenContext* ctx, ASTNode* node) {
     
     if (target->type == AST_IDENTIFIER) {
         // 简单变量赋值
-        Symbol* sym = symtbl_lookup(ctx->symtbl, target->data.identifier.name);
+        const char* var_name = target->data.identifier.name;
+        Symbol* sym = NULL;
+        
+        // 如果当前在函数内，先尝试查找完全限定名（用于静态变量）
+        if (ctx->current_function) {
+            const char* func_name = ctx->current_function->name;
+            size_t qualified_len = strlen(func_name) + strlen(var_name) + 2;
+            char* qualified_name = (char*)mmgr_alloc(qualified_len);
+            if (qualified_name) {
+                snprintf(qualified_name, qualified_len, "%s.%s", func_name, var_name);
+                sym = symtbl_lookup(ctx->symtbl, qualified_name);
+                
+                if (sym && sym->is_static) {
+                    // 找到静态变量
+                    mmgr_free(qualified_name);
+                    
+                    uint8_t flags = 0x01;  // 静态变量在全局区
+                    uint16_t addr = sym->index;
+                    codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
+                    return OK;
+                }
+                mmgr_free(qualified_name);
+            }
+        }
+        
+        // 否则使用常规查找
+        sym = symtbl_lookup(ctx->symtbl, var_name);
         if (!sym) {
             snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                    "Undefined variable: %s", target->data.identifier.name);
+                    "Undefined variable: %s", var_name);
             ctx->error_code = ERR_NAME;
             return ERR_NAME;
         }
