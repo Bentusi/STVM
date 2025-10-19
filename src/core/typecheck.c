@@ -473,13 +473,42 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
                 return type_info_create(TYPE_BOOL);
             }
             
-            // 逻辑运算: AND OR XOR
-            if (op >= BINOP_AND && op <= BINOP_OR) {
-                if (left_type->base_type != TYPE_BOOL || right_type->base_type != TYPE_BOOL) {
-                    fprintf(stderr, "Type error: Logical operation requires boolean types\n");
-                    checker->error_count++;
+            // 逻辑/位运算: AND OR XOR（符合 IEC 61131-3）
+            // 可以用于BOOL（逻辑）或INT（位）类型
+            if (op >= BINOP_AND && op <= BINOP_XOR) {
+                // BOOL AND BOOL -> BOOL（逻辑运算）
+                if (left_type->base_type == TYPE_BOOL && right_type->base_type == TYPE_BOOL) {
+                    return type_info_create(TYPE_BOOL);
                 }
-                return type_info_create(TYPE_BOOL);
+                // INT AND INT -> INT（位运算）
+                else if (left_type->base_type == TYPE_INT && right_type->base_type == TYPE_INT) {
+                    return type_info_create(TYPE_INT);
+                }
+                else {
+                    fprintf(stderr, "Type error: AND/OR/XOR requires both operands to be BOOL or both INT\n");
+                    checker->error_count++;
+                    return NULL;
+                }
+            }
+            
+            // 位运算: BIT_AND BIT_OR BIT_XOR（仅INT）
+            if (op >= BINOP_BIT_AND && op <= BINOP_BIT_XOR) {
+                if (left_type->base_type != TYPE_INT || right_type->base_type != TYPE_INT) {
+                    fprintf(stderr, "Type error: Bitwise operation requires integer types\n");
+                    checker->error_count++;
+                    return NULL;
+                }
+                return type_info_create(TYPE_INT);
+            }
+            
+            // 移位运算: SHL SHR
+            if (op == BINOP_SHL || op == BINOP_SHR) {
+                if (left_type->base_type != TYPE_INT || right_type->base_type != TYPE_INT) {
+                    fprintf(stderr, "Type error: Shift operation requires integer types\n");
+                    checker->error_count++;
+                    return NULL;
+                }
+                return type_info_create(TYPE_INT);
             }
             
             return NULL;
@@ -502,12 +531,24 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
                     return NULL;
                 }
             } else if (op == UNOP_NOT) {
-                // NOT
-                if (operand_type->base_type != TYPE_BOOL) {
-                    fprintf(stderr, "Type error: NOT requires boolean type\n");
+                // NOT：可以是逻辑非（BOOL）或位取反（INT）
+                if (operand_type->base_type == TYPE_BOOL) {
+                    return type_info_create(TYPE_BOOL);
+                } else if (operand_type->base_type == TYPE_INT) {
+                    return type_info_create(TYPE_INT);
+                } else {
+                    fprintf(stderr, "Type error: NOT requires boolean or integer type\n");
                     checker->error_count++;
+                    return NULL;
                 }
-                return type_info_create(TYPE_BOOL);
+            } else if (op == UNOP_BIT_NOT) {
+                // 位取反：仅INT
+                if (operand_type->base_type != TYPE_INT) {
+                    fprintf(stderr, "Type error: Bitwise NOT requires integer type\n");
+                    checker->error_count++;
+                    return NULL;
+                }
+                return type_info_create(TYPE_INT);
             }
             
             return NULL;

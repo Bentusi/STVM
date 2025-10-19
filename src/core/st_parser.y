@@ -69,6 +69,7 @@ ASTNode* parse_result = NULL;
 %token TOKEN_ASSIGN TOKEN_EQ TOKEN_NE TOKEN_LT TOKEN_LE TOKEN_GT TOKEN_GE
 %token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MOD
 %token TOKEN_AND TOKEN_OR TOKEN_XOR TOKEN_NOT
+%token TOKEN_SHL TOKEN_SHR
 
 %token TOKEN_SEMICOLON TOKEN_COLON TOKEN_COMMA TOKEN_DOT TOKEN_RANGE
 %token TOKEN_LPAREN TOKEN_RPAREN TOKEN_LBRACKET TOKEN_RBRACKET
@@ -86,13 +87,14 @@ ASTNode* parse_result = NULL;
 %type <ast_node> argument_list
 %type <type_info> type_spec
 
-/* 运算符优先级和结合性 */
+/* 运算符优先级和结合性（符合 IEC 61131-3）*/
 %left TOKEN_OR
 %left TOKEN_XOR
 %left TOKEN_AND
 %left TOKEN_EQ TOKEN_NE
 %left TOKEN_LT TOKEN_LE TOKEN_GT TOKEN_GE
 %left TOKEN_PLUS TOKEN_MINUS
+%left TOKEN_SHL TOKEN_SHR  /* 移位操作与加减同级 */
 %left TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MOD
 %right TOKEN_NOT UNARY_MINUS
 
@@ -538,7 +540,7 @@ xor_expr:
     and_expr { $$ = $1; }
     | xor_expr TOKEN_XOR and_expr
     {
-        $$ = ast_create_binary_op(BINOP_OR, $1, $3);
+        $$ = ast_create_binary_op(BINOP_XOR, $1, $3);
     }
     ;
 
@@ -587,6 +589,14 @@ add_expr:
     | add_expr TOKEN_MINUS mult_expr
     {
         $$ = ast_create_binary_op(BINOP_SUB, $1, $3);
+    }
+    | add_expr TOKEN_SHL mult_expr
+    {
+        $$ = ast_create_binary_op(BINOP_SHL, $1, $3);
+    }
+    | add_expr TOKEN_SHR mult_expr
+    {
+        $$ = ast_create_binary_op(BINOP_SHR, $1, $3);
     }
     ;
 

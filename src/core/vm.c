@@ -312,6 +312,95 @@ static ErrorCode vm_execute_logical(VM* vm, Opcode op) {
         switch (op) {
             case OP_AND: result.bool_val = a.bool_val && b.bool_val; break;
             case OP_OR:  result.bool_val = a.bool_val || b.bool_val; break;
+            case OP_XOR: result.bool_val = (a.bool_val != b.bool_val); break;  // 逻辑异或
+            default: return ERR_INVALID_INSTRUCTION;
+        }
+    }
+    
+    PUSH(result);
+    return OK;
+}
+
+/**
+ * @brief 执行位运算（符合 IEC 61131-3 标准）
+ */
+static ErrorCode vm_execute_bitwise(VM* vm, Opcode op) {
+    Value result;
+    
+    if (op == OP_BIT_NOT) {
+        // 位取反（一元操作）
+        CHECK_STACK(1);
+        Value a = POP();
+        
+        // 类型检查：只能对整数类型进行位操作
+        if (a.type != TYPE_INT) {
+            vm->error_code = ERR_TYPE;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                    "Bitwise NOT requires integer type at PC=%u", vm->pc-1);
+            return ERR_TYPE;
+        }
+        
+        result.type = a.type;
+        result.int_val = ~a.int_val;
+    } else if (op == OP_SHL || op == OP_SHR) {
+        // 移位操作
+        CHECK_STACK(2);
+        Value shift_amount = POP();
+        Value value = POP();
+        
+        // 类型检查
+        if (value.type != TYPE_INT) {
+            vm->error_code = ERR_TYPE;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                    "Shift operation requires integer type at PC=%u", vm->pc-1);
+            return ERR_TYPE;
+        }
+        
+        if (shift_amount.type != TYPE_INT) {
+            vm->error_code = ERR_TYPE;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                    "Shift amount must be INT at PC=%u", vm->pc-1);
+            return ERR_TYPE;
+        }
+        
+        result.type = value.type;
+        int32_t shift = shift_amount.int_val;
+        
+        // 检查移位量合法性（避免未定义行为）
+        if (shift < 0 || shift >= 32) {
+            vm->error_code = ERR_RUNTIME;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                    "Invalid shift amount %d at PC=%u", shift, vm->pc-1);
+            return ERR_RUNTIME;
+        }
+        
+        if (op == OP_SHL) {
+            result.int_val = value.int_val << shift;
+        } else {
+            // 算术右移（保留符号位）
+            result.int_val = value.int_val >> shift;
+        }
+    } else {
+        // 二元位操作（AND, OR, XOR）
+        CHECK_STACK(2);
+        Value b = POP();
+        Value a = POP();
+        
+        // 类型检查
+        if (a.type != TYPE_INT || b.type != TYPE_INT) {
+            vm->error_code = ERR_TYPE;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                    "Bitwise operation requires integer types at PC=%u", vm->pc-1);
+            return ERR_TYPE;
+        }
+        
+        // 结果类型与操作数相同
+        result.type = a.type;
+        
+        switch (op) {
+            case OP_BIT_AND: result.int_val = a.int_val & b.int_val; break;
+            case OP_BIT_OR:  result.int_val = a.int_val | b.int_val; break;
+            case OP_BIT_XOR: result.int_val = a.int_val ^ b.int_val; break;
             default: return ERR_INVALID_INSTRUCTION;
         }
     }
@@ -449,8 +538,21 @@ ErrorCode vm_step(VM* vm) {
         // === 逻辑运算 ===
         case OP_AND:
         case OP_OR:
+        case OP_XOR:
         case OP_NOT: {
             ErrorCode err = vm_execute_logical(vm, instr.opcode);
+            if (err != OK) return err;
+            break;
+        }
+        
+        // === 位运算 ===
+        case OP_BIT_AND:
+        case OP_BIT_OR:
+        case OP_BIT_XOR:
+        case OP_BIT_NOT:
+        case OP_SHL:
+        case OP_SHR: {
+            ErrorCode err = vm_execute_bitwise(vm, instr.opcode);
             if (err != OK) return err;
             break;
         }
@@ -940,8 +1042,21 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             // === 逻辑运算 ===
             case OP_AND:
             case OP_OR:
+            case OP_XOR:
             case OP_NOT: {
                 ErrorCode err = vm_execute_logical(vm, instr.opcode);
+                if (err != OK) return err;
+                break;
+            }
+            
+            // === 位运算 ===
+            case OP_BIT_AND:
+            case OP_BIT_OR:
+            case OP_BIT_XOR:
+            case OP_BIT_NOT:
+            case OP_SHL:
+            case OP_SHR: {
+                ErrorCode err = vm_execute_bitwise(vm, instr.opcode);
                 if (err != OK) return err;
                 break;
             }

@@ -112,6 +112,10 @@ test_libmgr: dirs $(CORE_OBJS)
 	@echo "Building test_libmgr..."
 	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_libmgr tests/test_libmgr.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
 
+test_bitops: dirs $(CORE_OBJS)
+	@echo "Building test_bitops..."
+	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_bitops tests/test_bitops.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
+
 # Main programs
 stvm: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
 	@echo "Building stvm (compiler and VM)..."
@@ -168,6 +172,7 @@ help:
 	@echo "  test_codegen  - Build code generator test"
 	@echo "  test_vm       - Build VM test"
 	@echo "  test_libmgr   - Build library manager test"
+	@echo "  test_bitops   - Build bitwise operations test"
 	@echo "  test          - Build and run all tests"
 	@echo ""
 	@echo "Usage examples:"

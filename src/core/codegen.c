@@ -497,25 +497,53 @@ static ErrorCode generate_binary_op(CodeGenContext* ctx, ASTNode* node) {
     
     // 运算符
     Opcode opcode;
-    switch (node->data.binary_op.op) {
-        case BINOP_ADD: opcode = OP_ADD; break;
-        case BINOP_SUB: opcode = OP_SUB; break;
-        case BINOP_MUL: opcode = OP_MUL; break;
-        case BINOP_DIV: opcode = OP_DIV; break;
-        case BINOP_MOD: opcode = OP_MOD; break;
-        case BINOP_EQ:  opcode = OP_EQ;  break;
-        case BINOP_NE:  opcode = OP_NE;  break;
-        case BINOP_LT:  opcode = OP_LT;  break;
-        case BINOP_LE:  opcode = OP_LE;  break;
-        case BINOP_GT:  opcode = OP_GT;  break;
-        case BINOP_GE:  opcode = OP_GE;  break;
-        case BINOP_AND: opcode = OP_AND; break;
-        case BINOP_OR:  opcode = OP_OR;  break;
-        default:
-            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                    "Unsupported binary operator: %d", node->data.binary_op.op);
-            ctx->error_code = ERR_RUNTIME;
-            return ERR_RUNTIME;
+    BinaryOp op = node->data.binary_op.op;
+    
+    // 对于AND/OR/XOR，根据结果类型选择逻辑或位运算指令
+    if (op == BINOP_AND || op == BINOP_OR || op == BINOP_XOR) {
+        // 检查resolved_type来决定使用逻辑还是位运算
+        if (node->resolved_type && node->resolved_type->base_type == TYPE_INT) {
+            // 整数类型：使用位运算
+            switch (op) {
+                case BINOP_AND: opcode = OP_BIT_AND; break;
+                case BINOP_OR:  opcode = OP_BIT_OR;  break;
+                case BINOP_XOR: opcode = OP_BIT_XOR; break;
+                default: opcode = OP_AND; break;
+            }
+        } else {
+            // 布尔类型：使用逻辑运算
+            switch (op) {
+                case BINOP_AND: opcode = OP_AND; break;
+                case BINOP_OR:  opcode = OP_OR;  break;
+                case BINOP_XOR: opcode = OP_XOR; break;
+                default: opcode = OP_AND; break;
+            }
+        }
+    } else {
+        // 其他运算符
+        switch (op) {
+            case BINOP_ADD: opcode = OP_ADD; break;
+            case BINOP_SUB: opcode = OP_SUB; break;
+            case BINOP_MUL: opcode = OP_MUL; break;
+            case BINOP_DIV: opcode = OP_DIV; break;
+            case BINOP_MOD: opcode = OP_MOD; break;
+            case BINOP_EQ:  opcode = OP_EQ;  break;
+            case BINOP_NE:  opcode = OP_NE;  break;
+            case BINOP_LT:  opcode = OP_LT;  break;
+            case BINOP_LE:  opcode = OP_LE;  break;
+            case BINOP_GT:  opcode = OP_GT;  break;
+            case BINOP_GE:  opcode = OP_GE;  break;
+            case BINOP_BIT_AND: opcode = OP_BIT_AND; break;
+            case BINOP_BIT_OR:  opcode = OP_BIT_OR;  break;
+            case BINOP_BIT_XOR: opcode = OP_BIT_XOR; break;
+            case BINOP_SHL: opcode = OP_SHL; break;
+            case BINOP_SHR: opcode = OP_SHR; break;
+            default:
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                        "Unsupported binary operator: %d", op);
+                ctx->error_code = ERR_RUNTIME;
+                return ERR_RUNTIME;
+        }
     }
     
     codegen_emit(ctx, opcode, 0);
@@ -530,14 +558,25 @@ static ErrorCode generate_unary_op(CodeGenContext* ctx, ASTNode* node) {
     if (err != OK) return err;
     
     Opcode opcode;
-    switch (node->data.unary_op.op) {
-        case UNOP_NEG: opcode = OP_NEG; break;
-        case UNOP_NOT: opcode = OP_NOT; break;
-        default:
-            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                    "Unsupported unary operator: %d", node->data.unary_op.op);
-            ctx->error_code = ERR_RUNTIME;
-            return ERR_RUNTIME;
+    UnaryOp op = node->data.unary_op.op;
+    
+    // 对于NOT，根据结果类型选择逻辑或位运算
+    if (op == UNOP_NOT) {
+        if (node->resolved_type && node->resolved_type->base_type == TYPE_INT) {
+            opcode = OP_BIT_NOT;  // 整数类型：位取反
+        } else {
+            opcode = OP_NOT;      // 布尔类型：逻辑非
+        }
+    } else {
+        switch (op) {
+            case UNOP_NEG: opcode = OP_NEG; break;
+            case UNOP_BIT_NOT: opcode = OP_BIT_NOT; break;
+            default:
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                        "Unsupported unary operator: %d", op);
+                ctx->error_code = ERR_RUNTIME;
+                return ERR_RUNTIME;
+        }
     }
     
     codegen_emit(ctx, opcode, 0);

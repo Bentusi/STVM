@@ -45,10 +45,19 @@ typedef enum {
     OP_GT,              // 大于
     OP_GE,              // 大于等于
     
-    // === 逻辑运算（3个）===
+    // === 逻辑运算（4个）===
     OP_AND,             // 逻辑与
     OP_OR,              // 逻辑或
     OP_NOT,             // 逻辑非
+    OP_XOR,             // 逻辑异或
+    
+    // === 位运算（6个）===
+    OP_BIT_AND,         // 位与（&）
+    OP_BIT_OR,          // 位或（|）
+    OP_BIT_XOR,         // 位异或（^）
+    OP_BIT_NOT,         // 位取反（~）
+    OP_SHL,             // 左移（<<）
+    OP_SHR,             // 右移（>>）
     
     // === 控制流（5个）===
     OP_JMP,             // 无条件跳转 operand: 目标地址
@@ -64,7 +73,7 @@ typedef enum {
     OP_LOAD_INDEXED,    // 加载数组元素 operand: 数组基址，栈顶为索引
     OP_STORE_INDEXED,   // 存储数组元素 operand: 数组基址，栈顶为值，栈次为索引
     
-    OP_COUNT            // 指令总数
+    OP_COUNT            // 指令总数（现在包含35个指令）
 } Opcode;
 
 /**

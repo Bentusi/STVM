@@ -89,6 +89,10 @@ STRING      '([^'\n]|'')*'
 (?i:XOR)            { return TOKEN_XOR; }
 (?i:NOT)            { return TOKEN_NOT; }
 
+    /* 移位运算符关键字（IEC 61131-3）*/
+(?i:SHL)            { return TOKEN_SHL; }
+(?i:SHR)            { return TOKEN_SHR; }
+
     /* 整数字面量 */
 {INTEGER}           { 
                         yylval.int_value = atoll(yytext); 

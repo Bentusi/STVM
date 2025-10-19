@@ -63,8 +63,18 @@ typedef enum {
     BINOP_GE,       // >=
     
     // 逻辑运算
-    BINOP_AND,      // AND
-    BINOP_OR        // OR
+    BINOP_AND,      // AND（逻辑与）
+    BINOP_OR,       // OR（逻辑或）
+    BINOP_XOR,      // XOR（逻辑异或）
+    
+    // 位运算（IEC 61131-3）
+    BINOP_BIT_AND,  // &（位与）
+    BINOP_BIT_OR,   // |（位或）
+    BINOP_BIT_XOR,  // ^（位异或）
+    
+    // 移位运算
+    BINOP_SHL,      // SHL（左移）
+    BINOP_SHR       // SHR（右移）
 } BinaryOp;
 
 /**
@@ -72,7 +82,8 @@ typedef enum {
  */
 typedef enum {
     UNOP_NEG,       // - (取负)
-    UNOP_NOT        // NOT (逻辑非)
+    UNOP_NOT,       // NOT (逻辑非)
+    UNOP_BIT_NOT    // ~（位取反）
 } UnaryOp;
 
 /**
