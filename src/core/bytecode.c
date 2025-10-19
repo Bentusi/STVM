@@ -22,7 +22,8 @@ const char* opcode_to_string(Opcode opcode) {
         "PUSH", "POP", "DUP", "LOAD", "STORE",
         "ADD", "SUB", "MUL", "DIV", "MOD", "NEG",
         "EQ", "NE", "LT", "LE", "GT", "GE",
-        "AND", "OR", "NOT",
+        "AND", "OR", "NOT", "XOR",
+        "BIT_AND", "BIT_OR", "BIT_XOR", "BIT_NOT", "SHL", "SHR",
         "JMP", "JZ", "JNZ", "CALL", "RET",
         "HALT", "CALL_EXT", "NOP", "LOAD_INDEXED", "STORE_INDEXED"
     };
@@ -451,6 +452,13 @@ void bytecode_disassemble_instruction(Instruction instr, char* buffer, size_t si
         case OP_AND:
         case OP_OR:
         case OP_NOT:
+        case OP_XOR:
+        case OP_BIT_AND:
+        case OP_BIT_OR:
+        case OP_BIT_XOR:
+        case OP_BIT_NOT:
+        case OP_SHL:
+        case OP_SHR:
         case OP_RET:
         case OP_HALT:
         case OP_NOP:

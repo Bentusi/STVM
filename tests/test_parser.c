@@ -150,12 +150,11 @@ void test_function_declaration(void) {
     
     const char* source =
         "PROGRAM Test\n"
-        "FUNCTION Add\n"
+        "FUNCTION Add : INT\n"
         "VAR_INPUT\n"
         "  a : INT;\n"
         "  b : INT;\n"
         "END_VAR\n"
-        ": INT\n"
         "  RETURN a + b;\n"
         "END_FUNCTION\n"
         "END_PROGRAM\n";
@@ -249,7 +248,7 @@ int main(void) {
     printf("=== Parser and Type Checker Tests (Flex/Bison) ===\n\n");
     
     // 初始化内存管理器
-    assert(mmgr_init() == OK);
+    assert(mmgr_init() == true);
     
     test_simple_program();
     test_expressions();

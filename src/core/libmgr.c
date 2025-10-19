@@ -345,7 +345,7 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
     ImportedSymbol* import = (ImportedSymbol*)mmgr_alloc(sizeof(ImportedSymbol));
     if (!import) return ERR_OUT_OF_MEMORY;
     
-    import->name = mmgr_strdup(qualified_name);  // 使用完全限定名
+    import->name = mmgr_strdup(import_name);  // 使用导入名称（别名或原名）
     import->original_name = mmgr_strdup(symbol_name);
     import->library = lib;
     import->symbol = symbol;
@@ -353,9 +353,9 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
     mgr->imports = import;
     
     // 将符号注册到全局符号表
-    // 使用完全限定名，这样代码生成器会生成正确的函数名
+    // 使用导入名称（别名或原名），这样代码中可以直接使用简单名称
     TypeInfo* type_copy = type_info_retain(symbol->type);
-    Symbol* global_sym = symtbl_define_variable(mgr->global_symtbl, qualified_name, 
+    Symbol* global_sym = symtbl_define_variable(mgr->global_symtbl, import_name, 
                                                  type_copy, false);
     if (global_sym) {
         global_sym->kind = symbol->kind;
@@ -364,6 +364,7 @@ ErrorCode libmgr_import_symbol(LibraryManager* mgr, const char* library_name,
         global_sym->local_count = symbol->local_count;
         global_sym->is_library = true;
         global_sym->library_name = mmgr_strdup(library_name);
+        global_sym->qualified_name = mmgr_strdup(qualified_name);  // 保存完全限定名
     } else {
         // 如果定义失败，释放retain的类型
         type_info_free(type_copy);

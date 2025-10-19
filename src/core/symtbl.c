@@ -342,6 +342,20 @@ static Symbol* scope_lookup(Scope* scope, const char* name) {
         sym = sym->next;
     }
     
+    // 如果是限定名查找失败，尝试遍历所有符号查找库符号
+    if (strchr(name, '.')) {
+        for (uint32_t i = 0; i < SYMBOL_TABLE_SIZE; i++) {
+            sym = scope->symbols[i];
+            while (sym) {
+                if (sym->is_library && sym->qualified_name && 
+                    strcmp(sym->qualified_name, name) == 0) {
+                    return sym;
+                }
+                sym = sym->next;
+            }
+        }
+    }
+    
     return NULL;
 }
 
