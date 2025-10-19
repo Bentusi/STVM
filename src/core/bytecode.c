@@ -74,6 +74,8 @@ BytecodeModule* bytecode_module_create(void) {
     module->entry_point = 0;
     module->line_numbers = NULL;
     module->source_file = NULL;
+    module->library_deps = NULL;
+    module->library_dep_count = 0;
     
     return module;
 }
@@ -120,6 +122,16 @@ void bytecode_module_free(BytecodeModule* module) {
     // 释放源文件名
     if (module->source_file) {
         mmgr_free(module->source_file);
+    }
+    
+    // 释放库依赖信息
+    for (uint32_t i = 0; i < module->library_dep_count; i++) {
+        if (module->library_deps[i]) {
+            mmgr_free(module->library_deps[i]);
+        }
+    }
+    if (module->library_deps) {
+        mmgr_free(module->library_deps);
     }
     
     mmgr_free(module);
@@ -702,6 +714,45 @@ ErrorCode bytecode_merge_library(BytecodeModule* main, BytecodeModule* library, 
             }
         }
     }
+    
+    return OK;
+}
+
+/**
+ * @brief 添加库依赖到字节码模块
+ */
+ErrorCode bytecode_add_library_dependency(BytecodeModule* module, const char* library_path) {
+    if (!module || !library_path) {
+        return ERR_RUNTIME;
+    }
+    
+    // 检查是否已经存在此库依赖
+    for (uint32_t i = 0; i < module->library_dep_count; i++) {
+        if (strcmp(module->library_deps[i], library_path) == 0) {
+            return OK;  // 已存在,不重复添加
+        }
+    }
+    
+    // 扩展库依赖数组
+    char** new_deps = (char**)mmgr_realloc(
+        module->library_deps,
+        sizeof(char*) * (module->library_dep_count + 1)
+    );
+    if (!new_deps) {
+        return ERR_OUT_OF_MEMORY;
+    }
+    
+    // 复制库路径
+    size_t len = strlen(library_path);
+    char* lib_path_copy = (char*)mmgr_alloc(len + 1);
+    if (!lib_path_copy) {
+        return ERR_OUT_OF_MEMORY;
+    }
+    strcpy(lib_path_copy, library_path);
+    
+    new_deps[module->library_dep_count] = lib_path_copy;
+    module->library_deps = new_deps;
+    module->library_dep_count++;
     
     return OK;
 }

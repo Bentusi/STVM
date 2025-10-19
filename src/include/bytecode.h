@@ -147,6 +147,10 @@ typedef struct {
     // 入口点
     uint32_t entry_point;
     
+    // 库依赖信息(新增)
+    char** library_deps;    // 依赖的库文件名数组
+    uint32_t library_dep_count;
+    
     // 调试信息
     int* line_numbers;      // 指令行号映射（可选）
     char* source_file;      // 源文件名（可选）
@@ -284,5 +288,13 @@ void bytecode_print_module(BytecodeModule* module);
  * @return 错误码
  */
 ErrorCode bytecode_merge_library(BytecodeModule* main, BytecodeModule* library, const char* library_name);
+
+/**
+ * @brief 添加库依赖到字节码模块
+ * @param module 字节码模块
+ * @param library_path 库文件路径
+ * @return 错误码
+ */
+ErrorCode bytecode_add_library_dependency(BytecodeModule* module, const char* library_path);
 
 #endif // STVM_BYTECODE_H

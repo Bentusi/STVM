@@ -391,6 +391,7 @@ ErrorCode bytecode_save_to_stream(const BytecodeModule* module, FILE* fp) {
     header.constant_count = module->const_count;
     header.function_count = module->function_count;
     header.instruction_count = module->instruction_count;
+    header.library_dep_count = module->library_dep_count;
     header.checksum = bytecode_compute_checksum(module);
     
     // 写入文件头
@@ -409,6 +410,20 @@ ErrorCode bytecode_save_to_stream(const BytecodeModule* module, FILE* fp) {
     // 写入指令数组
     err = save_instructions(module, fp);
     if (err != OK) return err;
+    
+    // 写入库依赖信息(新增)
+    for (uint32_t i = 0; i < module->library_dep_count; i++) {
+        uint32_t len = strlen(module->library_deps[i]);
+        // 写入字符串长度
+        if (fwrite(&len, sizeof(uint32_t), 1, fp) != 1) {
+            return ERR_FILE_IO;
+        }
+        // 写入字符串内容
+        if (fwrite(module->library_deps[i], 1, len, fp) != len) {
+            return ERR_FILE_IO;
+        }
+    }
+    
     return OK;
 }
 
@@ -468,6 +483,38 @@ BytecodeModule* bytecode_load_from_stream(FILE* fp) {
     if (err != OK) {
         bytecode_module_free(module);
         return NULL;
+    }
+    
+    // 加载库依赖信息(新增)
+    module->library_dep_count = header.library_dep_count;
+    if (header.library_dep_count > 0) {
+        module->library_deps = (char**)mmgr_alloc(sizeof(char*) * header.library_dep_count);
+        if (!module->library_deps) {
+            bytecode_module_free(module);
+            return NULL;
+        }
+        
+        for (uint32_t i = 0; i < header.library_dep_count; i++) {
+            // 读取字符串长度
+            uint32_t len;
+            if (fread(&len, sizeof(uint32_t), 1, fp) != 1) {
+                bytecode_module_free(module);
+                return NULL;
+            }
+            
+            // 分配并读取字符串
+            module->library_deps[i] = (char*)mmgr_alloc(len + 1);
+            if (!module->library_deps[i]) {
+                bytecode_module_free(module);
+                return NULL;
+            }
+            
+            if (fread(module->library_deps[i], 1, len, fp) != len) {
+                bytecode_module_free(module);
+                return NULL;
+            }
+            module->library_deps[i][len] = '\0';
+        }
     }
     
     // 验证校验和

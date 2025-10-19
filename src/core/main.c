@@ -364,6 +364,26 @@ int cli_compile(const CliOptions* options) {
                 printf("没有库需要链接\n");
             }
         }
+    } else {
+        // 非静态链接,记录库依赖信息(新增)
+        uint32_t lib_count = libmgr_get_library_count(libmgr);
+        if (lib_count > 0) {
+            if (options->verbose) {
+                printf("记录库依赖信息（共 %u 个库）...\n", lib_count);
+            }
+            
+            for (uint32_t i = 0; i < lib_count; i++) {
+                const char* lib_name = libmgr_get_library_name(libmgr, i);
+                const char* lib_path = libmgr_get_library_path(libmgr, lib_name);
+                
+                if (lib_path) {
+                    bytecode_add_library_dependency(module, lib_path);
+                    if (options->verbose) {
+                        printf("  依赖库: %s\n", lib_path);
+                    }
+                }
+            }
+        }
     }
     
     // 打印字节码（如果需要）
@@ -452,6 +472,45 @@ int cli_run(const CliOptions* options) {
         printf("字节码加载完成\n");
         printf("入口点: %d\n", module->entry_point);
         printf("全局变量数: %d\n", module->global_count);
+        printf("库依赖数: %d\n", module->library_dep_count);
+    }
+    
+    // 加载库依赖(新增)
+    LibraryManager* libmgr = NULL;
+    if (module->library_dep_count > 0) {
+        if (options->verbose) {
+            printf("加载库依赖...\n");
+        }
+        
+        // 创建库管理器 (运行模式不需要符号表,传NULL)
+        libmgr = libmgr_create(NULL);
+        if (!libmgr) {
+            fprintf(stderr, "错误：无法创建库管理器\n");
+            bytecode_module_free(module);
+            mmgr_cleanup();
+            return 1;
+        }
+        
+        // 加载所有依赖的库
+        for (uint32_t i = 0; i < module->library_dep_count; i++) {
+            const char* lib_path = module->library_deps[i];
+            if (options->verbose) {
+                printf("  加载库: %s\n", lib_path);
+            }
+            
+            ErrorCode err = libmgr_load_library(libmgr, lib_path);
+            if (err != OK) {
+                fprintf(stderr, "错误：无法加载库 '%s'\n", lib_path);
+                libmgr_free(libmgr);
+                bytecode_module_free(module);
+                mmgr_cleanup();
+                return 1;
+            }
+        }
+        
+        if (options->verbose) {
+            printf("库依赖加载完成\n");
+        }
     }
     
     // 打印字节码（如果需要）
@@ -465,9 +524,15 @@ int cli_run(const CliOptions* options) {
     VM* vm = vm_create(module);
     if (!vm) {
         fprintf(stderr, "错误：无法创建虚拟机\n");
+        if (libmgr) libmgr_free(libmgr);
         bytecode_module_free(module);
         mmgr_cleanup();
         return 1;
+    }
+    
+    // 设置库管理器(新增)
+    if (libmgr) {
+        vm_set_library_manager(vm, libmgr);
     }
     
     // 调试模式
@@ -514,6 +579,7 @@ int cli_run(const CliOptions* options) {
     
     // 清理
     vm_free(vm);
+    if (libmgr) libmgr_free(libmgr);
     bytecode_module_free(module);
     mmgr_cleanup();
     

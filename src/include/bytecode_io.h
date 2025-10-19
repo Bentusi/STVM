@@ -17,7 +17,7 @@ struct SymbolTable;
 /**
  * @brief STBC文件格式魔数
  */
-#define STBC_MAGIC 0x53544243  // "STBC" in ASCII
+#define STBC_MAGIC 0x43425453  // "STBC" in little-endian (文件中显示为 53 54 42 43 "STBC")
 
 /**
  * @brief STBC文件版本
@@ -37,6 +37,7 @@ typedef struct STBCHeader {
     uint32_t constant_count;        // 常量池大小
     uint32_t function_count;        // 函数数量
     uint32_t instruction_count;     // 指令数量
+    uint32_t library_dep_count;     // 库依赖数量(新增)
     uint32_t checksum;              // CRC32校验和（可选）
 } STBCHeader;
 
