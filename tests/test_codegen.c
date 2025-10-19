@@ -179,7 +179,10 @@ void test_if_statement(void) {
     codegen_free(ctx);
     ast_free_node(program);
     bytecode_module_free(module);
-    type_info_free(int_type);
+    // 释放所有 type_info 引用（初始 + 2 次 retain）
+    type_info_free(int_type);  // x_sym 的引用
+    type_info_free(int_type);  // y_sym 的引用
+    type_info_free(int_type);  // 初始引用
     symtbl_free(symtbl);
 }
 
@@ -235,6 +238,7 @@ void test_while_loop(void) {
     codegen_free(ctx);
     ast_free_node(program);
     bytecode_module_free(module);
+    type_info_free(int_type);
     symtbl_free(symtbl);
 }
 

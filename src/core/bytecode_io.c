@@ -478,6 +478,13 @@ BytecodeModule* bytecode_load_from_stream(FILE* fp) {
         return NULL;
     }
     
+    // 释放 bytecode_module_create() 分配的初始指令数组
+    // 因为 load_instructions() 会重新分配
+    if (module->instructions) {
+        mmgr_free(module->instructions);
+        module->instructions = NULL;
+    }
+    
     // 加载指令数组
     err = load_instructions(module, fp, header.instruction_count);
     if (err != OK) {

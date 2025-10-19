@@ -135,6 +135,10 @@ void test_variable_declaration(void) {
     
     ast_free_node(var_decl);
     ast_free_node(var_decl2);
+    
+    // 释放我们创建的类型
+    type_info_free(type);
+    type_info_free(type2);
 }
 
 void test_assignment(void) {

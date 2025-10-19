@@ -63,6 +63,9 @@ void test_array_type_info(void) {
     
     printf("✓ Created 1D INT array [10]\n");
     
+    // 释放我们对 elem_type 的引用（array_type 会保持它的引用）
+    type_info_free(elem_type);
+    // 释放数组类型（会递归释放 elem_type）
     type_info_free(array_type);
 }
 
@@ -86,6 +89,11 @@ void test_function_type_info(void) {
     
     printf("✓ Created function type (INT, REAL) -> BOOL\n");
     
+    // 释放我们对这些类型的引用（func_type 会保持它们的引用）
+    type_info_free(return_type);
+    type_info_free(param_types[0]);
+    type_info_free(param_types[1]);
+    // 释放函数类型（会递归释放所有子类型）
     type_info_free(func_type);
 }
 

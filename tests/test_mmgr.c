@@ -136,13 +136,19 @@ void test_stress(void) {
 void test_pool_reset(void) {
     printf("\n--- Test: Pool Reset ---\n");
     
-    // 分配一些内存
+    // 分配一些内存并保存指针
+    void* ptrs[10];
     for (int i = 0; i < 10; i++) {
-        mmgr_alloc_from_pool(POOL_SMALL, 32);
+        ptrs[i] = mmgr_alloc_from_pool(POOL_SMALL, 32);
     }
     printf("✓ Allocated 10 blocks from SMALL pool\n");
     
-    // 重置池
+    // 先正常释放所有内存
+    for (int i = 0; i < 10; i++) {
+        mmgr_free(ptrs[i]);
+    }
+    
+    // 重置池（现在池已经是空的了）
     mmgr_reset_pool(POOL_SMALL);
     printf("✓ Reset SMALL pool\n");
     

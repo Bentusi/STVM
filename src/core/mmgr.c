@@ -147,7 +147,7 @@ void* mmgr_alloc_from_pool(PoolType pool_type, size_t size) {
         
         MemoryBlock* block = (MemoryBlock*)ptr;
         block->magic = MMGR_MAGIC;
-        block->size = total_size;  // 存储总大小（包括头部）
+        block->size = size;  // 存储用户请求的数据大小（不包括头部）
         block->pool_type = pool_type;
         block->is_free = false;
         block->next = NULL;

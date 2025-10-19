@@ -63,6 +63,10 @@ void test_define_variables(void) {
     printf("✓ Duplicate variable definition rejected\n");
     type_info_free(dup_type);
     
+    // 释放我们创建的类型
+    type_info_free(int_type);
+    type_info_free(real_type);
+    
     symtbl_free(symtbl);
 }
 
@@ -126,6 +130,11 @@ void test_local_variables(void) {
     assert(local_var2->offset == 1);
     printf("✓ Defined local variable: local_z [local @%d]\n", local_var2->offset);
     
+    // 释放我们创建的类型
+    type_info_free(global_type);
+    type_info_free(local_type);
+    type_info_free(local_type2);
+    
     symtbl_leave_scope(symtbl);
     symtbl_free(symtbl);
 }
@@ -168,6 +177,10 @@ void test_symbol_lookup(void) {
     assert(not_found == NULL);
     printf("✓ Non-existent variable returned NULL\n");
     
+    // 释放我们创建的类型
+    type_info_free(type1);
+    type_info_free(type2);
+    
     symtbl_leave_scope(symtbl);
     symtbl_free(symtbl);
 }
@@ -195,6 +208,11 @@ void test_define_functions(void) {
     assert(found_func != NULL);
     assert(found_func == func);
     printf("✓ Found function: %s\n", found_func->name);
+    
+    // 释放我们创建的类型
+    type_info_free(return_type);
+    type_info_free(param_types[0]);
+    type_info_free(param_types[1]);
     
     symtbl_free(symtbl);
 }
@@ -226,6 +244,11 @@ void test_function_parameters(void) {
     Symbol* local = symtbl_define_variable(symtbl, "temp", local_type, false);
     assert(local->offset == 2);
     printf("✓ Defined local variable: temp [local @%d]\n", local->offset);
+    
+    // 释放我们创建的类型
+    type_info_free(param1_type);
+    type_info_free(param2_type);
+    type_info_free(local_type);
     
     symtbl_leave_scope(symtbl);
     symtbl_free(symtbl);
@@ -262,10 +285,9 @@ void test_library_symbols(void) {
     SymbolTable* symtbl = symtbl_init();
     
     // 创建库符号
-    TypeInfo* func_type = type_info_create_function(
-        type_info_create(TYPE_REAL),
-        NULL, 0
-    );
+    TypeInfo* return_type = type_info_create(TYPE_REAL);
+    TypeInfo* func_type = type_info_create_function(return_type, NULL, 0);
+    
     Symbol* lib_sym = (Symbol*)mmgr_alloc_from_pool(POOL_SYMBOL, sizeof(Symbol));
     memset(lib_sym, 0, sizeof(Symbol));
     lib_sym->name = mmgr_strdup("sqrt");
@@ -286,6 +308,10 @@ void test_library_symbols(void) {
     assert(found != NULL);
     assert(found == lib_sym);
     printf("✓ Found library symbol: %s\n", found->qualified_name);
+    
+    // 释放类型（因为 owns_type = false）
+    type_info_free(return_type);
+    type_info_free(func_type);
     
     symtbl_free(symtbl);
 }
@@ -309,6 +335,12 @@ void test_symbol_print(void) {
     
     // 打印符号表
     symtbl_print(symtbl);
+    
+    // 释放我们创建的类型（因为符号表不拥有它们）
+    type_info_free(type1);
+    type_info_free(type2);
+    type_info_free(ret_type);
+    type_info_free(param_types[0]);
     
     symtbl_free(symtbl);
 }
