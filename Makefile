@@ -3,7 +3,7 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c11 -I./src/include -I./build
-LDFLAGS =
+LDFLAGS = -lm
 
 # Flex and Bison
 LEX = flex
@@ -21,6 +21,7 @@ CFLAGS += $(DEBUG_FLAGS)
 SRC_DIR = src
 INCLUDE_DIR = $(SRC_DIR)/include
 CORE_DIR = $(SRC_DIR)/core
+TESTS_DIR = tests
 BUILD_DIR = build
 OBJ_DIR = $(BUILD_DIR)/obj
 BIN_DIR = $(BUILD_DIR)/bin
@@ -28,6 +29,9 @@ BIN_DIR = $(BUILD_DIR)/bin
 # Source files (exclude .l and .y files, they're generated)
 CORE_SRCS = $(filter-out $(CORE_DIR)/st_lexer.c $(CORE_DIR)/st_parser.c,$(wildcard $(CORE_DIR)/*.c))
 CORE_OBJS = $(patsubst $(CORE_DIR)/%.c,$(OBJ_DIR)/%.o,$(CORE_SRCS))
+
+# Test source files
+TEST_SRCS = $(wildcard $(TESTS_DIR)/*.c)
 
 # Generated parser files
 PARSER_C = $(BUILD_DIR)/st_parser.tab.c
@@ -40,9 +44,9 @@ LEXER_OBJ = $(OBJ_DIR)/lex.yy.o
 HEADERS = $(wildcard $(INCLUDE_DIR)/*.h)
 
 # Targets
-.PHONY: all clean dirs test release parser stvm
+.PHONY: all clean dirs test release parser stvm help
 
-all: dirs parser stvm test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr
+all: stvm
 
 # Create necessary directories
 dirs:
@@ -50,98 +54,135 @@ dirs:
 	@mkdir -p $(BIN_DIR)
 
 # Generate parser and lexer
-parser: dirs $(PARSER_C) $(LEXER_C)
+parser: $(PARSER_C) $(LEXER_C)
 
-$(PARSER_C) $(PARSER_H): $(CORE_DIR)/st_parser.y
+$(PARSER_C) $(PARSER_H): $(CORE_DIR)/st_parser.y | dirs
 	@echo "Generating parser..."
 	$(YACC) $(YFLAGS) -o $(PARSER_C) $<
 
-$(LEXER_C): $(CORE_DIR)/st_lexer.l $(PARSER_H)
+$(LEXER_C): $(CORE_DIR)/st_lexer.l $(PARSER_H) | dirs
 	@echo "Generating lexer..."
 	$(LEX) -o $(LEXER_C) $<
 
 # Compile generated parser and lexer
-$(PARSER_OBJ): $(PARSER_C) $(HEADERS)
+$(PARSER_OBJ): $(PARSER_C) $(PARSER_H) $(HEADERS) | dirs
 	@echo "Compiling parser..."
-	$(CC) $(CFLAGS) -Wno-unused-function -c $< -o $@
+	$(CC) $(CFLAGS) -Wno-unused-function -c $(PARSER_C) -o $@
 
-$(LEXER_OBJ): $(LEXER_C) $(HEADERS)
+$(LEXER_OBJ): $(LEXER_C) $(PARSER_H) $(HEADERS) | dirs
 	@echo "Compiling lexer..."
-	$(CC) $(CFLAGS) -Wno-unused-function -c $< -o $@
+	$(CC) $(CFLAGS) -Wno-unused-function -c $(LEXER_C) -o $@
 
-# Compile object files
-$(OBJ_DIR)/%.o: $(CORE_DIR)/%.c $(HEADERS)
+# Compile object files with proper dependencies
+$(OBJ_DIR)/%.o: $(CORE_DIR)/%.c $(HEADERS) | dirs
 	@echo "Compiling $<..."
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# Test programs
-test_mmgr: dirs $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o
+# Test programs with proper dependencies
+test_mmgr: $(BIN_DIR)/test_mmgr
+
+$(BIN_DIR)/test_mmgr: $(TESTS_DIR)/test_mmgr.c $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o | dirs
 	@echo "Building test_mmgr..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_mmgr tests/test_mmgr.c $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_types: dirs $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o
+test_types: $(BIN_DIR)/test_types
+
+$(BIN_DIR)/test_types: $(TESTS_DIR)/test_types.c $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o | dirs
 	@echo "Building test_types..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_types tests/test_types.c $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_bytecode: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
+test_bytecode: $(BIN_DIR)/test_bytecode
+
+$(BIN_DIR)/test_bytecode: $(TESTS_DIR)/test_bytecode.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) | dirs
 	@echo "Building test_bytecode..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_bytecode tests/test_bytecode.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_ast: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
+test_ast: $(BIN_DIR)/test_ast
+
+$(BIN_DIR)/test_ast: $(TESTS_DIR)/test_ast.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) | dirs
 	@echo "Building test_ast..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_ast tests/test_ast.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_symtbl: dirs $(CORE_OBJS)
+test_symtbl: $(BIN_DIR)/test_symtbl
+
+$(BIN_DIR)/test_symtbl: $(TESTS_DIR)/test_symtbl.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) | dirs
 	@echo "Building test_symtbl..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_symtbl tests/test_symtbl.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_parser: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
+test_parser: $(BIN_DIR)/test_parser
+
+$(BIN_DIR)/test_parser: $(TESTS_DIR)/test_parser.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) | dirs
 	@echo "Building test_parser..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_parser tests/test_parser.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_codegen: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
+test_codegen: $(BIN_DIR)/test_codegen
+
+$(BIN_DIR)/test_codegen: $(TESTS_DIR)/test_codegen.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) | dirs
 	@echo "Building test_codegen..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_codegen tests/test_codegen.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-# VM and Library Manager tests
-test_vm: dirs $(CORE_OBJS)
+test_vm: $(BIN_DIR)/test_vm
+
+$(BIN_DIR)/test_vm: $(TESTS_DIR)/test_vm.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) | dirs
 	@echo "Building test_vm..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_vm tests/test_vm.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_libmgr: dirs $(CORE_OBJS)
+test_libmgr: $(BIN_DIR)/test_libmgr
+
+$(BIN_DIR)/test_libmgr: $(TESTS_DIR)/test_libmgr.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) | dirs
 	@echo "Building test_libmgr..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_libmgr tests/test_libmgr.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-test_bitops: dirs $(CORE_OBJS)
+test_bitops: $(BIN_DIR)/test_bitops
+
+$(BIN_DIR)/test_bitops: $(TESTS_DIR)/test_bitops.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) | dirs
 	@echo "Building test_bitops..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/test_bitops tests/test_bitops.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Main programs
-stvm: dirs parser $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ)
+stvm: $(BIN_DIR)/stvm
+
+$(BIN_DIR)/stvm: $(CORE_OBJS) $(PARSER_OBJ) $(LEXER_OBJ) | dirs
 	@echo "Building stvm (compiler and VM)..."
-	$(CC) $(CFLAGS) -o $(BIN_DIR)/stvm $(OBJ_DIR)/main.o $(OBJ_DIR)/debugger.o $(filter-out $(OBJ_DIR)/main.o $(OBJ_DIR)/debugger.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 # Release build
 release: CFLAGS := $(filter-out $(DEBUG_FLAGS),$(CFLAGS))
 release: CFLAGS += $(RELEASE_FLAGS)
 release: clean all
 
-# Run tests
-test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr
-	@echo "\n=== Running Memory Manager Tests ==="
+# Run all tests
+test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr test_bitops
+	@echo ""
+	@echo "=== Running Memory Manager Tests ==="
 	@./$(BIN_DIR)/test_mmgr
-	@echo "\n=== Running Types Tests ==="
+	@echo ""
+	@echo "=== Running Types Tests ==="
 	@-./$(BIN_DIR)/test_types
-	@echo "\n=== Running Bytecode Tests ==="
+	@echo ""
+	@echo "=== Running Bytecode Tests ==="
 	@./$(BIN_DIR)/test_bytecode
-	@echo "\n=== Running AST Tests ==="
+	@echo ""
+	@echo "=== Running AST Tests ==="
 	@./$(BIN_DIR)/test_ast
-	@echo "\n=== Running Symbol Table Tests ==="
+	@echo ""
+	@echo "=== Running Symbol Table Tests ==="
 	@./$(BIN_DIR)/test_symtbl
-	@echo "\n=== Running Parser and Type Checker Tests ==="
+	@echo ""
+	@echo "=== Running Parser and Type Checker Tests ==="
 	@-./$(BIN_DIR)/test_parser
-	@echo "\n=== Running Code Generator Tests ==="
+	@echo ""
+	@echo "=== Running Code Generator Tests ==="
 	@./$(BIN_DIR)/test_codegen
+	@echo ""
+	@echo "=== Running VM Tests ==="
+	@./$(BIN_DIR)/test_vm
+	@echo ""
+	@echo "=== Running Library Manager Tests ==="
+	@./$(BIN_DIR)/test_libmgr
+	@echo ""
+	@echo "=== Running Bitwise Operations Tests ==="
+	@./$(BIN_DIR)/test_bitops
 
 # Clean build artifacts
 clean:
