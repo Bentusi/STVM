@@ -9,11 +9,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// 初始容量
-#define INITIAL_INSTRUCTION_CAPACITY 256
-#define INITIAL_CONSTANT_CAPACITY 64
-#define INITIAL_FUNCTION_CAPACITY 32
-
 /**
  * @brief 获取操作码名称字符串
  */

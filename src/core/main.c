@@ -872,6 +872,9 @@ int cli_compile_and_run(const CliOptions* options) {
  * @brief REPL模式
  */
 int cli_repl(const CliOptions* options) {
+    // TODO: 未来可能需要使用 options 配置 REPL 行为
+    (void)options;
+    
     printf("STVM Interactive REPL v%d.%d.%d\n", 
            STVM_VERSION_MAJOR, STVM_VERSION_MINOR, STVM_VERSION_PATCH);
     printf("输入 '.help' 查看帮助, '.quit' 退出\n\n");

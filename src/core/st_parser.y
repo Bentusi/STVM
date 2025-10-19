@@ -12,11 +12,17 @@
 #include "types.h"
 #include "mmgr.h"
 
+/* 需要 strdup 声明 */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 /* 外部声明 */
 extern int yylex(void);
 extern int yylineno;
 extern int yycolumn;
 extern char* yytext;
+extern char* strdup(const char*);
 
 void yyerror(const char* s);
 

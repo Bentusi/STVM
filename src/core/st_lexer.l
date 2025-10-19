@@ -10,6 +10,11 @@
 #include "st_parser.tab.h"
 #include "mmgr.h"
 
+/* 需要 POSIX 函数声明 */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 /* 当前列号 */
 int yycolumn = 1;
 
@@ -154,23 +159,6 @@ STRING      '([^'\n]|'')*'
 
     /* 行注释 // ... */
 "//"[^\n]*          { /* 忽略行注释 */ }
-
-    /* 块注释 (* ... *) */
-"(*"                {
-                        int c;
-                        while ((c = input()) != 0) {
-                            if (c == '\n') {
-                                yylineno++;
-                                yycolumn = 1;
-                            } else if (c == '*') {
-                                if ((c = input()) == ')') {
-                                    break;
-                                } else {
-                                    unput(c);
-                                }
-                            }
-                        }
-                    }
 
     /* 块注释 (* ... *) */
 "(*"                {

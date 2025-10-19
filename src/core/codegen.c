@@ -329,7 +329,7 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
         return ERR_NAME;
     }
     // 记录返回值变量的 offset
-    int32_t return_var_offset = ctx->symtbl->local_var_offset - 1;  // 刚刚定义的变量
+    (void)ctx->symtbl->local_var_offset;  // 返回值变量的 offset，当前未使用
     ctx->local_var_count++;
     
     // 注册局部变量到符号表（在生成初始化代码之前）

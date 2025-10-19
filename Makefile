@@ -71,7 +71,7 @@ $(PARSER_OBJ): $(PARSER_C) $(PARSER_H) $(HEADERS) | dirs
 
 $(LEXER_OBJ): $(LEXER_C) $(PARSER_H) $(HEADERS) | dirs
 	@echo "Compiling lexer..."
-	$(CC) $(CFLAGS) -Wno-unused-function -c $(LEXER_C) -o $@
+	$(CC) $(CFLAGS) -Wno-unused-function -D_POSIX_C_SOURCE=200809L -c $(LEXER_C) -o $@
 
 # Compile object files with proper dependencies
 $(OBJ_DIR)/%.o: $(CORE_DIR)/%.c $(HEADERS) | dirs

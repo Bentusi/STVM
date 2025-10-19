@@ -327,6 +327,10 @@ void debugger_disassemble(Debugger* dbg, uint32_t start, int count) {
         return;
     }
     
+    // TODO: 实现指定范围的反汇编，当前忽略 start 和 count 参数
+    (void)start;
+    (void)count;
+    
     bytecode_print_module(dbg->vm->module);
 }
 

@@ -18,6 +18,11 @@
 #include "types.h"
 #include "error.h"
 
+// 初始容量
+#define INITIAL_INSTRUCTION_CAPACITY (1024*256)
+#define INITIAL_CONSTANT_CAPACITY (1024*64)
+#define INITIAL_FUNCTION_CAPACITY (1024*32)
+
 /**
  * @brief 操作码枚举（精简到28个核心指令）
  */
