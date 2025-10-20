@@ -14,6 +14,7 @@
 #include "mmgr.h"
 #include "builtins.h"
 #include "libmgr.h"
+#include "iomgr.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -118,6 +119,15 @@ VM* vm_create(BytecodeModule* module) {
 void vm_set_library_manager(VM* vm, struct LibraryManager* libmgr) {
     if (vm) {
         vm->libmgr = libmgr;
+    }
+}
+
+/**
+ * @brief 设置虚拟机的 I/O 管理器
+ */
+void vm_set_io_manager(VM* vm, struct IOManager* io_manager) {
+    if (vm) {
+        vm->io_manager = io_manager;
     }
 }
 
@@ -821,6 +831,115 @@ ErrorCode vm_step(VM* vm) {
             // 空操作
             break;
         
+        // === 硬件 I/O ===
+        case OP_IO_READ: {
+            // operand: 常量池中的 I/O 地址字符串索引
+            if (!vm->io_manager) {
+                vm->error_code = ERR_RUNTIME;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "I/O manager not set at PC=%u", vm->pc-1);
+                return ERR_RUNTIME;
+            }
+            
+            uint32_t addr_idx = instr.operand;
+            if (addr_idx >= vm->module->const_count) {
+                vm->error_code = ERR_OUT_OF_BOUNDS;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Invalid constant index %u at PC=%u", addr_idx, vm->pc-1);
+                return ERR_OUT_OF_BOUNDS;
+            }
+            
+            Constant* c = &vm->module->constants[addr_idx];
+            if (c->type != CONST_STRING) {
+                vm->error_code = ERR_TYPE;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "I/O address must be STRING at PC=%u", vm->pc-1);
+                return ERR_TYPE;
+            }
+            
+            // 解析 I/O 地址
+            IOAddress io_addr;
+            ErrorCode err = io_address_parse(c->string_val, &io_addr);
+            if (err != OK) {
+                vm->error_code = err;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Failed to parse I/O address '%s' at PC=%u", c->string_val, vm->pc-1);
+                return err;
+            }
+            
+            // 从 I/O 管理器读取
+            Value io_value;
+            err = io_manager_read(vm->io_manager, &io_addr, &io_value);
+            if (err != OK) {
+                vm->error_code = err;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Failed to read I/O '%s' at PC=%u", c->string_val, vm->pc-1);
+                return err;
+            }
+            
+            // 压入栈
+            PUSH(io_value);
+            break;
+        }
+        
+        case OP_IO_WRITE: {
+            // operand: 常量池中的 I/O 地址字符串索引
+            // 栈顶: 要写入的值
+            if (!vm->io_manager) {
+                vm->error_code = ERR_RUNTIME;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "I/O manager not set at PC=%u", vm->pc-1);
+                return ERR_RUNTIME;
+            }
+            
+            if (vm->sp < 1) {
+                vm->error_code = ERR_STACK_UNDERFLOW;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Stack underflow in IO_WRITE at PC=%u", vm->pc-1);
+                return ERR_STACK_UNDERFLOW;
+            }
+            
+            uint32_t addr_idx = instr.operand;
+            if (addr_idx >= vm->module->const_count) {
+                vm->error_code = ERR_OUT_OF_BOUNDS;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Invalid constant index %u at PC=%u", addr_idx, vm->pc-1);
+                return ERR_OUT_OF_BOUNDS;
+            }
+            
+            Constant* c = &vm->module->constants[addr_idx];
+            if (c->type != CONST_STRING) {
+                vm->error_code = ERR_TYPE;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "I/O address must be STRING at PC=%u", vm->pc-1);
+                return ERR_TYPE;
+            }
+            
+            // 解析 I/O 地址
+            IOAddress io_addr;
+            ErrorCode err = io_address_parse(c->string_val, &io_addr);
+            if (err != OK) {
+                vm->error_code = err;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Failed to parse I/O address '%s' at PC=%u", c->string_val, vm->pc-1);
+                return err;
+            }
+            
+            // 从栈弹出值
+            Value write_value = POP();
+            
+            // 写入 I/O 管理器
+            err = io_manager_write(vm->io_manager, &io_addr, &write_value);
+            if (err != OK) {
+                vm->error_code = err;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                        "Failed to write I/O '%s' at PC=%u", c->string_val, vm->pc-1);
+                return err;
+            }
+            
+            break;
+        }
+        
         case OP_LOAD_INDEXED: {
             // 从栈顶弹出索引，使用 operand 作为基地址，压入数组元素
             if (vm->sp < 1) {
@@ -1316,6 +1435,115 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             case OP_NOP:
                 // 空操作
                 break;
+            
+            // === 硬件 I/O ===
+            case OP_IO_READ: {
+                // operand: 常量池中的 I/O 地址字符串索引
+                if (!vm->io_manager) {
+                    vm->error_code = ERR_RUNTIME;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "I/O manager not set at PC=%u", vm->pc-1);
+                    return ERR_RUNTIME;
+                }
+                
+                uint32_t addr_idx = instr.operand;
+                if (addr_idx >= vm->module->const_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Invalid constant index %u at PC=%u", addr_idx, vm->pc-1);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                
+                Constant* c = &vm->module->constants[addr_idx];
+                if (c->type != CONST_STRING) {
+                    vm->error_code = ERR_TYPE;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "I/O address must be STRING at PC=%u", vm->pc-1);
+                    return ERR_TYPE;
+                }
+                
+                // 解析 I/O 地址
+                IOAddress io_addr;
+                ErrorCode err = io_address_parse(c->string_val, &io_addr);
+                if (err != OK) {
+                    vm->error_code = err;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Failed to parse I/O address '%s' at PC=%u", c->string_val, vm->pc-1);
+                    return err;
+                }
+                
+                // 从 I/O 管理器读取
+                Value io_value;
+                err = io_manager_read(vm->io_manager, &io_addr, &io_value);
+                if (err != OK) {
+                    vm->error_code = err;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Failed to read I/O '%s' at PC=%u", c->string_val, vm->pc-1);
+                    return err;
+                }
+                
+                // 压入栈
+                PUSH(io_value);
+                break;
+            }
+            
+            case OP_IO_WRITE: {
+                // operand: 常量池中的 I/O 地址字符串索引
+                // 栈顶: 要写入的值
+                if (!vm->io_manager) {
+                    vm->error_code = ERR_RUNTIME;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "I/O manager not set at PC=%u", vm->pc-1);
+                    return ERR_RUNTIME;
+                }
+                
+                if (vm->sp < 0) {
+                    vm->error_code = ERR_STACK_UNDERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Stack underflow in IO_WRITE at PC=%u", vm->pc-1);
+                    return ERR_STACK_UNDERFLOW;
+                }
+                
+                uint32_t addr_idx = instr.operand;
+                if (addr_idx >= vm->module->const_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Invalid constant index %u at PC=%u", addr_idx, vm->pc-1);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                
+                Constant* c = &vm->module->constants[addr_idx];
+                if (c->type != CONST_STRING) {
+                    vm->error_code = ERR_TYPE;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "I/O address must be STRING at PC=%u", vm->pc-1);
+                    return ERR_TYPE;
+                }
+                
+                // 解析 I/O 地址
+                IOAddress io_addr;
+                ErrorCode err = io_address_parse(c->string_val, &io_addr);
+                if (err != OK) {
+                    vm->error_code = err;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Failed to parse I/O address '%s' at PC=%u", c->string_val, vm->pc-1);
+                    return err;
+                }
+                
+                // 从栈弹出值
+                Value write_value = POP();
+                
+                // 写入 I/O 管理器
+                err = io_manager_write(vm->io_manager, &io_addr, &write_value);
+                if (err != OK) {
+                    vm->error_code = err;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Failed to write I/O '%s' at PC=%u", c->string_val, vm->pc-1);
+                    return err;
+                }
+                
+                break;
+            }
             
             case OP_LOAD_INDEXED: {
                 // 从栈顶弹出索引，使用 operand 作为基地址，压入数组元素

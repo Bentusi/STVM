@@ -63,6 +63,8 @@ static void scope_free(Scope* scope) {
             if (sym->name) mmgr_free(sym->name);
             if (sym->qualified_name) mmgr_free(sym->qualified_name);
             if (sym->library_name) mmgr_free(sym->library_name);
+            if (sym->function_scope) mmgr_free(sym->function_scope);
+            if (sym->io_address) mmgr_free(sym->io_address);
             // 只有当符号拥有类型信息时才释放
             if (sym->type && sym->owns_type) type_info_free(sym->type);
             

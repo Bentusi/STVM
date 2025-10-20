@@ -120,9 +120,17 @@ ErrorCode typecheck_program(TypeChecker* checker, ASTNode* program) {
                 bool is_const = decl->data.var_decl.is_const;
                 
                 // 注册变量到符号表
-                if (!symtbl_define_variable(checker->symtbl, name, type, is_const)) {
+                Symbol* sym = symtbl_define_variable(checker->symtbl, name, type, is_const);
+                if (!sym) {
                     fprintf(stderr, "Type error: Cannot define variable '%s'\n", name);
                     checker->error_count++;
+                } else {
+                    // 如果是外部I/O变量，设置相应标志和地址
+                    if (decl->data.var_decl.is_external) {
+                        sym->is_external = true;
+                        sym->io_address = decl->data.var_decl.io_address ? 
+                                         mmgr_strdup(decl->data.var_decl.io_address) : NULL;
+                    }
                 }
                 
                 // 如果有初始化表达式，检查类型
@@ -218,10 +226,18 @@ ErrorCode typecheck_function(TypeChecker* checker, ASTNode* func_decl) {
                 bool is_const = decl->data.var_decl.is_const;
                 
                 // 定义为函数作用域的静态变量
-                if (!symtbl_define_static_variable(checker->symtbl, name, type, is_const, func_name)) {
+                Symbol* sym = symtbl_define_static_variable(checker->symtbl, name, type, is_const, func_name);
+                if (!sym) {
                     fprintf(stderr, "Type error: Cannot define static variable '%s' in function '%s'\n", 
                             name, func_name);
                     checker->error_count++;
+                } else {
+                    // 如果是外部I/O变量，设置相应标志和地址
+                    if (decl->data.var_decl.is_external) {
+                        sym->is_external = true;
+                        sym->io_address = decl->data.var_decl.io_address ? 
+                                         mmgr_strdup(decl->data.var_decl.io_address) : NULL;
+                    }
                 }
                 
                 if (decl->data.var_decl.initializer) {
@@ -270,9 +286,17 @@ ErrorCode typecheck_function(TypeChecker* checker, ASTNode* func_decl) {
                 bool is_const = decl->data.var_decl.is_const;
                 
                 // 在当前（函数）作用域定义变量
-                if (!symtbl_define_variable(checker->symtbl, name, type, is_const)) {
+                Symbol* sym = symtbl_define_variable(checker->symtbl, name, type, is_const);
+                if (!sym) {
                     fprintf(stderr, "Type error: Cannot define local variable '%s'\n", name);
                     checker->error_count++;
+                } else {
+                    // 如果是外部I/O变量，设置相应标志和地址
+                    if (decl->data.var_decl.is_external) {
+                        sym->is_external = true;
+                        sym->io_address = decl->data.var_decl.io_address ? 
+                                         mmgr_strdup(decl->data.var_decl.io_address) : NULL;
+                    }
                 }
                 
                 if (decl->data.var_decl.initializer) {

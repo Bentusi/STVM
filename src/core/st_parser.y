@@ -56,7 +56,7 @@ ASTNode* parse_result = NULL;
 %token TOKEN_PROGRAM TOKEN_END_PROGRAM TOKEN_BEGIN
 %token TOKEN_FUNCTION TOKEN_END_FUNCTION
 %token TOKEN_PRINT
-%token TOKEN_VAR TOKEN_VAR_INPUT TOKEN_VAR_OUTPUT TOKEN_VAR_LOCAL TOKEN_END_VAR
+%token TOKEN_VAR TOKEN_VAR_INPUT TOKEN_VAR_OUTPUT TOKEN_VAR_LOCAL TOKEN_VAR_EXTERNAL TOKEN_END_VAR TOKEN_AT
 %token TOKEN_IF TOKEN_THEN TOKEN_ELSIF TOKEN_ELSE TOKEN_END_IF
 %token TOKEN_CASE TOKEN_OF TOKEN_END_CASE
 %token TOKEN_FOR TOKEN_TO TOKEN_BY TOKEN_DO TOKEN_END_FOR
@@ -85,7 +85,7 @@ ASTNode* parse_result = NULL;
 /* 非终结符类型声明 */
 %type <ast_node> program import_list import_decl
 %type <ast_node> var_decl_list var_decl var_decl_item
-%type <ast_node> function_list function_decl function_params function_local_vars function_var_decl_list
+%type <ast_node> function_list function_decl function_params function_local_vars function_var_decl_list external_var_decl_list
 %type <ast_node> statement_list statement
 %type <ast_node> assignment_stmt if_stmt elsif_list while_stmt for_stmt case_stmt return_stmt print_stmt
 %type <ast_node> expression or_expr xor_expr and_expr comparison_expr
@@ -219,6 +219,11 @@ var_decl:
     {
         $$ = $2;
         // 输出变量：可以在后续类型检查时处理
+    }
+    | TOKEN_VAR_EXTERNAL external_var_decl_list TOKEN_END_VAR
+    {
+        $$ = $2;
+        // 外部I/O变量：映射到硬件地址
     }
     ;
 
@@ -375,6 +380,19 @@ function_local_vars:
             $$ = $1;
         }
     }
+    | function_local_vars TOKEN_VAR_EXTERNAL external_var_decl_list TOKEN_END_VAR
+    {
+        // VAR_EXTERNAL 块中的变量标记为外部 I/O 变量
+        if ($1 == NULL) {
+            $$ = $3;
+        } else {
+            // 连接到现有的变量链表
+            ASTNode* last = $1;
+            while (last->next) last = last->next;
+            last->next = $3;
+            $$ = $1;
+        }
+    }
     | function_local_vars TOKEN_VAR TOKEN_END_VAR
     {
         // 空的 VAR 块（函数内定义全局变量）
@@ -445,6 +463,27 @@ statement_list:
             last->next = $2;
             $$ = $1;
         }
+    }
+    ;
+
+/* 外部 I/O 变量声明列表（VAR_EXTERNAL 块） */
+external_var_decl_list:
+    TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_AT TOKEN_STRING_LITERAL TOKEN_SEMICOLON
+    {
+        // 创建外部变量声明: 变量名 : 类型 AT "I/O地址";
+        $$ = ast_create_external_var_decl($1, $3, $5);
+        if ($1) mmgr_free((void*)$1);
+        if ($5) mmgr_free((void*)$5);
+    }
+    | external_var_decl_list TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_AT TOKEN_STRING_LITERAL TOKEN_SEMICOLON
+    {
+        ASTNode* new_decl = ast_create_external_var_decl($2, $4, $6);
+        ASTNode* last = $1;
+        while (last->next) last = last->next;
+        last->next = new_decl;
+        $$ = $1;
+        if ($2) mmgr_free((void*)$2);
+        if ($6) mmgr_free((void*)$6);
     }
     ;
 

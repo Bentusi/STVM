@@ -124,6 +124,14 @@ int32_t codegen_add_constant(CodeGenContext* ctx, Value value) {
 }
 
 /**
+ * @brief 添加字符串常量到常量池
+ */
+static int32_t codegen_add_string_constant(CodeGenContext* ctx, const char* str) {
+    if (!ctx || !str) return -1;
+    return bytecode_add_string_constant(ctx->module, str);
+}
+
+/**
  * @brief 获取当前指令位置
  */
 int32_t codegen_current_position(CodeGenContext* ctx) {
@@ -537,6 +545,18 @@ static ErrorCode generate_identifier(CodeGenContext* ctx, ASTNode* node) {
                 // 找到静态变量
                 mmgr_free(qualified_name);
                 
+                // 检查是否为外部I/O变量
+                if (sym->is_external && sym->io_address) {
+                    // 生成 OP_IO_READ 指令
+                    int32_t addr_index = codegen_add_string_constant(ctx, sym->io_address);
+                    if (addr_index < 0) {
+                        ctx->error_code = ERR_OUT_OF_MEMORY;
+                        return ERR_OUT_OF_MEMORY;
+                    }
+                    codegen_emit(ctx, OP_IO_READ, (uint16_t)addr_index);
+                    return OK;
+                }
+                
                 uint8_t flags = 0x01;  // 静态变量在全局区
                 uint16_t addr = sym->index;
                 codegen_emit_with_flags(ctx, OP_LOAD, flags, addr);
@@ -553,6 +573,18 @@ static ErrorCode generate_identifier(CodeGenContext* ctx, ASTNode* node) {
                 "Undefined variable: %s", var_name);
         ctx->error_code = ERR_NAME;
         return ERR_NAME;
+    }
+    
+    // 检查是否为外部I/O变量
+    if (sym->is_external && sym->io_address) {
+        // 生成 OP_IO_READ 指令
+        int32_t addr_index = codegen_add_string_constant(ctx, sym->io_address);
+        if (addr_index < 0) {
+            ctx->error_code = ERR_OUT_OF_MEMORY;
+            return ERR_OUT_OF_MEMORY;
+        }
+        codegen_emit(ctx, OP_IO_READ, (uint16_t)addr_index);
+        return OK;
     }
     
     // LOAD指令：flags指示全局/局部，使用正确的索引/偏移
@@ -875,6 +907,18 @@ static ErrorCode generate_assign(CodeGenContext* ctx, ASTNode* node) {
                     // 找到静态变量
                     mmgr_free(qualified_name);
                     
+                    // 检查是否为外部I/O变量
+                    if (sym->is_external && sym->io_address) {
+                        // 生成 OP_IO_WRITE 指令
+                        int32_t addr_index = codegen_add_string_constant(ctx, sym->io_address);
+                        if (addr_index < 0) {
+                            ctx->error_code = ERR_OUT_OF_MEMORY;
+                            return ERR_OUT_OF_MEMORY;
+                        }
+                        codegen_emit(ctx, OP_IO_WRITE, (uint16_t)addr_index);
+                        return OK;
+                    }
+                    
                     uint8_t flags = 0x01;  // 静态变量在全局区
                     uint16_t addr = sym->index;
                     codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
@@ -891,6 +935,18 @@ static ErrorCode generate_assign(CodeGenContext* ctx, ASTNode* node) {
                     "Undefined variable: %s", var_name);
             ctx->error_code = ERR_NAME;
             return ERR_NAME;
+        }
+        
+        // 检查是否为外部I/O变量
+        if (sym->is_external && sym->io_address) {
+            // 生成 OP_IO_WRITE 指令
+            int32_t addr_index = codegen_add_string_constant(ctx, sym->io_address);
+            if (addr_index < 0) {
+                ctx->error_code = ERR_OUT_OF_MEMORY;
+                return ERR_OUT_OF_MEMORY;
+            }
+            codegen_emit(ctx, OP_IO_WRITE, (uint16_t)addr_index);
+            return OK;
         }
         
         // 生成STORE指令

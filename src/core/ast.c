@@ -84,6 +84,26 @@ ASTNode* ast_create_var_decl(const char* name, TypeInfo* type, ASTNode* initiali
     node->data.var_decl.initializer = initializer;
     node->data.var_decl.is_const = is_const;
     node->data.var_decl.is_global = is_global;
+    node->data.var_decl.is_external = false;
+    node->data.var_decl.io_address = NULL;
+    
+    return node;
+}
+
+/**
+ * @brief 创建外部 I/O 变量声明节点
+ */
+ASTNode* ast_create_external_var_decl(const char* name, TypeInfo* type, const char* io_address) {
+    ASTNode* node = ast_create_node(AST_VAR_DECL);
+    if (!node) return NULL;
+    
+    node->data.var_decl.name = name ? mmgr_strdup(name) : NULL;
+    node->data.var_decl.type = type ? type_info_retain(type) : NULL;
+    node->data.var_decl.initializer = NULL;
+    node->data.var_decl.is_const = false;
+    node->data.var_decl.is_global = true;  // External variables are always global
+    node->data.var_decl.is_external = true;
+    node->data.var_decl.io_address = io_address ? mmgr_strdup(io_address) : NULL;
     
     return node;
 }
@@ -314,6 +334,7 @@ void ast_free_node(ASTNode* node) {
             ast_free_node(node->data.var_decl.initializer);
             if (node->data.var_decl.name) mmgr_free(node->data.var_decl.name);
             if (node->data.var_decl.type) type_info_free(node->data.var_decl.type);
+            if (node->data.var_decl.io_address) mmgr_free(node->data.var_decl.io_address);
             break;
             
         case AST_FUNCTION_DECL:

@@ -20,6 +20,7 @@ STVM 是一个为 ST（Structured Text）语言设计的字节码编译器和虚
   - 模块导入（IMPORT）
   - 库管理系统
   - **热更新（Hot Reload）** - 运行时代码更新，无需停机
+  - **硬件 I/O 映射** - 直接访问 GPIO、ADC、DAC 等硬件（设计完成）
 
 - ✅ **开发工具**
   - 编译器（ST → 字节码）
@@ -85,6 +86,38 @@ if (result == HOT_RELOAD_SUCCESS) {
 - [热更新快速指南](HOT_RELOAD_QUICKSTART.md)
 - [热更新实现报告](HOT_RELOAD_IMPLEMENTATION.md)
 - [热更新可行性评估](HOT_RELOAD_ASSESSMENT.md)
+
+## 硬件 I/O 映射
+
+STVM 支持直接访问嵌入式硬件设备，实现工业控制应用。
+
+### 特性
+
+- ✅ **IEC 61131-3 标准地址**：`%IX0.0`、`%QW5`、`%MD100`
+- ✅ **多种 I/O 类型**：GPIO、ADC、DAC、PWM、Modbus、CANopen
+- ✅ **硬件抽象层**：支持 Linux、STM32、ESP32 等多平台
+- ✅ **高效安全**：批量刷新、权限控制、多线程安全
+
+### ST 代码示例
+
+```st
+PROGRAM MotorControl
+VAR_EXTERNAL
+    start_button AT %IX0.0 : BOOL;    (* GPIO输入 *)
+    motor_enable AT %QX0.0 : BOOL;    (* GPIO输出 *)
+    speed_sensor AT %IW0 : INT;        (* ADC输入 *)
+END_VAR
+
+IF start_button THEN
+    motor_enable := TRUE;
+END_IF
+END_PROGRAM
+```
+
+详细文档：
+- [硬件 I/O 设计方案](HARDWARE_IO_DESIGN.md)
+- [硬件 I/O 实现指南](HARDWARE_IO_IMPLEMENTATION_GUIDE.md)
+- [硬件 I/O 完成总结](HARDWARE_IO_SUMMARY.md)
 
 ## 项目结构
 

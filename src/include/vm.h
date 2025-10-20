@@ -7,6 +7,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// 前向声明（不 typedef，避免与 iomgr.h 冲突）
+struct IOManager;
+
 /**
  * @brief 调用帧结构 - 保存函数调用上下文
  */
@@ -58,6 +61,9 @@ typedef struct VM {
     
     // 库管理器（用于查找导入的库函数）
     struct LibraryManager* libmgr;
+    
+    // I/O 管理器（用于硬件 I/O 访问）
+    struct IOManager* io_manager;
 } VM;
 
 /**
@@ -90,6 +96,13 @@ VM* vm_create(BytecodeModule* module);
  * @param libmgr 库管理器实例
  */
 void vm_set_library_manager(VM* vm, struct LibraryManager* libmgr);
+
+/**
+ * @brief 设置虚拟机的 I/O 管理器
+ * @param vm 虚拟机实例
+ * @param io_manager I/O 管理器实例
+ */
+void vm_set_io_manager(VM* vm, struct IOManager* io_manager);
 
 /**
  * @brief 释放虚拟机实例

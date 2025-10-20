@@ -634,7 +634,7 @@ int debugger_run(Debugger* dbg) {
     char line[512];
     
     while (true) {
-        printf("\n(stdb) ");
+        printf("(stdb) ");
         fflush(stdout);
         
         if (!fgets(line, sizeof(line), stdin)) {

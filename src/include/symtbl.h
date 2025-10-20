@@ -39,6 +39,8 @@ typedef struct Symbol {
     bool is_global;                 // 是否为全局变量
     bool is_static;                 // 是否为静态变量（函数内VAR块）
     char* function_scope;           // 所属函数名（静态变量用）
+    bool is_external;               // 是否为外部I/O变量
+    char* io_address;               // I/O地址（外部变量用）
     
     // 函数信息
     uint32_t address;               // 函数入口地址（字节码）

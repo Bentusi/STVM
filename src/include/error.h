@@ -31,6 +31,12 @@ typedef enum {
     ERR_INVALID_BYTECODE,   // 无效的字节码
     ERR_INVALID_INSTRUCTION,// 无效的指令
     ERR_CALL_STACK_OVERFLOW,// 调用栈溢出
+    ERR_INVALID_ARGUMENT,   // 无效参数
+    ERR_NOT_FOUND,          // 未找到
+    ERR_ALREADY_EXISTS,     // 已存在
+    ERR_PERMISSION_DENIED,  // 权限拒绝
+    ERR_DEVICE_NOT_OPEN,    // 设备未打开
+    ERR_SYSTEM_ERROR,       // 系统错误
     ERR_UNKNOWN             // 未知错误
 } ErrorCode;
 
@@ -55,6 +61,12 @@ static inline const char* error_code_to_string(ErrorCode code) {
         case ERR_INVALID_BYTECODE:   return "Invalid Bytecode";
         case ERR_INVALID_INSTRUCTION:return "Invalid Instruction";
         case ERR_CALL_STACK_OVERFLOW:return "Call Stack Overflow";
+        case ERR_INVALID_ARGUMENT:   return "Invalid Argument";
+        case ERR_NOT_FOUND:          return "Not Found";
+        case ERR_ALREADY_EXISTS:     return "Already Exists";
+        case ERR_PERMISSION_DENIED:  return "Permission Denied";
+        case ERR_DEVICE_NOT_OPEN:    return "Device Not Open";
+        case ERR_SYSTEM_ERROR:       return "System Error";
         case ERR_UNKNOWN:            return "Unknown Error";
         default:                     return "Undefined Error";
     }

@@ -78,7 +78,11 @@ typedef enum {
     OP_LOAD_INDEXED,    // 加载数组元素 operand: 数组基址，栈顶为索引
     OP_STORE_INDEXED,   // 存储数组元素 operand: 数组基址，栈顶为值，栈次为索引
     
-    OP_COUNT            // 指令总数（现在包含35个指令）
+    // === 硬件 I/O（2个）===
+    OP_IO_READ,         // 从硬件 I/O 读取 operand: I/O地址索引（常量池中）
+    OP_IO_WRITE,        // 向硬件 I/O 写入 operand: I/O地址索引（常量池中）
+    
+    OP_COUNT            // 指令总数（现在包含37个指令）
 } Opcode;
 
 /**

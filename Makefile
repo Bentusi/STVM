@@ -145,6 +145,18 @@ $(BIN_DIR)/test_hotreload: $(TESTS_DIR)/test_hotreload.c $(filter-out $(OBJ_DIR)
 	@echo "Building test_hotreload..."
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_io_manager: $(BIN_DIR)/test_io_manager
+
+$(BIN_DIR)/test_io_manager: $(TESTS_DIR)/test_io_manager_simple.c $(OBJ_DIR)/iomgr.o $(OBJ_DIR)/io_adapter_sim.o $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o | dirs
+	@echo "Building test_io_manager..."
+	$(CC) $(CFLAGS) -pthread -o $@ $^ $(LDFLAGS)
+
+test_io_integration: $(BIN_DIR)/test_io_integration
+
+$(BIN_DIR)/test_io_integration: $(TESTS_DIR)/test_io_integration.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) | dirs
+	@echo "Building test_io_integration..."
+	$(CC) $(CFLAGS) -pthread -o $@ $^ $(LDFLAGS)
+
 # Main programs
 stvm: $(BIN_DIR)/stvm
 
@@ -192,6 +204,9 @@ test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_c
 	@echo ""
 	@echo "=== Running Hot Reload Tests ==="
 	@./$(BIN_DIR)/test_hotreload
+	@echo ""
+	@echo "=== Running I/O Manager Tests ==="
+	@./$(BIN_DIR)/test_io_manager
 
 # Clean build artifacts
 clean:
@@ -224,6 +239,7 @@ help:
 	@echo "  test_libmgr   - Build library manager test"
 	@echo "  test_bitops   - Build bitwise operations test"
 	@echo "  test_hotreload- Build hot reload test"
+	@echo "  test_io_manager - Build I/O manager test"
 	@echo "  test          - Build and run all tests"
 	@echo ""
 	@echo "Usage examples:"

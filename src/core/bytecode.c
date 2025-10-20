@@ -20,7 +20,8 @@ const char* opcode_to_string(Opcode opcode) {
         "AND", "OR", "NOT", "XOR",
         "BIT_AND", "BIT_OR", "BIT_XOR", "BIT_NOT", "SHL", "SHR",
         "JMP", "JZ", "JNZ", "CALL", "RET",
-        "HALT", "CALL_EXT", "NOP", "LOAD_INDEXED", "STORE_INDEXED"
+        "HALT", "CALL_EXT", "NOP", "LOAD_INDEXED", "STORE_INDEXED",
+        "IO_READ", "IO_WRITE"
     };
     
     if (opcode >= 0 && opcode < OP_COUNT) {

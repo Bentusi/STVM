@@ -1,0 +1,107 @@
+{
+  "io_config": {
+    "platform": "linux",
+    "auto_refresh": true,
+    "refresh_cycle_us": 10000,
+    
+    "points": [
+      {
+        "comment": "=== 数字输入/输出 (GPIO) ===",
+        "address": "%IX0.0",
+        "type": "digital_in",
+        "hardware": {
+          "path": "/sys/class/gpio/gpio27",
+          "pin": 27
+        },
+        "properties": {
+          "invert": false,
+          "read_protected": false
+        }
+      },
+      {
+        "address": "%QX0.0",
+        "type": "digital_out",
+        "hardware": {
+          "path": "/sys/class/gpio/gpio17",
+          "pin": 17
+        },
+        "properties": {
+          "force_write": false,
+          "write_protected": false
+        }
+      },
+      {
+        "address": "%QX1.0",
+        "type": "digital_out",
+        "hardware": {
+          "path": "/sys/class/gpio/gpio23",
+          "pin": 23
+        }
+      },
+      
+      {
+        "comment": "=== 模拟输入 (ADC) ===",
+        "address": "%IW0",
+        "type": "analog_in",
+        "hardware": {
+          "path": "/dev/spidev0.0",
+          "channel": 0,
+          "description": "MCP3008 ADC Channel 0"
+        },
+        "conversion": {
+          "scale": 1.0,
+          "offset": 0,
+          "comment": "12-bit ADC: 0-4095"
+        },
+        "filter": {
+          "enable": true,
+          "samples": 10,
+          "comment": "10-sample moving average"
+        }
+      },
+      
+      {
+        "comment": "=== PWM 输出 ===",
+        "address": "%QW0",
+        "type": "pwm",
+        "hardware": {
+          "path": "/sys/class/pwm/pwmchip0/pwm0",
+          "pin": 18,
+          "frequency": 25000,
+          "comment": "25kHz PWM for fan control"
+        },
+        "conversion": {
+          "scale": 1.0,
+          "offset": 0,
+          "comment": "0-100 maps to 0-100% duty cycle"
+        }
+      },
+      
+      {
+        "comment": "=== 模拟输出 (DAC) ===",
+        "address": "%QW1",
+        "type": "analog_out",
+        "hardware": {
+          "path": "/dev/i2c-1",
+          "address": "0x60",
+          "description": "MCP4725 DAC"
+        },
+        "conversion": {
+          "scale": 4095.0,
+          "offset": 0,
+          "comment": "12-bit DAC: 0-4095"
+        }
+      },
+      
+      {
+        "comment": "=== 内部存储 ===",
+        "address": "%MW0",
+        "type": "memory",
+        "properties": {
+          "persistent": false,
+          "comment": "Runtime memory, not persistent"
+        }
+      }
+    ]
+  }
+}

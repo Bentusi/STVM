@@ -36,7 +36,8 @@ LETTER      [a-zA-Z_]
 IDENTIFIER  {LETTER}({LETTER}|{DIGIT})*
 INTEGER     {DIGIT}+
 REAL        {DIGIT}+\.{DIGIT}+([eE][+-]?{DIGIT}+)?
-STRING      '([^'\n]|'')*'
+STRING_SQ   '([^'\n]|'')*'
+STRING_DQ   \"([^\"\n]|\"\")*\"
 
 %%
 
@@ -51,7 +52,9 @@ STRING      '([^'\n]|'')*'
 (?i:VAR_INPUT)      { return TOKEN_VAR_INPUT; }
 (?i:VAR_OUTPUT)     { return TOKEN_VAR_OUTPUT; }
 (?i:VAR_LOCAL)      { return TOKEN_VAR_LOCAL; }
+(?i:VAR_EXTERNAL)   { return TOKEN_VAR_EXTERNAL; }
 (?i:END_VAR)        { return TOKEN_END_VAR; }
+(?i:AT)             { return TOKEN_AT; }
 (?i:IF)             { return TOKEN_IF; }
 (?i:THEN)           { return TOKEN_THEN; }
 (?i:ELSIF)          { return TOKEN_ELSIF; }
@@ -110,8 +113,8 @@ STRING      '([^'\n]|'')*'
                         return TOKEN_REAL_LITERAL; 
                     }
 
-    /* 字符串字面量 */
-{STRING}            {
+    /* 字符串字面量 - 单引号 */
+{STRING_SQ}         {
                         /* 去掉首尾引号，处理转义的单引号 '' -> ' */
                         int len = yyleng - 2;
                         char* str = mmgr_alloc(len + 1);
@@ -120,6 +123,23 @@ STRING      '([^'\n]|'')*'
                             str[j++] = yytext[i];
                             if (yytext[i] == '\'' && yytext[i+1] == '\'') {
                                 i++; /* 跳过第二个单引号 */
+                            }
+                        }
+                        str[j] = '\0';
+                        yylval.string_value = str;
+                        return TOKEN_STRING_LITERAL;
+                    }
+
+    /* 字符串字面量 - 双引号 */
+{STRING_DQ}         {
+                        /* 去掉首尾引号，处理转义的双引号 "" -> " */
+                        int len = yyleng - 2;
+                        char* str = mmgr_alloc(len + 1);
+                        int j = 0;
+                        for (int i = 1; i < yyleng - 1; i++) {
+                            str[j++] = yytext[i];
+                            if (yytext[i] == '"' && yytext[i+1] == '"') {
+                                i++; /* 跳过第二个双引号 */
                             }
                         }
                         str[j] = '\0';
