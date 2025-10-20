@@ -139,6 +139,12 @@ $(BIN_DIR)/test_bitops: $(TESTS_DIR)/test_bitops.c $(filter-out $(OBJ_DIR)/main.
 	@echo "Building test_bitops..."
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_hotreload: $(BIN_DIR)/test_hotreload
+
+$(BIN_DIR)/test_hotreload: $(TESTS_DIR)/test_hotreload.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) | dirs
+	@echo "Building test_hotreload..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Main programs
 stvm: $(BIN_DIR)/stvm
 
@@ -183,6 +189,9 @@ test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_c
 	@echo ""
 	@echo "=== Running Bitwise Operations Tests ==="
 	@./$(BIN_DIR)/test_bitops
+	@echo ""
+	@echo "=== Running Hot Reload Tests ==="
+	@./$(BIN_DIR)/test_hotreload
 
 # Clean build artifacts
 clean:
@@ -214,6 +223,7 @@ help:
 	@echo "  test_vm       - Build VM test"
 	@echo "  test_libmgr   - Build library manager test"
 	@echo "  test_bitops   - Build bitwise operations test"
+	@echo "  test_hotreload- Build hot reload test"
 	@echo "  test          - Build and run all tests"
 	@echo ""
 	@echo "Usage examples:"
