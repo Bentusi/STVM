@@ -105,6 +105,16 @@ VM* vm_create(BytecodeModule* module) {
     // 初始化库管理器（默认为NULL）
     vm->libmgr = NULL;
     
+    // 初始化 I/O 管理器（默认为NULL）
+    vm->io_manager = NULL;
+    
+    // 初始化热加载字段（默认禁用）
+    vm->hotreload = NULL;
+    vm->hotreload_enabled = false;
+    vm->hotreload_auto_apply = false;
+    vm->hotreload_check_interval = 0;
+    vm->instructions_since_check = 0;
+    
     // 注册内置函数
     if (!builtins_register_all(vm)) {
         fprintf(stderr, "警告：内置函数注册失败\n");
@@ -136,6 +146,11 @@ void vm_set_io_manager(VM* vm, struct IOManager* io_manager) {
  */
 void vm_free(VM* vm) {
     if (!vm) return;
+    
+    // 清理热加载管理器
+    if (vm->hotreload) {
+        vm_disable_hotreload(vm);
+    }
     
     if (vm->stack) mmgr_free(vm->stack);
     if (vm->call_stack) mmgr_free(vm->call_stack);
@@ -1053,6 +1068,28 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
     
     // 主解释循环
     while (vm->running && vm->pc < code_size) {
+        // 热加载检查点（可配置频率）
+        if (vm->hotreload_enabled && vm->hotreload) {
+            vm->instructions_since_check++;
+            
+            // 检查是否到达检查间隔
+            if (vm->hotreload_check_interval == 0 || 
+                vm->instructions_since_check >= vm->hotreload_check_interval) {
+                
+                ErrorCode hr_err = vm_check_hotreload(vm);
+                if (hr_err != OK && hr_err != ERR_NOT_FOUND) {
+                    // 热加载失败但不终止程序，只记录错误
+                    fprintf(stderr, "[VM] Hotreload check failed: error code %d\n", hr_err);
+                }
+                
+                vm->instructions_since_check = 0;
+                
+                // 重新获取代码指针（模块可能已更新）
+                code = vm->module->instructions;
+                code_size = vm->module->instruction_count;
+            }
+        }
+        
         Instruction instr = code[vm->pc++];
         vm->instruction_count++;
         

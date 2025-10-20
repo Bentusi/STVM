@@ -9,6 +9,7 @@
 
 // 前向声明（不 typedef，避免与 iomgr.h 冲突）
 struct IOManager;
+struct HotReloadManager;
 
 /**
  * @brief 调用帧结构 - 保存函数调用上下文
@@ -64,6 +65,13 @@ typedef struct VM {
     
     // I/O 管理器（用于硬件 I/O 访问）
     struct IOManager* io_manager;
+    
+    // 热加载管理器（可选，用于运行时代码更新）
+    struct HotReloadManager* hotreload;
+    bool hotreload_enabled;           // 是否启用热加载
+    bool hotreload_auto_apply;        // 是否自动应用更新
+    uint32_t hotreload_check_interval; // 检查间隔（指令数，0=每次循环）
+    uint32_t instructions_since_check; // 自上次检查以来的指令数
 } VM;
 
 /**
@@ -177,5 +185,75 @@ bool vm_register_external_function(VM* vm, const char* name,
  * @return 参数值
  */
 Value vm_get_arg(VM* vm, int32_t index);
+
+// ============================================================================
+// 热加载功能 API
+// ============================================================================
+
+/**
+ * @brief 启用虚拟机的热加载功能
+ * @param vm 虚拟机实例
+ * @param auto_apply 是否自动应用更新（true=自动，false=手动）
+ * @param check_interval 检查间隔（执行多少条指令后检查一次，0=每次循环）
+ * @return 错误码
+ */
+ErrorCode vm_enable_hotreload(VM* vm, bool auto_apply, uint32_t check_interval);
+
+/**
+ * @brief 禁用虚拟机的热加载功能
+ * @param vm 虚拟机实例
+ */
+void vm_disable_hotreload(VM* vm);
+
+/**
+ * @brief 手动触发热加载更新
+ * @param vm 虚拟机实例
+ * @param bytecode_file 新的字节码文件路径
+ * @param force 是否强制更新（跳过安全检查）
+ * @return 错误码
+ */
+ErrorCode vm_trigger_hotreload(VM* vm, const char* bytecode_file, bool force);
+
+/**
+ * @brief 暂存新模块（不立即应用）
+ * @param vm 虚拟机实例
+ * @param bytecode_file 新的字节码文件路径
+ * @return 错误码
+ */
+ErrorCode vm_stage_hotreload(VM* vm, const char* bytecode_file);
+
+/**
+ * @brief 应用已暂存的热更新
+ * @param vm 虚拟机实例
+ * @return 错误码
+ */
+ErrorCode vm_apply_hotreload(VM* vm);
+
+/**
+ * @brief 检查热加载是否安全
+ * @param vm 虚拟机实例
+ * @return true 如果可以安全地应用热更新
+ */
+bool vm_is_hotreload_safe(VM* vm);
+
+/**
+ * @brief 取消已暂存的热更新
+ * @param vm 虚拟机实例
+ */
+void vm_cancel_hotreload(VM* vm);
+
+/**
+ * @brief 获取热加载统计信息
+ * @param vm 虚拟机实例
+ * @return 统计信息指针，如果未启用热加载则返回 NULL
+ */
+const struct HotReloadStats* vm_get_hotreload_stats(VM* vm);
+
+/**
+ * @brief 内部函数：检查并应用待处理的热更新
+ * @param vm 虚拟机实例
+ * @return 错误码（仅供内部使用）
+ */
+ErrorCode vm_check_hotreload(VM* vm);
 
 #endif // STVM_VM_H

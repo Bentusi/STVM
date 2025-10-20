@@ -157,6 +157,12 @@ $(BIN_DIR)/test_io_integration: $(TESTS_DIR)/test_io_integration.c $(filter-out 
 	@echo "Building test_io_integration..."
 	$(CC) $(CFLAGS) -pthread -o $@ $^ $(LDFLAGS)
 
+test_hotreload_integration: $(BIN_DIR)/test_hotreload_integration
+
+$(BIN_DIR)/test_hotreload_integration: $(TESTS_DIR)/test_hotreload_integration.c $(filter-out $(OBJ_DIR)/main.o,$(CORE_OBJS)) $(PARSER_OBJ) $(LEXER_OBJ) | dirs
+	@echo "Building test_hotreload_integration..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Main programs
 stvm: $(BIN_DIR)/stvm
 
