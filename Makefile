@@ -2,7 +2,7 @@
 # Phase 1, 2 & 3: Infrastructure + Data Structures + Compiler Frontend
 
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c11 -I./src/include -I./build
+CFLAGS = -Wall -Wextra -std=c11 -I./src/include -I./build -D_POSIX_C_SOURCE=200809L
 LDFLAGS = -lm
 
 # Flex and Bison

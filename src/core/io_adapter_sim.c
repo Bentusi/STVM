@@ -130,6 +130,7 @@ static void sim_close_device(void* device_handle) {
  * @brief 从模拟设备读取
  */
 static ErrorCode sim_read(void* device_handle, uint32_t address, Value* value) {
+    (void)address;  // 模拟设备暂不使用地址参数
     if (!device_handle || !value) {
         return ERR_INVALID_ARGUMENT;
     }

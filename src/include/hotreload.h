@@ -52,7 +52,7 @@ typedef enum {
 /**
  * @brief 热更新统计信息
  */
-typedef struct {
+typedef struct HotReloadStats {
     uint32_t functions_updated;     // 已更新的函数数
     uint32_t functions_added;       // 新增的函数数
     uint32_t functions_deleted;     // 删除的函数数

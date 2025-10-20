@@ -7,9 +7,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-// 前向声明（不 typedef，避免与 iomgr.h 冲突）
+// 前向声明（使用不透明指针，避免与 iomgr.h 中的 typedef 冲突）
 struct IOManager;
 struct HotReloadManager;
+struct HotReloadStats;
 
 /**
  * @brief 调用帧结构 - 保存函数调用上下文
@@ -106,7 +107,7 @@ VM* vm_create(BytecodeModule* module);
 void vm_set_library_manager(VM* vm, struct LibraryManager* libmgr);
 
 /**
- * @brief 设置虚拟机的 I/O 管理器
+ * @brief 设置 I/O 管理器
  * @param vm 虚拟机实例
  * @param io_manager I/O 管理器实例
  */

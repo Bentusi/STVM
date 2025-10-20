@@ -8,3 +8,4 @@ stvm
 *.bak
 build/
 *.stbc
+*.md

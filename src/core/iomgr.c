@@ -19,6 +19,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 #include <math.h>
 
@@ -753,7 +754,12 @@ static void* refresh_thread_func(void* arg) {
         
         // 睡眠剩余时间
         if (elapsed < mgr->refresh_cycle_us) {
-            usleep(mgr->refresh_cycle_us - elapsed);
+            uint64_t sleep_us = mgr->refresh_cycle_us - elapsed;
+            struct timespec ts = {
+                .tv_sec = sleep_us / 1000000,
+                .tv_nsec = (sleep_us % 1000000) * 1000
+            };
+            nanosleep(&ts, NULL);
         } else {
             log_message(mgr, "WARNING", "Refresh cycle overrun: %lu us (limit: %u us)",
                        elapsed, mgr->refresh_cycle_us);

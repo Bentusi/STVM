@@ -123,7 +123,7 @@ typedef struct IOHardwareAdapter {
 // I/O 管理器
 // ============================================================================
 
-typedef struct {
+typedef struct IOManager {
     IOPoint** io_points;
     uint32_t point_count;
     uint32_t point_capacity;
