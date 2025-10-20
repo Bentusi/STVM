@@ -28,6 +28,7 @@ static ErrorCode generate_assign(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_if(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
 static ErrorCode generate_while(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
 static ErrorCode generate_for(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
+static ErrorCode generate_case(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
 static ErrorCode generate_return(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_block(CodeGenContext* ctx, ASTNode* stmts, LoopContext* loop_ctx);
 
@@ -209,7 +210,10 @@ static ErrorCode generate_program(CodeGenContext* ctx, ASTNode* program) {
     }
     
     // 1.5. 生成函数内定义的静态变量的初始化代码
-    // 这些变量使用完全限定名（FunctionName.VarName）存储在全局区
+    // 注意：由于库模块的初始化代码可能不被执行，
+    // 我们将静态变量初始化移到函数内部处理（见 generate_var_decls）
+    // 这里保留代码框架但不生成任何指令
+    /*
     ASTNode* func = program->data.program.functions;
     while (func) {
         if (func->type == AST_FUNCTION_DECL && func->data.function_decl.declarations) {
@@ -218,48 +222,20 @@ static ErrorCode generate_program(CodeGenContext* ctx, ASTNode* program) {
             while (decl) {
                 if (decl->type == AST_VAR_DECL && decl->data.var_decl.is_global && 
                     decl->data.var_decl.initializer) {
-                    // 生成初始化表达式
-                    err = codegen_expr(ctx, decl->data.var_decl.initializer);
-                    if (err != OK) return err;
-                    
-                    // 构造完全限定名查找符号
-                    const char* var_name = decl->data.var_decl.name;
-                    size_t qualified_len = strlen(func_name) + strlen(var_name) + 2;
-                    char* qualified_name = (char*)mmgr_alloc(qualified_len);
-                    if (!qualified_name) {
-                        ctx->error_code = ERR_RUNTIME;
-                        return ERR_RUNTIME;
-                    }
-                    snprintf(qualified_name, qualified_len, "%s.%s", func_name, var_name);
-                    
-                    // 查找符号并生成STORE指令
-                    Symbol* sym = symtbl_lookup(ctx->symtbl, qualified_name);
-                    
-                    if (!sym) {
-                        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                                "Undefined static variable: %s.%s", func_name, var_name);
-                        mmgr_free(qualified_name);
-                        ctx->error_code = ERR_NAME;
-                        return ERR_NAME;
-                    }
-                    
-                    mmgr_free(qualified_name);
-                    
-                    uint8_t flags = 0x01;  // 全局变量标志
-                    uint16_t addr = sym->index;
-                    codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
+                    // 静态变量初始化已移到函数内部
                 }
                 decl = decl->next;
             }
         }
         func = func->next;
     }
+    */
     
     // 2. 发射跳转指令跳过函数定义到主程序体
     int32_t jump_to_main = codegen_emit(ctx, OP_JMP, 0);
     
     // 3. 生成函数定义
-    func = program->data.program.functions;
+    ASTNode* func = program->data.program.functions;
     while (func) {
         err = codegen_function(ctx, func);
         if (err != OK) return err;
@@ -290,11 +266,35 @@ static ErrorCode generate_var_decls(CodeGenContext* ctx, ASTNode* var_decls) {
     
     while (decl) {
         if (decl->type == AST_VAR_DECL) {
-            // 跳过函数内定义的全局变量的初始化
-            // 这些变量应该在程序初始化阶段统一处理
+            // 处理所有变量声明，包括函数内的静态变量
+            // 注意：函数内的静态变量（is_global=true）也在这里初始化
+            // 以确保库模块的静态变量能被正确初始化
+            
+            // 如果是函数内的静态变量，需要使用完全限定名
+            const char* var_name = decl->data.var_decl.name;
+            Symbol* sym = NULL;
+            
             if (ctx->current_function && decl->data.var_decl.is_global) {
-                decl = decl->next;
-                continue;
+                // 静态变量：使用完全限定名查找
+                const char* func_name = ctx->current_function->name;
+                size_t qualified_len = strlen(func_name) + strlen(var_name) + 2;
+                char* qualified_name = (char*)mmgr_alloc(qualified_len);
+                if (!qualified_name) {
+                    ctx->error_code = ERR_RUNTIME;
+                    return ERR_RUNTIME;
+                }
+                snprintf(qualified_name, qualified_len, "%s.%s", func_name, var_name);
+                sym = symtbl_lookup(ctx->symtbl, qualified_name);
+                mmgr_free(qualified_name);
+            } else {
+                // 普通变量：直接查找
+                sym = symtbl_lookup(ctx->symtbl, var_name);
+            }
+            if (!sym) {
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                        "Undefined variable: %s", decl->data.var_decl.name);
+                ctx->error_code = ERR_NAME;
+                return ERR_NAME;
             }
             
             // 如果有初始化表达式，生成代码
@@ -302,14 +302,40 @@ static ErrorCode generate_var_decls(CodeGenContext* ctx, ASTNode* var_decls) {
                 ErrorCode err = codegen_expr(ctx, decl->data.var_decl.initializer);
                 if (err != OK) return err;
                 
-                // 查找符号
-                Symbol* sym = symtbl_lookup(ctx->symtbl, decl->data.var_decl.name);
-                if (!sym) {
-                    snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                            "Undefined variable: %s", decl->data.var_decl.name);
-                    ctx->error_code = ERR_NAME;
-                    return ERR_NAME;
+                // 生成STORE指令：使用正确的索引/偏移
+                uint8_t flags = sym->is_global ? 0x01 : 0x00;
+                uint16_t addr = sym->is_global ? sym->index : sym->offset;
+                codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
+            } else if (sym->type && sym->type->base_type != TYPE_ARRAY && sym->type->base_type != TYPE_FUNCTION) {
+                // 没有初始化表达式，且不是数组或函数类型，生成默认值
+                // 数组和函数不需要显式初始化
+                Value default_val = {.type = TYPE_VOID};
+                default_val.type = sym->type->base_type;
+                switch (default_val.type) {
+                    case TYPE_INT:
+                        default_val.int_val = 0;
+                        break;
+                    case TYPE_REAL:
+                        default_val.real_val = 0.0;
+                        break;
+                    case TYPE_BOOL:
+                        default_val.bool_val = false;
+                        break;
+                    case TYPE_STRING:
+                        default_val.string_val = "";
+                        break;
+                    default:
+                        // 跳过其他类型（TYPE_VOID等）
+                        decl = decl->next;
+                        continue;
                 }
+                
+                int32_t const_index = codegen_add_constant(ctx, default_val);
+                if (const_index < 0) {
+                    ctx->error_code = ERR_OUT_OF_MEMORY;
+                    return ERR_OUT_OF_MEMORY;
+                }
+                codegen_emit(ctx, OP_PUSH, (uint16_t)const_index);
                 
                 // 生成STORE指令：使用正确的索引/偏移
                 uint8_t flags = sym->is_global ? 0x01 : 0x00;
@@ -732,13 +758,25 @@ static ErrorCode generate_function_call(CodeGenContext* ctx, ASTNode* node) {
     if (sym && sym->kind == SYM_FUNCTION) {
         // 确保函数在函数表中（用于 CALL_EXT 查找）
         if (!func) {
+            // 从符号表获取返回类型
+            DataType return_type = TYPE_VOID;
+            if (sym->type) {
+                if (sym->type->base_type == TYPE_FUNCTION && sym->type->func_info.return_type) {
+                    // 函数类型，从func_info中获取返回类型
+                    return_type = sym->type->func_info.return_type->base_type;
+                } else if (sym->type->base_type != TYPE_FUNCTION) {
+                    // 简单类型（不应该出现，但作为fallback）
+                    return_type = sym->type->base_type;
+                }
+            }
+            
             // 添加到函数表（使用完全限定名）
             uint32_t func_idx = bytecode_add_function(ctx->module,
                                                       func_name,  // 使用完全限定名
                                                       0,  // 外部函数地址为0
                                                       sym->param_count,
                                                       0,  // 无局部变量
-                                                      TYPE_VOID,  // 返回类型
+                                                      return_type,  // 从符号表获取返回类型
                                                       NULL);  // 无参数类型
             if (func_idx == (uint32_t)-1) {
                 ctx->error_code = ERR_RUNTIME;
@@ -865,10 +903,12 @@ ErrorCode codegen_stmt(CodeGenContext* ctx, ASTNode* stmt, LoopContext* loop_ctx
         case AST_RETURN:
             return generate_return(ctx, stmt);
             
+        case AST_CASE:
+            return generate_case(ctx, stmt, loop_ctx);
+            
         case AST_BLOCK:
-            // AST_BLOCK节点本身可能就是语句链表，或者有特定字段
-            // 根据实际AST结构，这里假设body或statements字段
-            return generate_block(ctx, stmt, loop_ctx);
+            // AST_BLOCK节点的语句列表存储在 next 指针中（见 ast_create_block）
+            return generate_block(ctx, stmt->next, loop_ctx);
             
         default:
             // 可能是表达式语句
@@ -1192,15 +1232,188 @@ static ErrorCode generate_for(CodeGenContext* ctx, ASTNode* node, LoopContext* p
 }
 
 /**
+ * @brief 生成 CASE 语句
+ * 
+ * CASE 语句的代码生成策略：
+ * 1. 计算 CASE 表达式并保存在栈上（需要多次比较）
+ * 2. 对每个分支的每个标签：
+ *    - 复制栈顶的表达式值
+ *    - 计算标签值
+ *    - 比较是否相等
+ *    - 如果相等，跳转到该分支的代码
+ * 3. 所有标签都不匹配，跳转到 ELSE 分支（如果有）或结束
+ * 4. 每个分支执行完后跳转到 CASE 语句结束
+ */
+static ErrorCode generate_case(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx) {
+    ErrorCode err;
+    
+    // 1. 计算 CASE 表达式
+    err = codegen_expr(ctx, node->data.case_stmt.expression);
+    if (err != OK) return err;
+    
+    // 用于存储每个分支开始位置的跳转索引
+    typedef struct {
+        int32_t* jump_indices;  // 该分支所有标签的跳转索引
+        int label_count;        // 标签数量
+    } BranchJumps;
+    
+    int case_count = node->data.case_stmt.case_count;
+    BranchJumps* branch_jumps = (BranchJumps*)mmgr_alloc(sizeof(BranchJumps) * case_count);
+    if (!branch_jumps) return ERR_OUT_OF_MEMORY;
+    
+    // 2. 为每个分支的每个标签生成比较和条件跳转
+    for (int i = 0; i < case_count; i++) {
+        ASTNode* case_elem = node->data.case_stmt.cases[i];
+        if (!case_elem || case_elem->type != AST_CASE_ELEMENT) {
+            continue;
+        }
+        
+        // 计算该分支有多少个标签
+        int label_count = 0;
+        ASTNode* label = case_elem->data.case_element.labels;
+        while (label) {
+            label_count++;
+            label = label->next;
+        }
+        
+        branch_jumps[i].label_count = label_count;
+        branch_jumps[i].jump_indices = (int32_t*)mmgr_alloc(sizeof(int32_t) * label_count);
+        if (!branch_jumps[i].jump_indices) {
+            for (int j = 0; j < i; j++) {
+                mmgr_free(branch_jumps[j].jump_indices);
+            }
+            mmgr_free(branch_jumps);
+            return ERR_OUT_OF_MEMORY;
+        }
+        
+        // 为每个标签生成比较代码
+        label = case_elem->data.case_element.labels;
+        int label_idx = 0;
+        while (label) {
+            // 复制栈顶的 CASE 表达式值（用于比较）
+            codegen_emit(ctx, OP_DUP, 0);
+            
+            // 计算标签值
+            err = codegen_expr(ctx, label);
+            if (err != OK) {
+                for (int j = 0; j <= i; j++) {
+                    mmgr_free(branch_jumps[j].jump_indices);
+                }
+                mmgr_free(branch_jumps);
+                return err;
+            }
+            
+            // 比较是否相等
+            codegen_emit(ctx, OP_EQ, 0);
+            
+            // 如果相等，跳转到该分支（稍后回填）
+            branch_jumps[i].jump_indices[label_idx] = codegen_emit(ctx, OP_JNZ, 0);
+            
+            label_idx++;
+            label = label->next;
+        }
+    }
+    
+    // 3. 所有标签都不匹配，跳转到 ELSE 或结束
+    int32_t default_jump = codegen_emit(ctx, OP_JMP, 0);
+    
+    // 用于存储每个分支结束时跳转到 CASE 结束的跳转索引
+    int32_t* end_jumps = (int32_t*)mmgr_alloc(sizeof(int32_t) * case_count);
+    if (!end_jumps) {
+        for (int i = 0; i < case_count; i++) {
+            mmgr_free(branch_jumps[i].jump_indices);
+        }
+        mmgr_free(branch_jumps);
+        return ERR_OUT_OF_MEMORY;
+    }
+    
+    // 4. 生成每个分支的代码
+    for (int i = 0; i < case_count; i++) {
+        ASTNode* case_elem = node->data.case_stmt.cases[i];
+        if (!case_elem) continue;
+        
+        // 回填该分支所有标签的跳转地址到这里
+        int32_t branch_start = codegen_current_position(ctx);
+        for (int j = 0; j < branch_jumps[i].label_count; j++) {
+            codegen_patch_jump(ctx, branch_jumps[i].jump_indices[j], branch_start);
+        }
+        
+        // 弹出栈顶的 CASE 表达式值（已经匹配，不再需要）
+        codegen_emit(ctx, OP_POP, 0);
+        
+        // 生成分支语句
+        if (case_elem->data.case_element.statements) {
+            err = generate_block(ctx, case_elem->data.case_element.statements, loop_ctx);
+            if (err != OK) {
+                for (int j = 0; j < case_count; j++) {
+                    mmgr_free(branch_jumps[j].jump_indices);
+                }
+                mmgr_free(branch_jumps);
+                mmgr_free(end_jumps);
+                return err;
+            }
+        }
+        
+        // 跳转到 CASE 结束
+        end_jumps[i] = codegen_emit(ctx, OP_JMP, 0);
+    }
+    
+    // 5. 生成 ELSE 分支（如果有）
+    int32_t else_start = codegen_current_position(ctx);
+    codegen_patch_jump(ctx, default_jump, else_start);
+    
+    // 弹出栈顶的 CASE 表达式值
+    codegen_emit(ctx, OP_POP, 0);
+    
+    if (node->data.case_stmt.default_case) {
+        err = generate_block(ctx, node->data.case_stmt.default_case, loop_ctx);
+        if (err != OK) {
+            for (int i = 0; i < case_count; i++) {
+                mmgr_free(branch_jumps[i].jump_indices);
+            }
+            mmgr_free(branch_jumps);
+            mmgr_free(end_jumps);
+            return err;
+        }
+    }
+    
+    // 6. 回填所有分支结束时的跳转到 CASE 结束
+    int32_t case_end = codegen_current_position(ctx);
+    for (int i = 0; i < case_count; i++) {
+        codegen_patch_jump(ctx, end_jumps[i], case_end);
+    }
+    
+    // 释放内存
+    for (int i = 0; i < case_count; i++) {
+        mmgr_free(branch_jumps[i].jump_indices);
+    }
+    mmgr_free(branch_jumps);
+    mmgr_free(end_jumps);
+    
+    return OK;
+}
+
+/**
  * @brief 生成return语句
  */
 static ErrorCode generate_return(CodeGenContext* ctx, ASTNode* node) {
     ErrorCode err;
     
     if (node->data.return_stmt.value) {
-        // 计算返回值
+        // 计算返回值表达式
         err = codegen_expr(ctx, node->data.return_stmt.value);
         if (err != OK) return err;
+        
+        // IEC 61131-3: 返回值通过赋值给函数名变量实现
+        // 将栈顶的返回值赋给返回值变量（函数名变量）
+        if (ctx->current_function && ctx->current_function->name) {
+            Symbol* return_var = symtbl_lookup(ctx->symtbl, ctx->current_function->name);
+            if (return_var && return_var->scope_level > 0) {  // 局部变量
+                uint8_t flags = 0x00;  // 局部变量标志
+                uint16_t offset = return_var->index;
+                codegen_emit_with_flags(ctx, OP_STORE, flags, offset);
+            }
+        }
     }
     
     codegen_emit(ctx, OP_RET, 0);

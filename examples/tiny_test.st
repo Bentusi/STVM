@@ -1,8 +1,6 @@
 (* 超级简单的测试 *)
 
 PROGRAM TinyTest
-VAR
-END_VAR
 
 FUNCTION Five : INT
 VAR_LOCAL

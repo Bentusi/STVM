@@ -450,6 +450,56 @@ static TypeInfo* check_statement(TypeChecker* checker, ASTNode* stmt) {
             return ret_type;
         }
         
+        case AST_CASE: {
+            // 检查 CASE 表达式
+            TypeInfo* case_expr_type = check_expression(checker, stmt->data.case_stmt.expression);
+            if (!case_expr_type) {
+                fprintf(stderr, "Type error: CASE expression has no type\n");
+                checker->error_count++;
+                return NULL;
+            }
+            
+            // 检查每个 CASE 分支
+            if (stmt->data.case_stmt.cases) {
+                for (int i = 0; i < stmt->data.case_stmt.case_count; i++) {
+                    ASTNode* case_elem = stmt->data.case_stmt.cases[i];
+                    if (!case_elem || case_elem->type != AST_CASE_ELEMENT) {
+                        continue;
+                    }
+                    
+                    // 检查标签列表中的每个标签
+                    ASTNode* label = case_elem->data.case_element.labels;
+                    while (label) {
+                        TypeInfo* label_type = check_expression(checker, label);
+                        if (label_type && !type_info_can_convert(case_expr_type, label_type)) {
+                            fprintf(stderr, "Type error: CASE label type does not match expression type\n");
+                            checker->error_count++;
+                        }
+                        label = label->next;
+                    }
+                    
+                    // 检查分支语句
+                    if (case_elem->data.case_element.statements) {
+                        check_statement_list(checker, case_elem->data.case_element.statements);
+                    }
+                }
+            }
+            
+            // 检查 ELSE 分支（如果有）
+            if (stmt->data.case_stmt.default_case) {
+                check_statement_list(checker, stmt->data.case_stmt.default_case);
+            }
+            
+            return NULL;
+        }
+        
+        case AST_CASE_ELEMENT: {
+            // CASE_ELEMENT 由 AST_CASE 处理，不应单独出现
+            fprintf(stderr, "Type error: CASE_ELEMENT cannot appear outside CASE statement\n");
+            checker->error_count++;
+            return NULL;
+        }
+        
         case AST_FUNCTION_CALL: {
             // 函数调用作为语句
             check_expression(checker, stmt);
@@ -503,14 +553,15 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             }
             
             BinaryOp op = expr->data.binary_op.op;
+            TypeInfo* result_type = NULL;
             
             // 算术运算: + - * / MOD
             if (op >= BINOP_ADD && op <= BINOP_MOD) {
                 if (left_type->base_type == TYPE_INT && right_type->base_type == TYPE_INT) {
-                    return type_info_create(TYPE_INT);
+                    result_type = type_info_create(TYPE_INT);
                 } else if ((left_type->base_type == TYPE_INT || left_type->base_type == TYPE_REAL) &&
                            (right_type->base_type == TYPE_INT || right_type->base_type == TYPE_REAL)) {
-                    return type_info_create(TYPE_REAL);
+                    result_type = type_info_create(TYPE_REAL);
                 } else {
                     fprintf(stderr, "Type error: Arithmetic operation requires numeric types\n");
                     checker->error_count++;
@@ -519,24 +570,24 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             }
             
             // 比较运算: = <> < <= > >=
-            if (op >= BINOP_EQ && op <= BINOP_GE) {
+            else if (op >= BINOP_EQ && op <= BINOP_GE) {
                 if (!type_info_can_convert(left_type, right_type)) {
                     fprintf(stderr, "Type error: Comparison requires compatible types\n");
                     checker->error_count++;
                 }
-                return type_info_create(TYPE_BOOL);
+                result_type = type_info_create(TYPE_BOOL);
             }
             
             // 逻辑/位运算: AND OR XOR（符合 IEC 61131-3）
             // 可以用于BOOL（逻辑）或INT（位）类型
-            if (op >= BINOP_AND && op <= BINOP_XOR) {
+            else if (op >= BINOP_AND && op <= BINOP_XOR) {
                 // BOOL AND BOOL -> BOOL（逻辑运算）
                 if (left_type->base_type == TYPE_BOOL && right_type->base_type == TYPE_BOOL) {
-                    return type_info_create(TYPE_BOOL);
+                    result_type = type_info_create(TYPE_BOOL);
                 }
                 // INT AND INT -> INT（位运算）
                 else if (left_type->base_type == TYPE_INT && right_type->base_type == TYPE_INT) {
-                    return type_info_create(TYPE_INT);
+                    result_type = type_info_create(TYPE_INT);
                 }
                 else {
                     fprintf(stderr, "Type error: AND/OR/XOR requires both operands to be BOOL or both INT\n");
@@ -546,26 +597,31 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             }
             
             // 位运算: BIT_AND BIT_OR BIT_XOR（仅INT）
-            if (op >= BINOP_BIT_AND && op <= BINOP_BIT_XOR) {
+            else if (op >= BINOP_BIT_AND && op <= BINOP_BIT_XOR) {
                 if (left_type->base_type != TYPE_INT || right_type->base_type != TYPE_INT) {
                     fprintf(stderr, "Type error: Bitwise operation requires integer types\n");
                     checker->error_count++;
                     return NULL;
                 }
-                return type_info_create(TYPE_INT);
+                result_type = type_info_create(TYPE_INT);
             }
             
             // 移位运算: SHL SHR
-            if (op == BINOP_SHL || op == BINOP_SHR) {
+            else if (op == BINOP_SHL || op == BINOP_SHR) {
                 if (left_type->base_type != TYPE_INT || right_type->base_type != TYPE_INT) {
                     fprintf(stderr, "Type error: Shift operation requires integer types\n");
                     checker->error_count++;
                     return NULL;
                 }
-                return type_info_create(TYPE_INT);
+                result_type = type_info_create(TYPE_INT);
             }
             
-            return NULL;
+            // 保存resolved_type到AST节点，供codegen使用
+            if (result_type) {
+                expr->resolved_type = result_type;
+            }
+            
+            return result_type;
         }
         
         case AST_UNARY_OP: {
@@ -574,11 +630,12 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             if (!operand_type) return NULL;
             
             UnaryOp op = expr->data.unary_op.op;
+            TypeInfo* result_type = NULL;
             
             if (op == UNOP_NEG) {
                 // 负号
                 if (operand_type->base_type == TYPE_INT || operand_type->base_type == TYPE_REAL) {
-                    return operand_type;
+                    result_type = operand_type;
                 } else {
                     fprintf(stderr, "Type error: Negation requires numeric type\n");
                     checker->error_count++;
@@ -587,9 +644,9 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             } else if (op == UNOP_NOT) {
                 // NOT：可以是逻辑非（BOOL）或位取反（INT）
                 if (operand_type->base_type == TYPE_BOOL) {
-                    return type_info_create(TYPE_BOOL);
+                    result_type = type_info_create(TYPE_BOOL);
                 } else if (operand_type->base_type == TYPE_INT) {
-                    return type_info_create(TYPE_INT);
+                    result_type = type_info_create(TYPE_INT);
                 } else {
                     fprintf(stderr, "Type error: NOT requires boolean or integer type\n");
                     checker->error_count++;
@@ -602,10 +659,15 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
                     checker->error_count++;
                     return NULL;
                 }
-                return type_info_create(TYPE_INT);
+                result_type = type_info_create(TYPE_INT);
             }
             
-            return NULL;
+            // 保存resolved_type到AST节点，供codegen使用
+            if (result_type) {
+                expr->resolved_type = result_type;
+            }
+            
+            return result_type;
         }
         
         case AST_FUNCTION_CALL: {

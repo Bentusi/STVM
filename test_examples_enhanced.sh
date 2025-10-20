@@ -221,31 +221,6 @@ run_tests() {
         
         # 跳过某些已知有问题的文件
         local basename=$(basename "$st_file")
-        case "$basename" in
-            # 库文件，不需要直接执行
-            "mathlib.st"|"engineering_lib.st")
-                continue
-                ;;
-            # 需要 I/O 硬件的文件
-            "io_blink.st"|"io_temperature.st"|"io_test.st")
-                echo -n "Testing: $(printf '%-45s' "$basename") ... "
-                echo -e "${YELLOW}SKIPPED (requires I/O)${NC}"
-                SKIPPED=$((SKIPPED + 1))
-                SKIPPED_TESTS+=("$basename: Requires I/O hardware")
-                TOTAL=$((TOTAL + 1))
-                continue
-                ;;
-            # 需要外部库的文件
-            "test_import.st")
-                echo -n "Testing: $(printf '%-45s' "$basename") ... "
-                echo -e "${YELLOW}SKIPPED (requires library)${NC}"
-                SKIPPED=$((SKIPPED + 1))
-                SKIPPED_TESTS+=("$basename: Requires external library")
-                TOTAL=$((TOTAL + 1))
-                continue
-                ;;
-        esac
-        
         test_file "$st_file"
     done
 }

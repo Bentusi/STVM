@@ -26,6 +26,7 @@ typedef enum {
     AST_WHILE,              // while循环
     AST_FOR,                // for循环
     AST_CASE,               // case语句
+    AST_CASE_ELEMENT,       // case分支元素
     AST_RETURN,             // return语句
     AST_BLOCK,              // 语句块
     AST_EXPR_STMT,          // 表达式语句
@@ -175,6 +176,12 @@ typedef union {
         ASTNode* default_case;      // 默认分支（可选）
     } case_stmt;
     
+    // case分支元素
+    struct {
+        ASTNode* labels;            // 标签列表（链表）
+        ASTNode* statements;        // 语句列表
+    } case_element;
+    
     // return语句
     struct {
         ASTNode* value;             // 返回值（可选）
@@ -285,6 +292,16 @@ ASTNode* ast_create_for(const char* variable, ASTNode* start, ASTNode* end, ASTN
  * @brief 创建return语句节点
  */
 ASTNode* ast_create_return(ASTNode* value);
+
+/**
+ * @brief 创建case语句节点
+ */
+ASTNode* ast_create_case(ASTNode* expression, ASTNode** cases, int case_count, ASTNode* default_case);
+
+/**
+ * @brief 创建case分支元素节点
+ */
+ASTNode* ast_create_case_element(ASTNode* labels, ASTNode* statements);
 
 /**
  * @brief 创建语句块节点

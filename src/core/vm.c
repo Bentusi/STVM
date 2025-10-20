@@ -90,7 +90,12 @@ VM* vm_create(BytecodeModule* module) {
             mmgr_free(vm);
             return NULL;
         }
-        memset(vm->globals, 0, sizeof(Value) * vm->global_count);
+        // 初始化所有全局变量为默认值 (TYPE_INT, 0)
+        // 避免未初始化的类型字段导致运行时错误
+        for (int32_t i = 0; i < vm->global_count; i++) {
+            vm->globals[i].type = TYPE_INT;
+            vm->globals[i].int_val = 0;
+        }
     }
     
     vm->pc = 0;
@@ -762,9 +767,11 @@ ErrorCode vm_step(VM* vm) {
                                                 PUSH(local);
                                             }
                                             
-                                            // 临时保存当前模块和PC
+                                            // 临时保存当前模块、PC、SP和调用栈深度
                                             BytecodeModule* saved_module = vm->module;
                                             uint32_t saved_pc = vm->pc;
+                                            int32_t saved_sp = vm->sp;
+                                            int32_t saved_call_sp = vm->call_sp;
                                             
                                             // 切换到库模块
                                             vm->module = lib->module;
@@ -772,24 +779,37 @@ ErrorCode vm_step(VM* vm) {
                                             
                                             // 执行库函数直到返回
                                             bool lib_call_complete = false;
+                                            Value return_value = {.type = TYPE_VOID};
                                             while (!lib_call_complete && vm->running) {
                                                 ErrorCode err = vm_step(vm);
                                                 if (err != OK) {
-                                                    // 恢复原模块
+                                                    // 恢复原模块和状态
                                                     vm->module = saved_module;
+                                                    vm->sp = saved_sp;
                                                     return err;
                                                 }
                                                 
-                                                // 检查是否返回（调用栈已弹出）
-                                                if (vm->call_sp < (int32_t)(saved_module == vm->module ? 
-                                                    vm->call_stack[0].function->local_count : 0)) {
+                                                // 检查是否返回（调用栈恢复到调用前的深度）
+                                                if (vm->call_sp < saved_call_sp) {
                                                     lib_call_complete = true;
+                                                    // 获取返回值（如果有）
+                                                    if (lib_func->return_type != TYPE_VOID && vm->sp >= 0) {
+                                                        return_value = POP();
+                                                        // 强制设置返回值类型为函数签名声明的类型
+                                                        return_value.type = lib_func->return_type;
+                                                    }
                                                 }
                                             }
                                             
-                                            // 恢复原模块和PC
+                                            // 恢复原模块、PC和SP
                                             vm->module = saved_module;
                                             vm->pc = saved_pc;
+                                            vm->sp = saved_sp;
+                                            
+                                            // 压入返回值
+                                            if (return_value.type != TYPE_VOID) {
+                                                PUSH(return_value);
+                                            }
                                             
                                             goto call_ext_done;
                                         }

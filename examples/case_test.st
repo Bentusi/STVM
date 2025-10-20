@@ -1,4 +1,4 @@
-(* 示例程序 5: CASE 语句 *)
+(* 测试 CASE 语句 *)
 
 PROGRAM CaseExample
 VAR
@@ -21,6 +21,8 @@ END_VAR
         day_name := 'Invalid';
     END_CASE;
     
+    PRINT('Day ', day, ' is ', day_name);
+    
     (* 根据月份判断季节 *)
     CASE month OF
         12, 1, 2: season := 'Winter';
@@ -30,7 +32,6 @@ END_VAR
     ELSE
         season := 'Unknown';
     END_CASE;
-
-    PRINT('Day %d is %s\n', day, day_name);
-    PRINT('Month %d is in %s\n', month, season);
+    
+    PRINT('Month ', month, ' is in ', season);
 END_PROGRAM

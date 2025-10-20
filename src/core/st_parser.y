@@ -88,6 +88,7 @@ ASTNode* parse_result = NULL;
 %type <ast_node> function_list function_decl function_params function_local_vars function_var_decl_list external_var_decl_list
 %type <ast_node> statement_list statement
 %type <ast_node> assignment_stmt if_stmt elsif_list while_stmt for_stmt case_stmt return_stmt print_stmt
+%type <ast_node> case_element_list case_element case_labels case_label_list
 %type <ast_node> expression or_expr xor_expr and_expr comparison_expr
 %type <ast_node> add_expr mult_expr unary_expr primary_expr
 %type <ast_node> argument_list
@@ -586,10 +587,118 @@ for_stmt:
 
 /* CASE语句 */
 case_stmt:
-    TOKEN_CASE expression TOKEN_OF statement_list TOKEN_END_CASE
+    TOKEN_CASE expression TOKEN_OF case_element_list TOKEN_END_CASE
     {
-        // TODO: CASE语句暂未实现，使用空语句代替
-        $$ = NULL;
+        // 计算 case 分支数量
+        int case_count = 0;
+        ASTNode* elem = $4;
+        while (elem) {
+            case_count++;
+            elem = elem->next;
+        }
+        
+        // 分配 cases 数组
+        ASTNode** cases = NULL;
+        if (case_count > 0) {
+            cases = (ASTNode**)mmgr_alloc(sizeof(ASTNode*) * case_count);
+            elem = $4;
+            for (int i = 0; i < case_count; i++) {
+                cases[i] = elem;
+                ASTNode* next = elem->next;
+                elem->next = NULL;  // 断开链表
+                elem = next;
+            }
+        }
+        
+        // 创建 CASE 语句节点
+        $$ = ast_create_case($2, cases, case_count, NULL);
+    }
+    | TOKEN_CASE expression TOKEN_OF case_element_list TOKEN_ELSE statement_list TOKEN_END_CASE
+    {
+        // 计算 case 分支数量
+        int case_count = 0;
+        ASTNode* elem = $4;
+        while (elem) {
+            case_count++;
+            elem = elem->next;
+        }
+        
+        // 分配 cases 数组
+        ASTNode** cases = NULL;
+        if (case_count > 0) {
+            cases = (ASTNode**)mmgr_alloc(sizeof(ASTNode*) * case_count);
+            elem = $4;
+            for (int i = 0; i < case_count; i++) {
+                cases[i] = elem;
+                ASTNode* next = elem->next;
+                elem->next = NULL;  // 断开链表
+                elem = next;
+            }
+        }
+        
+        // 创建 CASE 语句节点
+        $$ = ast_create_case($2, cases, case_count, $6);
+    }
+    ;
+
+/* CASE 元素列表 */
+case_element_list:
+    case_element
+    {
+        $$ = $1;
+    }
+    | case_element_list case_element
+    {
+        // 将 case_element 添加到链表末尾
+        if ($1 == NULL) {
+            $$ = $2;
+        } else {
+            ASTNode* last = $1;
+            while (last->next != NULL) {
+                last = last->next;
+            }
+            last->next = $2;
+            $$ = $1;
+        }
+    }
+    ;
+
+/* CASE 元素（一个或多个标签 + 语句列表）*/
+case_element:
+    case_labels TOKEN_COLON statement_list
+    {
+        // 创建 CASE 元素节点
+        $$ = ast_create_case_element($1, $3);
+    }
+    ;
+
+/* CASE 标签列表（支持多值：1, 2, 3） */
+case_labels:
+    case_label_list
+    {
+        $$ = $1;
+    }
+    ;
+
+/* CASE 标签列表 */
+case_label_list:
+    expression
+    {
+        $$ = $1;
+    }
+    | case_label_list TOKEN_COMMA expression
+    {
+        // 将表达式添加到链表末尾
+        if ($1 == NULL) {
+            $$ = $3;
+        } else {
+            ASTNode* last = $1;
+            while (last->next != NULL) {
+                last = last->next;
+            }
+            last->next = $3;
+            $$ = $1;
+        }
     }
     ;
 

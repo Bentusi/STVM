@@ -38,6 +38,14 @@ LibraryManager* libmgr_create(SymbolTable* global_symtbl) {
 }
 
 /**
+ * @brief 获取第一个加载的库（用于遍历）
+ */
+LoadedLibrary* libmgr_get_first_library(LibraryManager* mgr) {
+    if (!mgr) return NULL;
+    return mgr->libraries;
+}
+
+/**
  * @brief 释放已加载库
  */
 static void free_loaded_library(LoadedLibrary* lib) {

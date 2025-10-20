@@ -209,6 +209,34 @@ ASTNode* ast_create_return(ASTNode* value) {
 }
 
 /**
+ * @brief 创建case语句节点
+ */
+ASTNode* ast_create_case(ASTNode* expression, ASTNode** cases, int case_count, ASTNode* default_case) {
+    ASTNode* node = ast_create_node(AST_CASE);
+    if (!node) return NULL;
+    
+    node->data.case_stmt.expression = expression;
+    node->data.case_stmt.cases = cases;
+    node->data.case_stmt.case_count = case_count;
+    node->data.case_stmt.default_case = default_case;
+    
+    return node;
+}
+
+/**
+ * @brief 创建case分支元素节点
+ */
+ASTNode* ast_create_case_element(ASTNode* labels, ASTNode* statements) {
+    ASTNode* node = ast_create_node(AST_CASE_ELEMENT);
+    if (!node) return NULL;
+    
+    node->data.case_element.labels = labels;
+    node->data.case_element.statements = statements;
+    
+    return node;
+}
+
+/**
  * @brief 创建语句块节点
  */
 ASTNode* ast_create_block(ASTNode* statements) {
@@ -396,6 +424,22 @@ void ast_free_node(ASTNode* node) {
             ast_free_node(node->data.return_stmt.value);
             break;
             
+        case AST_CASE:
+            ast_free_node(node->data.case_stmt.expression);
+            if (node->data.case_stmt.cases) {
+                for (int i = 0; i < node->data.case_stmt.case_count; i++) {
+                    ast_free_node(node->data.case_stmt.cases[i]);
+                }
+                mmgr_free(node->data.case_stmt.cases);
+            }
+            ast_free_node(node->data.case_stmt.default_case);
+            break;
+            
+        case AST_CASE_ELEMENT:
+            ast_free_node(node->data.case_element.labels);
+            ast_free_node(node->data.case_element.statements);
+            break;
+            
         case AST_BINARY_OP:
             ast_free_node(node->data.binary_op.left);
             ast_free_node(node->data.binary_op.right);
@@ -553,6 +597,31 @@ void ast_print(ASTNode* node, int indent) {
             ast_print(node->data.while_stmt.body, indent + 2);
             break;
             
+        case AST_CASE:
+            printf("CASE\n");
+            print_indent(indent); printf("  Expression:\n");
+            ast_print(node->data.case_stmt.expression, indent + 2);
+            print_indent(indent); printf("  Cases (%d):\n", node->data.case_stmt.case_count);
+            if (node->data.case_stmt.cases) {
+                for (int i = 0; i < node->data.case_stmt.case_count; i++) {
+                    print_indent(indent + 1); printf("Case[%d]:\n", i);
+                    ast_print(node->data.case_stmt.cases[i], indent + 2);
+                }
+            }
+            if (node->data.case_stmt.default_case) {
+                print_indent(indent); printf("  Default:\n");
+                ast_print(node->data.case_stmt.default_case, indent + 2);
+            }
+            break;
+            
+        case AST_CASE_ELEMENT:
+            printf("CASE_ELEMENT\n");
+            print_indent(indent); printf("  Labels:\n");
+            ast_print(node->data.case_element.labels, indent + 2);
+            print_indent(indent); printf("  Statements:\n");
+            ast_print(node->data.case_element.statements, indent + 2);
+            break;
+            
         case AST_BINARY_OP:
             printf("BINARY_OP: %s\n", binary_op_to_string(node->data.binary_op.op));
             print_indent(indent); printf("  Left:\n");
@@ -639,6 +708,21 @@ void ast_visit(ASTNode* node, ASTVisitor visitor, void* context) {
         case AST_WHILE:
             ast_visit(node->data.while_stmt.condition, visitor, context);
             ast_visit(node->data.while_stmt.body, visitor, context);
+            break;
+            
+        case AST_CASE:
+            ast_visit(node->data.case_stmt.expression, visitor, context);
+            if (node->data.case_stmt.cases) {
+                for (int i = 0; i < node->data.case_stmt.case_count; i++) {
+                    ast_visit(node->data.case_stmt.cases[i], visitor, context);
+                }
+            }
+            ast_visit(node->data.case_stmt.default_case, visitor, context);
+            break;
+            
+        case AST_CASE_ELEMENT:
+            ast_visit(node->data.case_element.labels, visitor, context);
+            ast_visit(node->data.case_element.statements, visitor, context);
             break;
             
         case AST_BINARY_OP:
