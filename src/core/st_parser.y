@@ -70,7 +70,7 @@ ASTNode* parse_result = NULL;
 %token <bool_value> TOKEN_TRUE TOKEN_FALSE
 %token <int_value> TOKEN_INTEGER_LITERAL
 %token <real_value> TOKEN_REAL_LITERAL
-%token <string_value> TOKEN_STRING_LITERAL TOKEN_IDENTIFIER
+%token <string_value> TOKEN_STRING_LITERAL TOKEN_IDENTIFIER TOKEN_DIRECT_ADDRESS
 
 %token TOKEN_ASSIGN TOKEN_EQ TOKEN_NE TOKEN_LT TOKEN_LE TOKEN_GT TOKEN_GE
 %token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MOD
@@ -494,22 +494,39 @@ statement_list:
 
 /* 外部 I/O 变量声明列表（VAR_EXTERNAL 块） */
 external_var_decl_list:
-    TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_AT TOKEN_STRING_LITERAL TOKEN_SEMICOLON
+    TOKEN_IDENTIFIER TOKEN_AT TOKEN_STRING_LITERAL TOKEN_COLON type_spec TOKEN_SEMICOLON
     {
-        // 创建外部变量声明: 变量名 : 类型 AT "I/O地址";
-        $$ = ast_create_external_var_decl($1, $3, $5);
+        // 创建外部变量声明: 变量名 AT "I/O地址" : 类型;
+        $$ = ast_create_external_var_decl($1, $5, $3);
         if ($1) mmgr_free((void*)$1);
-        if ($5) mmgr_free((void*)$5);
+        if ($3) mmgr_free((void*)$3);
     }
-    | external_var_decl_list TOKEN_IDENTIFIER TOKEN_COLON type_spec TOKEN_AT TOKEN_STRING_LITERAL TOKEN_SEMICOLON
+    | TOKEN_IDENTIFIER TOKEN_AT TOKEN_DIRECT_ADDRESS TOKEN_COLON type_spec TOKEN_SEMICOLON
     {
-        ASTNode* new_decl = ast_create_external_var_decl($2, $4, $6);
+        // 创建外部变量声明: 变量名 AT %IX0.0 : 类型;
+        $$ = ast_create_external_var_decl($1, $5, $3);
+        if ($1) mmgr_free((void*)$1);
+        if ($3) mmgr_free((void*)$3);
+    }
+    | external_var_decl_list TOKEN_IDENTIFIER TOKEN_AT TOKEN_STRING_LITERAL TOKEN_COLON type_spec TOKEN_SEMICOLON
+    {
+        ASTNode* new_decl = ast_create_external_var_decl($2, $6, $4);
         ASTNode* last = $1;
         while (last->next) last = last->next;
         last->next = new_decl;
         $$ = $1;
         if ($2) mmgr_free((void*)$2);
-        if ($6) mmgr_free((void*)$6);
+        if ($4) mmgr_free((void*)$4);
+    }
+    | external_var_decl_list TOKEN_IDENTIFIER TOKEN_AT TOKEN_DIRECT_ADDRESS TOKEN_COLON type_spec TOKEN_SEMICOLON
+    {
+        ASTNode* new_decl = ast_create_external_var_decl($2, $6, $4);
+        ASTNode* last = $1;
+        while (last->next) last = last->next;
+        last->next = new_decl;
+        $$ = $1;
+        if ($2) mmgr_free((void*)$2);
+        if ($4) mmgr_free((void*)$4);
     }
     ;
 

@@ -101,18 +101,6 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
 (?i:SHL)            { return TOKEN_SHL; }
 (?i:SHR)            { return TOKEN_SHR; }
 
-    /* 整数字面量 */
-{INTEGER}           { 
-                        yylval.int_value = atoll(yytext); 
-                        return TOKEN_INTEGER_LITERAL; 
-                    }
-
-    /* 实数字面量 */
-{REAL}              { 
-                        yylval.real_value = atof(yytext); 
-                        return TOKEN_REAL_LITERAL; 
-                    }
-
     /* 字符串字面量 - 单引号 */
 {STRING_SQ}         {
                         /* 去掉首尾引号，处理转义的单引号 '' -> ' */
@@ -145,6 +133,25 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
                         str[j] = '\0';
                         yylval.string_value = str;
                         return TOKEN_STRING_LITERAL;
+                    }
+
+    /* 直接地址（IEC 61131-3） - 在字符串之后、整数和标识符之前匹配 */
+%[IQM][XBWDL]{DIGIT}+(\.{DIGIT}+)*       {
+                        /* 复制地址字符串 (例如 %IX0.0, %QX0.0, %QX1.2) */
+                        yylval.string_value = mmgr_strdup(yytext);
+                        return TOKEN_DIRECT_ADDRESS;
+                    }
+
+    /* 整数字面量 */
+{INTEGER}           { 
+                        yylval.int_value = atoll(yytext); 
+                        return TOKEN_INTEGER_LITERAL; 
+                    }
+
+    /* 实数字面量 */
+{REAL}              { 
+                        yylval.real_value = atof(yytext); 
+                        return TOKEN_REAL_LITERAL; 
                     }
 
     /* 标识符 */
