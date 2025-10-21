@@ -1,4 +1,4 @@
-/**
+(**
  * @file example_io_blink.st
  * @brief GPIO LED 闪烁示例 - 展示 I/O 映射功能
  * 
@@ -9,7 +9,7 @@
  * 功能：
  * - 按钮按下时，LED 闪烁
  * - 按钮释放时，LED 熄灭
- */
+ *)
 
 PROGRAM LEDBlink
 

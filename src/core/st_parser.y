@@ -211,20 +211,36 @@ var_decl:
         // 注意：AST var_decl结构中没有is_input/is_output字段
         // 这些语义可以在后续的符号表中处理
     }
+    | TOKEN_VAR TOKEN_END_VAR
+    {
+        $$ = NULL;  // 空的 VAR 块
+    }
     | TOKEN_VAR_INPUT var_decl_item TOKEN_END_VAR
     {
         $$ = $2;
         // 输入变量：可以在后续类型检查时处理
+    }
+    | TOKEN_VAR_INPUT TOKEN_END_VAR
+    {
+        $$ = NULL;  // 空的 VAR_INPUT 块
     }
     | TOKEN_VAR_OUTPUT var_decl_item TOKEN_END_VAR
     {
         $$ = $2;
         // 输出变量：可以在后续类型检查时处理
     }
+    | TOKEN_VAR_OUTPUT TOKEN_END_VAR
+    {
+        $$ = NULL;  // 空的 VAR_OUTPUT 块
+    }
     | TOKEN_VAR_EXTERNAL external_var_decl_list TOKEN_END_VAR
     {
         $$ = $2;
         // 外部I/O变量：映射到硬件地址
+    }
+    | TOKEN_VAR_EXTERNAL TOKEN_END_VAR
+    {
+        $$ = NULL;  // 空的 VAR_EXTERNAL 块
     }
     ;
 
@@ -346,6 +362,10 @@ function_decl:
 /* 函数参数（VAR_INPUT块，可选） */
 function_params:
     /* 空 */ { $$ = NULL; }
+    | TOKEN_VAR_INPUT TOKEN_END_VAR
+    {
+        $$ = NULL;  // 空的 VAR_INPUT 块
+    }
     | TOKEN_VAR_INPUT var_decl_item TOKEN_END_VAR
     {
         $$ = $2;  // 返回参数链表
@@ -380,6 +400,11 @@ function_local_vars:
             last->next = $3;
             $$ = $1;
         }
+    }
+    | function_local_vars TOKEN_VAR_EXTERNAL TOKEN_END_VAR
+    {
+        // 空的 VAR_EXTERNAL 块
+        $$ = $1;
     }
     | function_local_vars TOKEN_VAR_EXTERNAL external_var_decl_list TOKEN_END_VAR
     {
