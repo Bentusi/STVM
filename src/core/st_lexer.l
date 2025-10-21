@@ -185,14 +185,14 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
 "]"                 { return TOKEN_RBRACKET; }
 
     /* 行注释 // ... */
-"//"[^\n]*          { /* 忽略行注释 */ }
+"//"[^\n]*          { /* 忽略行注释，换行符会被下面的规则处理 */ }
 
     /* 块注释 (* ... *) */
 "(*"                {
                         int c;
                         while ((c = input()) != 0) {
                             if (c == '\n') {
-                                yylineno++;
+                                /* yylineno 会自动增加，不需要手动处理 */
                                 yycolumn = 1;
                             } else if (c == '*') {
                                 if ((c = input()) == ')') {
@@ -206,7 +206,7 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
 
     /* 空白字符 */
 [ \t\r]+            { /* 忽略空白 */ }
-\n                  { yylineno++; yycolumn = 1; }
+\n                  { yycolumn = 1; /* 换行符，yylineno 自动增加 */ }
 
     /* 其他字符报错 */
 .                   { 
