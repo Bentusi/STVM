@@ -12,6 +12,24 @@
 #endif
 #include "vm.h"
 
+
+static char* type2str(DataType type){
+    switch (type) {
+        case TYPE_VOID:     return "VOID";
+        case TYPE_BOOL:     return "BOOL";
+        case TYPE_INT:      return "INT";
+        case TYPE_REAL:     return "REAL";
+        case TYPE_STRING:   return "STRING";
+        case TYPE_ARRAY:    return "ARRAY";
+        case TYPE_FUNCTION: return "FUNCTION";
+        case TYPE_QBOOL:    return "QBOOL";
+        case TYPE_QINT:     return "QINT";
+        case TYPE_QREAL:    return "QREAL";
+        case TYPE_QSTRING:  return "QSTRING";
+        default:            return "UNKNOWN";
+    }
+}
+
 /**
  * @brief PRINT 函数实现
  * 
@@ -52,7 +70,7 @@ Value builtin_print(VM* vm, int32_t argc) {
                     if (arg.type == TYPE_INT) {
                         printf("%d", arg.int_val);
                     } else {
-                        fprintf(stderr, "PRINT: %%d 需要 INT 类型，得到 %d\n", arg.type);
+                        fprintf(stderr, "PRINT: %%d 需要 INT 类型，得到 %s\n", type2str(arg.type));
                     }
                     break;
                 }
@@ -70,7 +88,7 @@ Value builtin_print(VM* vm, int32_t argc) {
                         // 自动转换 INT 到 REAL
                         printf("%f", (double)arg.int_val);
                     } else {
-                        fprintf(stderr, "PRINT: %%f 需要 REAL 类型，得到 %d\n", arg.type);
+                        fprintf(stderr, "PRINT: %%f 需要 REAL 类型，得到 %s\n", type2str(arg.type));
                     }
                     break;
                 }
@@ -85,7 +103,7 @@ Value builtin_print(VM* vm, int32_t argc) {
                     if (arg.type == TYPE_STRING && arg.string_val) {
                         printf("%s", arg.string_val);
                     } else {
-                        fprintf(stderr, "PRINT: %%s 需要 STRING 类型，得到 %d\n", arg.type);
+                        fprintf(stderr, "PRINT: %%s 需要 STRING 类型，得到 %s\n", type2str(arg.type));
                     }
                     break;
                 }
@@ -100,7 +118,7 @@ Value builtin_print(VM* vm, int32_t argc) {
                     if (arg.type == TYPE_BOOL) {
                         printf("%s", arg.bool_val ? "TRUE" : "FALSE");
                     } else {
-                        fprintf(stderr, "PRINT: %%b 需要 BOOL 类型，得到 %d\n", arg.type);
+                        fprintf(stderr, "PRINT: %%b 需要 BOOL 类型，得到 %s\n", type2str(arg.type));
                     }
                     break;
                 }

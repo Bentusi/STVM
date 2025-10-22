@@ -89,6 +89,9 @@ BEGIN
     temp4 := status; // 直接赋值
     PRINT('赋值测试完成，temp4.VAL = %s, temp4.QUALITY = %d\n', temp4.VAL, temp4.QUALITY);
 
+    // 7.类型转换
+    temp_celsius := temperature.VAL;
+    PRINT('类型转换测试完成，temp_celsius = %f\n', temp_celsius);
     PRINT('=== 所有成员访问测试完成 ===\n');
     
 END_PROGRAM

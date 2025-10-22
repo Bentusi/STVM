@@ -1090,7 +1090,7 @@ ErrorCode vm_step(VM* vm) {
         // === 质量位访问 ===
         case OP_LOAD_VAL: {
             // 加载质量化变量的值部分
-            uint32_t var_idx = instr.operand;
+            int32_t var_idx = (int32_t)instr.operand;
             Value qualified_val;
             
             if (instr.flags & FLAG_GLOBAL) {
@@ -1126,7 +1126,7 @@ ErrorCode vm_step(VM* vm) {
         
         case OP_LOAD_QUALITY: {
             // 加载质量化变量的质量位
-            uint32_t var_idx = instr.operand;
+            int32_t var_idx = (int32_t)instr.operand;
             Value qualified_val;
             
             if (instr.flags & FLAG_GLOBAL) {
@@ -1161,7 +1161,7 @@ ErrorCode vm_step(VM* vm) {
         
         case OP_STORE_VAL: {
             // 存储质量化变量的值部分
-            uint32_t var_idx = instr.operand;
+            int32_t var_idx = (int32_t)instr.operand;
             
             if (vm->sp < 0) {
                 vm->error_code = ERR_STACK_UNDERFLOW;
@@ -1209,7 +1209,7 @@ ErrorCode vm_step(VM* vm) {
         
         case OP_STORE_QUALITY: {
             // 存储质量化变量的质量位
-            uint32_t var_idx = instr.operand;
+            int32_t var_idx = (int32_t)instr.operand;
             
             if (vm->sp < 0) {
                 vm->error_code = ERR_STACK_UNDERFLOW;
@@ -1904,7 +1904,7 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             // === 质量位访问（需要在vm_run_from中也实现）===
             case OP_LOAD_VAL: {
                 // 加载质量化变量的值部分
-                uint32_t var_idx = instr.operand;
+                int32_t var_idx = (int32_t)instr.operand;
                 Value qualified_val;
                 
                 if (instr.flags & FLAG_GLOBAL) {
@@ -1940,7 +1940,7 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             
             case OP_LOAD_QUALITY: {
                 // 加载质量化变量的质量位
-                uint32_t var_idx = instr.operand;
+                int32_t var_idx = (int32_t)instr.operand;
                 Value qualified_val;
                 
                 if (instr.flags & FLAG_GLOBAL) {
@@ -1975,7 +1975,7 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             
             case OP_STORE_VAL: {
                 // 存储质量化变量的值部分
-                uint32_t var_idx = instr.operand;
+                int32_t var_idx = (int32_t)instr.operand;
                 
                 if (vm->sp < 0) {
                     vm->error_code = ERR_STACK_UNDERFLOW;
@@ -2023,7 +2023,7 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             
             case OP_STORE_QUALITY: {
                 // 存储质量化变量的质量位
-                uint32_t var_idx = instr.operand;
+                int32_t var_idx = (int32_t)instr.operand;
                 
                 if (vm->sp < 0) {
                     vm->error_code = ERR_STACK_UNDERFLOW;
