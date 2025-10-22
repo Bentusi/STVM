@@ -30,7 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLES_DIR="$SCRIPT_DIR/examples"
 STVM_BIN="$SCRIPT_DIR/build/bin/stvm"
 TEMP_DIR="/tmp/stvm_test_$$"
-REPORT_FILE="$SCRIPT_DIR/test_results.txt"
+REPORT_FILE="/tmp/test_results.txt"
 
 # 详细模式
 VERBOSE=0

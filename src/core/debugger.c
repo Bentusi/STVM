@@ -376,6 +376,12 @@ ErrorCode debugger_step_over(Debugger* dbg) {
     dbg->state = DEBUG_STEP_OVER;
     dbg->step_frame_level = vm->call_sp;
     
+    // 如果VM还没有启动，需要启动它
+    if (!vm->running) {
+        vm->running = true;
+        vm->error_code = OK;
+    }
+    
     // 检查下一条指令是否是CALL
     if (vm->pc < vm->module->instruction_count) {
         Instruction instr = vm->module->instructions[vm->pc];
@@ -403,11 +409,19 @@ ErrorCode debugger_step_over(Debugger* dbg) {
  * @brief 单步执行（进入函数）
  */
 ErrorCode debugger_step_into(Debugger* dbg) {
-    if (!dbg) {
+    if (!dbg || !dbg->vm) {
         return ERR_RUNTIME;
     }
     
     dbg->state = DEBUG_STEP_INTO;
+    VM* vm = dbg->vm;
+    
+    // 如果VM还没有启动，需要启动它
+    if (!vm->running) {
+        vm->running = true;
+        vm->error_code = OK;
+    }
+    
     return debugger_step_instruction(dbg);
 }
 
@@ -420,6 +434,12 @@ ErrorCode debugger_step_out(Debugger* dbg) {
     }
     
     VM* vm = dbg->vm;
+    
+    // 如果VM还没有启动，需要启动它
+    if (!vm->running) {
+        vm->running = true;
+        vm->error_code = OK;
+    }
     
     if (vm->call_sp < 0) {
         printf("已在最顶层\n");
@@ -451,11 +471,18 @@ ErrorCode debugger_continue(Debugger* dbg) {
     dbg->state = DEBUG_RUNNING;
     VM* vm = dbg->vm;
     
+    // 如果VM还没有启动，需要启动它
+    if (!vm->running) {
+        vm->running = true;
+        vm->error_code = OK;
+    }
+    
     while (vm->running) {
         // 检查断点
         if (debugger_check_breakpoint(dbg, vm->pc)) {
             printf("\n断点命中于地址 %u\n", vm->pc);
             debugger_print_frame(dbg);
+            dbg->state = DEBUG_PAUSED;
             return OK;
         }
         
@@ -466,6 +493,7 @@ ErrorCode debugger_continue(Debugger* dbg) {
     }
     
     printf("程序正常结束\n");
+    dbg->state = DEBUG_STOPPED;
     return OK;
 }
 
