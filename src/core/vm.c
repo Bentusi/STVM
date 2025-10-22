@@ -230,12 +230,36 @@ static ErrorCode vm_execute_arithmetic(VM* vm, Opcode op) {
     Value a = POP();
     Value result;
     result.type = a.type;
+    result.quality = QUALITY_GOOD;  // 默认质量位
+    
+    // 处理质量化类型：提取基础值并传播质量位
+    DataType base_type_a = is_qualified_type(a.type) ? get_base_type(a.type) : a.type;
+    DataType base_type_b = is_qualified_type(b.type) ? get_base_type(b.type) : b.type;
+    
+    // 质量位传播：任一操作数质量异常，结果就异常
+    QualityFlag quality_a = is_qualified_type(a.type) ? a.quality : QUALITY_GOOD;
+    QualityFlag quality_b = is_qualified_type(b.type) ? b.quality : QUALITY_GOOD;
+    result.quality = quality_propagate(quality_a, quality_b);
+    
+    // 确定结果类型：如果任一是质量化类型，结果也是质量化的
+    if (is_qualified_type(a.type) || is_qualified_type(b.type)) {
+        if (base_type_a == TYPE_REAL || base_type_b == TYPE_REAL) {
+            result.type = TYPE_QREAL;
+        } else {
+            result.type = TYPE_QINT;
+        }
+    } else {
+        if (base_type_a == TYPE_REAL || base_type_b == TYPE_REAL) {
+            result.type = TYPE_REAL;
+        } else {
+            result.type = TYPE_INT;
+        }
+    }
     
     // 类型转换：如果一个是REAL，结果就是REAL
-    if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
-        double left = (a.type == TYPE_REAL) ? a.real_val : (double)a.int_val;
-        double right = (b.type == TYPE_REAL) ? b.real_val : (double)b.int_val;
-        result.type = TYPE_REAL;
+    if (base_type_a == TYPE_REAL || base_type_b == TYPE_REAL) {
+        double left = (base_type_a == TYPE_REAL) ? a.real_val : (double)a.int_val;
+        double right = (base_type_b == TYPE_REAL) ? b.real_val : (double)b.int_val;
         
         switch (op) {
             case OP_ADD: result.real_val = left + right; break;

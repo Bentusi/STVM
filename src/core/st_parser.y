@@ -66,6 +66,7 @@ ASTNode* parse_result = NULL;
 %token TOKEN_IMPORT TOKEN_FROM TOKEN_AS
 
 %token TOKEN_BOOL TOKEN_INT TOKEN_REAL TOKEN_STRING TOKEN_ARRAY
+%token TOKEN_QBOOL TOKEN_QINT TOKEN_QREAL TOKEN_QSTRING
 
 %token <bool_value> TOKEN_TRUE TOKEN_FALSE
 %token <int_value> TOKEN_INTEGER_LITERAL
@@ -279,6 +280,10 @@ type_spec:
     | TOKEN_INT     { $$ = type_info_create(TYPE_INT); }
     | TOKEN_REAL    { $$ = type_info_create(TYPE_REAL); }
     | TOKEN_STRING  { $$ = type_info_create(TYPE_STRING); }
+    | TOKEN_QBOOL   { $$ = type_info_create(TYPE_QBOOL); }
+    | TOKEN_QINT    { $$ = type_info_create(TYPE_QINT); }
+    | TOKEN_QREAL   { $$ = type_info_create(TYPE_QREAL); }
+    | TOKEN_QSTRING { $$ = type_info_create(TYPE_QSTRING); }
     | TOKEN_ARRAY TOKEN_LBRACKET TOKEN_INTEGER_LITERAL TOKEN_RANGE TOKEN_INTEGER_LITERAL TOKEN_RBRACKET TOKEN_OF type_spec
     {
         // type_info_create_array(elem_type, dimensions, sizes)

@@ -555,13 +555,25 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             BinaryOp op = expr->data.binary_op.op;
             TypeInfo* result_type = NULL;
             
+            // 获取基础类型（去除质量化）
+            DataType left_base = is_qualified_type(left_type->base_type) ? 
+                                 get_base_type(left_type->base_type) : left_type->base_type;
+            DataType right_base = is_qualified_type(right_type->base_type) ? 
+                                  get_base_type(right_type->base_type) : right_type->base_type;
+            
+            // 检查是否有质量化类型参与运算
+            bool has_qualified = is_qualified_type(left_type->base_type) || 
+                                is_qualified_type(right_type->base_type);
+            
             // 算术运算: + - * / MOD
             if (op >= BINOP_ADD && op <= BINOP_MOD) {
-                if (left_type->base_type == TYPE_INT && right_type->base_type == TYPE_INT) {
-                    result_type = type_info_create(TYPE_INT);
-                } else if ((left_type->base_type == TYPE_INT || left_type->base_type == TYPE_REAL) &&
-                           (right_type->base_type == TYPE_INT || right_type->base_type == TYPE_REAL)) {
-                    result_type = type_info_create(TYPE_REAL);
+                if (left_base == TYPE_INT && right_base == TYPE_INT) {
+                    // 如果有质量化类型参与，结果也是质量化的
+                    result_type = type_info_create(has_qualified ? TYPE_QINT : TYPE_INT);
+                } else if ((left_base == TYPE_INT || left_base == TYPE_REAL) &&
+                           (right_base == TYPE_INT || right_base == TYPE_REAL)) {
+                    // 如果有质量化类型参与，结果也是质量化的
+                    result_type = type_info_create(has_qualified ? TYPE_QREAL : TYPE_REAL);
                 } else {
                     fprintf(stderr, "Type error: Arithmetic operation requires numeric types\n");
                     checker->error_count++;

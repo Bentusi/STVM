@@ -21,6 +21,10 @@ const char* type_to_string(DataType type) {
         case TYPE_STRING:   return "string";
         case TYPE_ARRAY:    return "array";
         case TYPE_FUNCTION: return "function";
+        case TYPE_QBOOL:    return "qbool";
+        case TYPE_QINT:     return "qint";
+        case TYPE_QREAL:    return "qreal";
+        case TYPE_QSTRING:  return "qstring";
         default:            return "unknown";
     }
 }
@@ -191,13 +195,24 @@ bool type_info_can_convert(const TypeInfo* from, const TypeInfo* to) {
     if (!from || !to) return false;
     if (type_info_equals(from, to)) return true;
     
-    // INT 可以转换为 REAL
-    if (from->base_type == TYPE_INT && to->base_type == TYPE_REAL) {
+    // 获取基础类型
+    DataType from_base = is_qualified_type(from->base_type) ? 
+                        get_base_type(from->base_type) : from->base_type;
+    DataType to_base = is_qualified_type(to->base_type) ? 
+                      get_base_type(to->base_type) : to->base_type;
+    
+    // 基础类型相同的质量化类型和非质量化类型可以互相转换
+    if (from_base == to_base) {
         return true;
     }
     
-    // BOOL 可以转换为 INT
-    if (from->base_type == TYPE_BOOL && to->base_type == TYPE_INT) {
+    // INT 可以转换为 REAL（质量化和非质量化都支持）
+    if (from_base == TYPE_INT && to_base == TYPE_REAL) {
+        return true;
+    }
+    
+    // BOOL 可以转换为 INT（质量化和非质量化都支持）
+    if (from_base == TYPE_BOOL && to_base == TYPE_INT) {
         return true;
     }
     
@@ -211,18 +226,23 @@ Value value_create(DataType type) {
     Value v;
     memset(&v, 0, sizeof(Value));
     v.type = type;
+    v.quality = QUALITY_GOOD;  // 默认质量位为良好
     
     switch (type) {
         case TYPE_BOOL:
+        case TYPE_QBOOL:
             v.bool_val = false;
             break;
         case TYPE_INT:
+        case TYPE_QINT:
             v.int_val = 0;
             break;
         case TYPE_REAL:
+        case TYPE_QREAL:
             v.real_val = 0.0;
             break;
         case TYPE_STRING:
+        case TYPE_QSTRING:
             v.string_val = NULL;
             break;
         case TYPE_ARRAY:
@@ -407,4 +427,66 @@ void value_free(Value* v) {
         v->array_val.data = NULL;
         v->array_val.length = 0;
     }
+    
+    // 释放质量化类型的字符串
+    if (v->type == TYPE_QSTRING && v->string_val) {
+        mmgr_free(v->string_val);
+        v->string_val = NULL;
+    }
+}
+
+/**
+ * @brief 检查类型是否为质量化类型
+ */
+bool is_qualified_type(DataType type) {
+    return (type == TYPE_QBOOL || type == TYPE_QINT || 
+            type == TYPE_QREAL || type == TYPE_QSTRING);
+}
+
+/**
+ * @brief 获取质量化类型对应的基础类型
+ */
+DataType get_base_type(DataType type) {
+    switch (type) {
+        case TYPE_QBOOL:   return TYPE_BOOL;
+        case TYPE_QINT:    return TYPE_INT;
+        case TYPE_QREAL:   return TYPE_REAL;
+        case TYPE_QSTRING: return TYPE_STRING;
+        default:           return type;  // 非质量化类型返回自身
+    }
+}
+
+/**
+ * @brief 获取基础类型对应的质量化类型
+ */
+DataType get_qualified_type(DataType type) {
+    switch (type) {
+        case TYPE_BOOL:   return TYPE_QBOOL;
+        case TYPE_INT:    return TYPE_QINT;
+        case TYPE_REAL:   return TYPE_QREAL;
+        case TYPE_STRING: return TYPE_QSTRING;
+        default:          return type;  // 无对应质量化类型
+    }
+}
+
+/**
+ * @brief 创建质量化值
+ */
+Value value_create_qualified(DataType type, QualityFlag quality) {
+    Value v = value_create(type);
+    v.quality = quality;
+    return v;
+}
+
+/**
+ * @brief 质量位传播运算（用于算术运算）
+ * 规则：任一操作数质量位异常，结果就异常
+ */
+QualityFlag quality_propagate(QualityFlag q1, QualityFlag q2) {
+    // 如果任一质量位不是GOOD，返回较差的质量位
+    if (q1 != QUALITY_GOOD || q2 != QUALITY_GOOD) {
+        // 返回较差的质量位（数值越大越差）
+        return (q1 > q2) ? q1 : q2;
+    }
+    return QUALITY_GOOD;
 }

@@ -86,6 +86,12 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
 (?i:STRING)         { return TOKEN_STRING; }
 (?i:ARRAY)          { return TOKEN_ARRAY; }
 
+    /* 质量化数据类型关键字 */
+(?i:QBOOL)          { return TOKEN_QBOOL; }
+(?i:QINT)           { return TOKEN_QINT; }
+(?i:QREAL)          { return TOKEN_QREAL; }
+(?i:QSTRING)        { return TOKEN_QSTRING; }
+
     /* 布尔字面量 */
 (?i:TRUE)           { yylval.bool_value = 1; return TOKEN_TRUE; }
 (?i:FALSE)          { yylval.bool_value = 0; return TOKEN_FALSE; }

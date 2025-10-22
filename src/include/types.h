@@ -20,14 +20,30 @@ typedef enum {
     TYPE_REAL,      // 实数类型（双精度浮点）
     TYPE_STRING,    // 字符串类型
     TYPE_ARRAY,     // 数组类型
-    TYPE_FUNCTION   // 函数类型
+    TYPE_FUNCTION,  // 函数类型
+    // 质量化类型
+    TYPE_QBOOL,     // 带质量位的布尔类型
+    TYPE_QINT,      // 带质量位的整型
+    TYPE_QREAL,     // 带质量位的实数类型
+    TYPE_QSTRING    // 带质量位的字符串类型
 } DataType;
+
+/**
+ * @brief 质量位枚举 - 表示数据的可信度
+ */
+typedef enum {
+    QUALITY_GOOD = 0,       // 00 - 良好（默认值）
+    QUALITY_UNCERTAIN = 1,  // 01 - 不确定
+    QUALITY_BAD = 2,        // 10 - 坏值
+    QUALITY_ERROR = 3       // 11 - 错误
+} QualityFlag;
 
 /**
  * @brief 运行时值表示（带类型标记）
  */
 typedef struct {
     DataType type;
+    QualityFlag quality;    // 质量位（对于质量化类型）
     union {
         bool bool_val;
         int32_t int_val;
@@ -189,5 +205,42 @@ Value value_copy(Value v);
  * @param v 值指针
  */
 void value_free(Value* v);
+
+/**
+ * @brief 检查类型是否为质量化类型
+ * @param type 数据类型
+ * @return 是质量化类型返回true，否则返回false
+ */
+bool is_qualified_type(DataType type);
+
+/**
+ * @brief 获取质量化类型对应的基础类型
+ * @param type 质量化数据类型
+ * @return 对应的基础类型
+ */
+DataType get_base_type(DataType type);
+
+/**
+ * @brief 获取基础类型对应的质量化类型
+ * @param type 基础数据类型
+ * @return 对应的质量化类型
+ */
+DataType get_qualified_type(DataType type);
+
+/**
+ * @brief 创建质量化值
+ * @param type 质量化类型
+ * @param quality 质量位
+ * @return 初始化的质量化Value
+ */
+Value value_create_qualified(DataType type, QualityFlag quality);
+
+/**
+ * @brief 质量位传播运算（用于算术运算）
+ * @param q1 操作数1的质量位
+ * @param q2 操作数2的质量位
+ * @return 结果的质量位
+ */
+QualityFlag quality_propagate(QualityFlag q1, QualityFlag q2);
 
 #endif // STVM_TYPES_H
