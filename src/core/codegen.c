@@ -24,6 +24,7 @@ static ErrorCode generate_identifier(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_literal(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_function_call(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_array_access(CodeGenContext* ctx, ASTNode* node);
+static ErrorCode generate_member_access(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_assign(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_if(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
 static ErrorCode generate_while(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
@@ -529,6 +530,9 @@ ErrorCode codegen_expr(CodeGenContext* ctx, ASTNode* expr) {
         case AST_ARRAY_ACCESS:
             return generate_array_access(ctx, expr);
             
+        case AST_MEMBER_ACCESS:
+            return generate_member_access(ctx, expr);
+            
         default:
             snprintf(ctx->error_msg, sizeof(ctx->error_msg),
                     "Unsupported expression type: %d", expr->type);
@@ -882,6 +886,63 @@ static ErrorCode generate_array_access(CodeGenContext* ctx, ASTNode* node) {
 }
 
 /**
+ * @brief 生成成员访问代码（质量化类型的.VAL/.QUALITY）
+ */
+static ErrorCode generate_member_access(CodeGenContext* ctx, ASTNode* node) {
+    // 成员访问：variable.VAL 或 variable.QUALITY
+    
+    // 检查对象是否是标识符
+    if (node->data.member_access.object->type != AST_IDENTIFIER) {
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                "Member access object must be an identifier");
+        ctx->error_code = ERR_RUNTIME;
+        return ERR_RUNTIME;
+    }
+    
+    // 获取变量符号
+    const char* var_name = node->data.member_access.object->data.identifier.name;
+    Symbol* var_sym = symtbl_lookup(ctx->symtbl, var_name);
+    if (!var_sym) {
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                "Undefined variable: %s", var_name);
+        ctx->error_code = ERR_NAME;
+        return ERR_NAME;
+    }
+    
+    // 检查是否是质量化类型
+    if (!is_qualified_type(var_sym->type->base_type)) {
+        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                "Variable '%s' is not a qualified type", var_name);
+        ctx->error_code = ERR_TYPE;
+        return ERR_TYPE;
+    }
+    
+    // 根据成员类型生成相应的指令
+    uint8_t flags = var_sym->is_global ? FLAG_GLOBAL : 0x00;
+    uint16_t var_offset = var_sym->is_global ? var_sym->index : var_sym->offset;
+    
+    switch (node->data.member_access.member) {
+        case MEMBER_VAL:
+            // 生成 OP_LOAD_VAL 指令
+            codegen_emit_with_flags(ctx, OP_LOAD_VAL, flags, var_offset);
+            break;
+            
+        case MEMBER_QUALITY:
+            // 生成 OP_LOAD_QUALITY 指令
+            codegen_emit_with_flags(ctx, OP_LOAD_QUALITY, flags, var_offset);
+            break;
+            
+        default:
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                    "Unknown member type: %d", node->data.member_access.member);
+            ctx->error_code = ERR_RUNTIME;
+            return ERR_RUNTIME;
+    }
+    
+    return OK;
+}
+
+/**
  * @brief 生成语句代码
  */
 ErrorCode codegen_stmt(CodeGenContext* ctx, ASTNode* stmt, LoopContext* loop_ctx) {
@@ -1054,6 +1115,59 @@ static ErrorCode generate_assign(CodeGenContext* ctx, ASTNode* node) {
             
             return OK;
         }
+        
+    } else if (target->type == AST_MEMBER_ACCESS) {
+        // 成员访问赋值：variable.VAL := value 或 variable.QUALITY := value
+        
+        // 检查对象是否是标识符
+        if (target->data.member_access.object->type != AST_IDENTIFIER) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                    "Member access object must be an identifier");
+            ctx->error_code = ERR_RUNTIME;
+            return ERR_RUNTIME;
+        }
+        
+        // 获取变量符号
+        const char* var_name = target->data.member_access.object->data.identifier.name;
+        Symbol* var_sym = symtbl_lookup(ctx->symtbl, var_name);
+        if (!var_sym) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                    "Undefined variable: %s", var_name);
+            ctx->error_code = ERR_NAME;
+            return ERR_NAME;
+        }
+        
+        // 检查是否是质量化类型
+        if (!is_qualified_type(var_sym->type->base_type)) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                    "Variable '%s' is not a qualified type", var_name);
+            ctx->error_code = ERR_TYPE;
+            return ERR_TYPE;
+        }
+        
+        // 根据成员类型生成相应的存储指令
+        uint8_t flags = var_sym->is_global ? FLAG_GLOBAL : 0x00;
+        uint16_t var_offset = var_sym->is_global ? var_sym->index : var_sym->offset;
+        
+        switch (target->data.member_access.member) {
+            case MEMBER_VAL:
+                // 生成 OP_STORE_VAL 指令
+                codegen_emit_with_flags(ctx, OP_STORE_VAL, flags, var_offset);
+                break;
+                
+            case MEMBER_QUALITY:
+                // 生成 OP_STORE_QUALITY 指令
+                codegen_emit_with_flags(ctx, OP_STORE_QUALITY, flags, var_offset);
+                break;
+                
+            default:
+                snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                        "Unknown member type: %d", target->data.member_access.member);
+                ctx->error_code = ERR_RUNTIME;
+                return ERR_RUNTIME;
+        }
+        
+        return OK;
         
     } else {
         snprintf(ctx->error_msg, sizeof(ctx->error_msg),

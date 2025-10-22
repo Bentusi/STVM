@@ -21,6 +21,7 @@ const char* opcode_to_string(Opcode opcode) {
         "BIT_AND", "BIT_OR", "BIT_XOR", "BIT_NOT", "SHL", "SHR",
         "JMP", "JZ", "JNZ", "CALL", "RET",
         "HALT", "CALL_EXT", "NOP", "LOAD_INDEXED", "STORE_INDEXED",
+        "LOAD_VAL", "LOAD_QUALITY", "STORE_VAL", "STORE_QUALITY",
         "IO_READ", "IO_WRITE"
     };
     

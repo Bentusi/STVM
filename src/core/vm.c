@@ -1087,6 +1087,181 @@ ErrorCode vm_step(VM* vm) {
             break;
         }
         
+        // === 质量位访问 ===
+        case OP_LOAD_VAL: {
+            // 加载质量化变量的值部分
+            uint32_t var_idx = instr.operand;
+            Value qualified_val;
+            
+            if (instr.flags & FLAG_GLOBAL) {
+                if (var_idx >= vm->global_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Global variable index out of bounds: %u", var_idx);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                qualified_val = vm->globals[var_idx];
+            } else {
+                int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                int32_t local_addr = bp + var_idx;
+                if (local_addr < 0 || local_addr >= vm->sp) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Local variable index out of bounds: %d", local_addr);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                qualified_val = vm->stack[local_addr];
+            }
+            
+            // 提取值部分，转换为对应的基础类型
+            Value value_part = qualified_val;
+            if (is_qualified_type(qualified_val.type)) {
+                value_part.type = get_base_type(qualified_val.type);
+                value_part.quality = QUALITY_GOOD;  // 提取的值默认为GOOD
+            }
+            
+            PUSH(value_part);
+            break;
+        }
+        
+        case OP_LOAD_QUALITY: {
+            // 加载质量化变量的质量位
+            uint32_t var_idx = instr.operand;
+            Value qualified_val;
+            
+            if (instr.flags & FLAG_GLOBAL) {
+                if (var_idx >= vm->global_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Global variable index out of bounds: %u", var_idx);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                qualified_val = vm->globals[var_idx];
+            } else {
+                int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                int32_t local_addr = bp + var_idx;
+                if (local_addr < 0 || local_addr >= vm->sp) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Local variable index out of bounds: %d", local_addr);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                qualified_val = vm->stack[local_addr];
+            }
+            
+            // 提取质量位，作为整数返回
+            Value quality_val;
+            quality_val.type = TYPE_INT;
+            quality_val.quality = QUALITY_GOOD;
+            quality_val.int_val = (int)qualified_val.quality;
+            
+            PUSH(quality_val);
+            break;
+        }
+        
+        case OP_STORE_VAL: {
+            // 存储质量化变量的值部分
+            uint32_t var_idx = instr.operand;
+            
+            if (vm->sp < 0) {
+                vm->error_code = ERR_STACK_UNDERFLOW;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in STORE_VAL");
+                return ERR_STACK_UNDERFLOW;
+            }
+            
+            Value new_value = POP();
+            Value* qualified_var;
+            
+            if (instr.flags & FLAG_GLOBAL) {
+                if (var_idx >= vm->global_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Global variable index out of bounds: %u", var_idx);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                qualified_var = &vm->globals[var_idx];
+            } else {
+                int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                int32_t local_addr = bp + var_idx;
+                if (local_addr < 0 || local_addr >= vm->sp) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Local variable index out of bounds: %d", local_addr);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                qualified_var = &vm->stack[local_addr];
+            }
+            
+            // 更新值部分，保持质量位不变
+            if (is_qualified_type(qualified_var->type)) {
+                QualityFlag old_quality = qualified_var->quality;
+                *qualified_var = new_value;
+                qualified_var->type = get_qualified_type(new_value.type);
+                qualified_var->quality = old_quality;
+            } else {
+                // 如果目标不是质量化类型，转换为质量化类型
+                *qualified_var = new_value;
+                qualified_var->type = get_qualified_type(new_value.type);
+                qualified_var->quality = QUALITY_GOOD;
+            }
+            break;
+        }
+        
+        case OP_STORE_QUALITY: {
+            // 存储质量化变量的质量位
+            uint32_t var_idx = instr.operand;
+            
+            if (vm->sp < 0) {
+                vm->error_code = ERR_STACK_UNDERFLOW;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in STORE_QUALITY");
+                return ERR_STACK_UNDERFLOW;
+            }
+            
+            Value quality_val = POP();
+            if (quality_val.type != TYPE_INT) {
+                vm->error_code = ERR_TYPE;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "Quality must be INT");
+                return ERR_TYPE;
+            }
+            
+            int quality = quality_val.int_val;
+            if (quality < 0 || quality > 3) {
+                vm->error_code = ERR_RUNTIME;
+                snprintf(vm->error_msg, sizeof(vm->error_msg), "Quality must be 0-3, got %d", quality);
+                return ERR_RUNTIME;
+            }
+            
+            Value* qualified_var;
+            
+            if (instr.flags & FLAG_GLOBAL) {
+                if (var_idx >= vm->global_count) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Global variable index out of bounds: %u", var_idx);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                qualified_var = &vm->globals[var_idx];
+            } else {
+                int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                int32_t local_addr = bp + var_idx;
+                if (local_addr < 0 || local_addr >= vm->sp) {
+                    vm->error_code = ERR_OUT_OF_BOUNDS;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                            "Local variable index out of bounds: %d", local_addr);
+                    return ERR_OUT_OF_BOUNDS;
+                }
+                qualified_var = &vm->stack[local_addr];
+            }
+            
+            // 更新质量位，保持值不变
+            if (!is_qualified_type(qualified_var->type)) {
+                // 如果不是质量化类型，转换为质量化类型
+                qualified_var->type = get_qualified_type(qualified_var->type);
+            }
+            qualified_var->quality = (QualityFlag)quality;
+            break;
+        }
+        
         default:
             vm->error_code = ERR_INVALID_INSTRUCTION;
             snprintf(vm->error_msg, sizeof(vm->error_msg), 
@@ -1723,6 +1898,181 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
                     vm->stack[local_addr] = value_val;
                 }
                 
+                break;
+            }
+            
+            // === 质量位访问（需要在vm_run_from中也实现）===
+            case OP_LOAD_VAL: {
+                // 加载质量化变量的值部分
+                uint32_t var_idx = instr.operand;
+                Value qualified_val;
+                
+                if (instr.flags & FLAG_GLOBAL) {
+                    if (var_idx >= vm->global_count) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Global variable index out of bounds: %u", var_idx);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    qualified_val = vm->globals[var_idx];
+                } else {
+                    int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                    int32_t local_addr = bp + var_idx;
+                    if (local_addr < 0 || local_addr >= vm->sp) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Local variable index out of bounds: %d", local_addr);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    qualified_val = vm->stack[local_addr];
+                }
+                
+                // 提取值部分，转换为对应的基础类型
+                Value value_part = qualified_val;
+                if (is_qualified_type(qualified_val.type)) {
+                    value_part.type = get_base_type(qualified_val.type);
+                    value_part.quality = QUALITY_GOOD;  // 提取的值默认为GOOD
+                }
+                
+                PUSH(value_part);
+                break;
+            }
+            
+            case OP_LOAD_QUALITY: {
+                // 加载质量化变量的质量位
+                uint32_t var_idx = instr.operand;
+                Value qualified_val;
+                
+                if (instr.flags & FLAG_GLOBAL) {
+                    if (var_idx >= vm->global_count) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Global variable index out of bounds: %u", var_idx);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    qualified_val = vm->globals[var_idx];
+                } else {
+                    int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                    int32_t local_addr = bp + var_idx;
+                    if (local_addr < 0 || local_addr >= vm->sp) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Local variable index out of bounds: %d", local_addr);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    qualified_val = vm->stack[local_addr];
+                }
+                
+                // 提取质量位，作为整数返回
+                Value quality_val;
+                quality_val.type = TYPE_INT;
+                quality_val.quality = QUALITY_GOOD;
+                quality_val.int_val = (int)qualified_val.quality;
+                
+                PUSH(quality_val);
+                break;
+            }
+            
+            case OP_STORE_VAL: {
+                // 存储质量化变量的值部分
+                uint32_t var_idx = instr.operand;
+                
+                if (vm->sp < 0) {
+                    vm->error_code = ERR_STACK_UNDERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in STORE_VAL");
+                    return ERR_STACK_UNDERFLOW;
+                }
+                
+                Value new_value = POP();
+                Value* qualified_var;
+                
+                if (instr.flags & FLAG_GLOBAL) {
+                    if (var_idx >= vm->global_count) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Global variable index out of bounds: %u", var_idx);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    qualified_var = &vm->globals[var_idx];
+                } else {
+                    int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                    int32_t local_addr = bp + var_idx;
+                    if (local_addr < 0 || local_addr >= vm->sp) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Local variable index out of bounds: %d", local_addr);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    qualified_var = &vm->stack[local_addr];
+                }
+                
+                // 更新值部分，保持质量位不变
+                if (is_qualified_type(qualified_var->type)) {
+                    QualityFlag old_quality = qualified_var->quality;
+                    *qualified_var = new_value;
+                    qualified_var->type = get_qualified_type(new_value.type);
+                    qualified_var->quality = old_quality;
+                } else {
+                    // 如果目标不是质量化类型，转换为质量化类型
+                    *qualified_var = new_value;
+                    qualified_var->type = get_qualified_type(new_value.type);
+                    qualified_var->quality = QUALITY_GOOD;
+                }
+                break;
+            }
+            
+            case OP_STORE_QUALITY: {
+                // 存储质量化变量的质量位
+                uint32_t var_idx = instr.operand;
+                
+                if (vm->sp < 0) {
+                    vm->error_code = ERR_STACK_UNDERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in STORE_QUALITY");
+                    return ERR_STACK_UNDERFLOW;
+                }
+                
+                Value quality_val = POP();
+                if (quality_val.type != TYPE_INT) {
+                    vm->error_code = ERR_TYPE;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Quality must be INT");
+                    return ERR_TYPE;
+                }
+                
+                int quality = quality_val.int_val;
+                if (quality < 0 || quality > 3) {
+                    vm->error_code = ERR_RUNTIME;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Quality must be 0-3, got %d", quality);
+                    return ERR_RUNTIME;
+                }
+                
+                Value* qualified_var;
+                
+                if (instr.flags & FLAG_GLOBAL) {
+                    if (var_idx >= vm->global_count) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Global variable index out of bounds: %u", var_idx);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    qualified_var = &vm->globals[var_idx];
+                } else {
+                    int32_t bp = (vm->call_sp >= 0) ? vm->call_stack[vm->call_sp].base_pointer : 0;
+                    int32_t local_addr = bp + var_idx;
+                    if (local_addr < 0 || local_addr >= vm->sp) {
+                        vm->error_code = ERR_OUT_OF_BOUNDS;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                                "Local variable index out of bounds: %d", local_addr);
+                        return ERR_OUT_OF_BOUNDS;
+                    }
+                    qualified_var = &vm->stack[local_addr];
+                }
+                
+                // 更新质量位，保持值不变
+                if (!is_qualified_type(qualified_var->type)) {
+                    // 如果不是质量化类型，转换为质量化类型
+                    qualified_var->type = get_qualified_type(qualified_var->type);
+                }
+                qualified_var->quality = (QualityFlag)quality;
                 break;
             }
             

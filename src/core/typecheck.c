@@ -39,6 +39,31 @@ ErrorCode typecheck_init(TypeChecker* checker, SymbolTable* symtbl, LibraryManag
         system_sym->param_count = 1;  // 1个参数
     }
     
+    // 注册质量位访问函数
+    Symbol* get_quality_sym = symtbl_define_function(symtbl, "GetQuality", int_type, NULL, 1);
+    if (get_quality_sym) {
+        get_quality_sym->param_count = 1;
+    }
+    
+    TypeInfo* qreal_type = type_info_create(TYPE_QREAL);
+    Symbol* make_qreal_sym = symtbl_define_function(symtbl, "MakeQReal", qreal_type, NULL, 2);
+    if (make_qreal_sym) {
+        make_qreal_sym->param_count = 2;
+    }
+    
+    TypeInfo* real_type = type_info_create(TYPE_REAL);
+    Symbol* to_real_sym = symtbl_define_function(symtbl, "ToReal", real_type, NULL, 1);
+    if (to_real_sym) {
+        to_real_sym->param_count = 1;
+    }
+    
+    // SetQuality函数比较特殊，返回修改后的值，类型与输入相同
+    TypeInfo* void_type2 = type_info_create(TYPE_VOID);
+    Symbol* set_quality_sym = symtbl_define_function(symtbl, "SetQuality", void_type2, NULL, 2);
+    if (set_quality_sym) {
+        set_quality_sym->param_count = 2;
+    }
+    
     return OK;
 }
 
@@ -754,6 +779,51 @@ static TypeInfo* check_expression(TypeChecker* checker, ASTNode* expr) {
             
             // 返回元素类型
             return array_type->array_info.elem_type;
+        }
+        
+        case AST_MEMBER_ACCESS: {
+            // 成员访问
+            ASTNode* object = expr->data.member_access.object;
+            MemberType member = expr->data.member_access.member;
+            
+            // 检查 object 是否为标识符
+            if (!object || object->type != AST_IDENTIFIER) {
+                fprintf(stderr, "Type error: Member access requires variable identifier\n");
+                checker->error_count++;
+                return NULL;
+            }
+            
+            const char* var_name = object->data.identifier.name;
+            
+            // 查找变量
+            Symbol* sym = symtbl_lookup(checker->symtbl, var_name);
+            if (!sym) {
+                fprintf(stderr, "Type error: Undefined variable '%s'\n", var_name);
+                checker->error_count++;
+                return NULL;
+            }
+            
+            // 检查变量是否为质量化类型
+            if (!is_qualified_type(sym->type->base_type)) {
+                fprintf(stderr, "Type error: Member access requires qualified type, '%s' is %s\n", 
+                        var_name, type_to_string(sym->type->base_type));
+                checker->error_count++;
+                return NULL;
+            }
+            
+            // 根据成员类型返回相应的类型
+            if (member == MEMBER_VAL) {
+                // VAL 成员返回对应的基础类型
+                DataType base_type = get_base_type(sym->type->base_type);
+                return type_info_create(base_type);
+            } else if (member == MEMBER_QUALITY) {
+                // QUALITY 成员总是返回 INT 类型
+                return type_info_create(TYPE_INT);
+            } else {
+                fprintf(stderr, "Type error: Unknown member type\n");
+                checker->error_count++;
+                return NULL;
+            }
         }
         
         default:

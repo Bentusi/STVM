@@ -78,6 +78,12 @@ typedef enum {
     OP_LOAD_INDEXED,    // 加载数组元素 operand: 数组基址，栈顶为索引
     OP_STORE_INDEXED,   // 存储数组元素 operand: 数组基址，栈顶为值，栈次为索引
     
+    // === 质量位访问（4个）===
+    OP_LOAD_VAL,        // 加载质量化变量的值部分 operand: 变量索引
+    OP_LOAD_QUALITY,    // 加载质量化变量的质量位 operand: 变量索引
+    OP_STORE_VAL,       // 存储质量化变量的值部分 operand: 变量索引
+    OP_STORE_QUALITY,   // 存储质量化变量的质量位 operand: 变量索引
+    
     // === 硬件 I/O（2个）===
     OP_IO_READ,         // 从硬件 I/O 读取 operand: I/O地址索引（常量池中）
     OP_IO_WRITE,        // 向硬件 I/O 写入 operand: I/O地址索引（常量池中）

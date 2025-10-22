@@ -328,6 +328,19 @@ ASTNode* ast_create_array_access(ASTNode* array, ASTNode* index) {
 }
 
 /**
+ * @brief 创建成员访问节点（质量化类型的.VAL/.QUALITY）
+ */
+ASTNode* ast_create_member_access(ASTNode* object, MemberType member) {
+    ASTNode* node = ast_create_node(AST_MEMBER_ACCESS);
+    if (!node) return NULL;
+    
+    node->data.member_access.object = object;
+    node->data.member_access.member = member;
+    
+    return node;
+}
+
+/**
  * @brief 将节点添加到列表末尾
  */
 ASTNode* ast_append_node(ASTNode* list, ASTNode* node) {
@@ -464,6 +477,10 @@ void ast_free_node(ASTNode* node) {
         case AST_ARRAY_ACCESS:
             ast_free_node(node->data.array_access.array);
             ast_free_node(node->data.array_access.index);
+            break;
+            
+        case AST_MEMBER_ACCESS:
+            ast_free_node(node->data.member_access.object);
             break;
             
         default:

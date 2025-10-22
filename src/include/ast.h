@@ -38,6 +38,7 @@ typedef enum {
     AST_IDENTIFIER,         // 标识符
     AST_FUNCTION_CALL,      // 函数调用
     AST_ARRAY_ACCESS,       // 数组访问
+    AST_MEMBER_ACCESS,      // 成员访问（质量化类型的.VAL/.QUALITY）
     
     // === 类型 ===
     AST_TYPE_SPEC,          // 类型规范
@@ -86,6 +87,14 @@ typedef enum {
     UNOP_NOT,       // NOT (逻辑非)
     UNOP_BIT_NOT    // ~（位取反）
 } UnaryOp;
+
+/**
+ * @brief 成员访问类型（质量化类型的成员）
+ */
+typedef enum {
+    MEMBER_VAL,     // .VAL - 访问值部分
+    MEMBER_QUALITY  // .QUALITY - 访问质量位部分
+} MemberType;
 
 /**
  * @brief 源码位置信息
@@ -223,6 +232,12 @@ typedef union {
         ASTNode* index;             // 索引表达式
     } array_access;
     
+    // 成员访问（质量化类型的.VAL/.QUALITY）
+    struct {
+        ASTNode* object;            // 对象表达式（质量化类型变量）
+        MemberType member;          // 成员类型（VAL或QUALITY）
+    } member_access;
+    
     // 类型规范
     struct {
         TypeInfo* type_info;        // 类型信息
@@ -337,6 +352,11 @@ ASTNode* ast_create_function_call(const char* name, ASTNode** arguments, int arg
  * @brief 创建数组访问节点
  */
 ASTNode* ast_create_array_access(ASTNode* array, ASTNode* index);
+
+/**
+ * @brief 创建成员访问节点（质量化类型的.VAL/.QUALITY）
+ */
+ASTNode* ast_create_member_access(ASTNode* object, MemberType member);
 
 /**
  * @brief 将节点添加到列表末尾

@@ -67,6 +67,7 @@ ASTNode* parse_result = NULL;
 
 %token TOKEN_BOOL TOKEN_INT TOKEN_REAL TOKEN_STRING TOKEN_ARRAY
 %token TOKEN_QBOOL TOKEN_QINT TOKEN_QREAL TOKEN_QSTRING
+%token TOKEN_VAL TOKEN_QUALITY
 
 %token <bool_value> TOKEN_TRUE TOKEN_FALSE
 %token <int_value> TOKEN_INTEGER_LITERAL
@@ -560,6 +561,18 @@ assignment_stmt:
         ASTNode* target = ast_create_array_access(array, $3);
         $$ = ast_create_assign(target, $6);
     }
+    | TOKEN_IDENTIFIER TOKEN_DOT TOKEN_VAL TOKEN_ASSIGN expression TOKEN_SEMICOLON
+    {
+        ASTNode* object = ast_create_identifier($1);
+        ASTNode* target = ast_create_member_access(object, MEMBER_VAL);
+        $$ = ast_create_assign(target, $5);
+    }
+    | TOKEN_IDENTIFIER TOKEN_DOT TOKEN_QUALITY TOKEN_ASSIGN expression TOKEN_SEMICOLON
+    {
+        ASTNode* object = ast_create_identifier($1);
+        ASTNode* target = ast_create_member_access(object, MEMBER_QUALITY);
+        $$ = ast_create_assign(target, $5);
+    }
     ;
 
 /* IF语句 */
@@ -965,6 +978,16 @@ primary_expr:
     {
         ASTNode* array = ast_create_identifier($1);
         $$ = ast_create_array_access(array, $3);
+    }
+    | TOKEN_IDENTIFIER TOKEN_DOT TOKEN_VAL
+    {
+        ASTNode* object = ast_create_identifier($1);
+        $$ = ast_create_member_access(object, MEMBER_VAL);
+    }
+    | TOKEN_IDENTIFIER TOKEN_DOT TOKEN_QUALITY
+    {
+        ASTNode* object = ast_create_identifier($1);
+        $$ = ast_create_member_access(object, MEMBER_QUALITY);
     }
     | TOKEN_LPAREN expression TOKEN_RPAREN
     {

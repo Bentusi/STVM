@@ -92,6 +92,10 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
 (?i:QREAL)          { return TOKEN_QREAL; }
 (?i:QSTRING)        { return TOKEN_QSTRING; }
 
+    /* 质量化类型成员关键字 */
+(?i:VAL)            { return TOKEN_VAL; }
+(?i:QUALITY)        { return TOKEN_QUALITY; }
+
     /* 布尔字面量 */
 (?i:TRUE)           { yylval.bool_value = 1; return TOKEN_TRUE; }
 (?i:FALSE)          { yylval.bool_value = 0; return TOKEN_FALSE; }

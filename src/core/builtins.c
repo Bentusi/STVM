@@ -210,5 +210,158 @@ bool builtins_register_all(VM* vm) {
         return false;
     }
     
+    // 注册质量位访问函数
+    if (!vm_register_external_function(vm, "GetQuality", builtin_get_quality, 1)) {
+        return false;
+    }
+    
+    if (!vm_register_external_function(vm, "SetQuality", builtin_set_quality, 2)) {
+        return false;
+    }
+    
+    if (!vm_register_external_function(vm, "MakeQReal", builtin_make_qreal, 2)) {
+        return false;
+    }
+    
+    if (!vm_register_external_function(vm, "ToReal", builtin_to_real, 1)) {
+        return false;
+    }
+    
     return true;
+}
+
+/**
+ * @brief GetQuality 函数实现
+ * 获取质量化变量的质量位
+ */
+Value builtin_get_quality(VM* vm, int32_t argc) {
+    Value result = {.type = TYPE_INT, .quality = QUALITY_GOOD, .int_val = 0};
+    
+    if (argc != 1) {
+        fprintf(stderr, "GetQuality: 需要1个参数\n");
+        return result;
+    }
+    
+    Value val = vm_get_arg(vm, 0);
+    
+    // 如果是质量化类型，返回质量位；否则返回GOOD
+    if (is_qualified_type(val.type)) {
+        result.int_val = (int)val.quality;
+    } else {
+        result.int_val = (int)QUALITY_GOOD;
+    }
+    
+    return result;
+}
+
+/**
+ * @brief SetQuality 函数实现
+ * 设置质量化变量的质量位
+ */
+Value builtin_set_quality(VM* vm, int32_t argc) {
+    Value result = {.type = TYPE_VOID, .quality = QUALITY_GOOD};
+    
+    if (argc != 2) {
+        fprintf(stderr, "SetQuality: 需要2个参数 (变量, 质量位)\n");
+        return result;
+    }
+    
+    Value val = vm_get_arg(vm, 0);
+    Value quality_val = vm_get_arg(vm, 1);
+    
+    if (quality_val.type != TYPE_INT) {
+        fprintf(stderr, "SetQuality: 质量位必须是整数\n");
+        return result;
+    }
+    
+    // 检查质量位值是否有效
+    int quality = quality_val.int_val;
+    if (quality < 0 || quality > 3) {
+        fprintf(stderr, "SetQuality: 质量位值必须在0-3之间\n");
+        return result;
+    }
+    
+    // 如果是质量化类型，创建新值；否则转换为质量化类型
+    if (is_qualified_type(val.type)) {
+        result = val;
+        result.quality = (QualityFlag)quality;
+        result.type = val.type;
+    } else {
+        result = val;
+        result.type = get_qualified_type(val.type);
+        result.quality = (QualityFlag)quality;
+    }
+    
+    return result;
+}
+
+/**
+ * @brief MakeQReal 函数实现
+ * 创建带指定质量位的实数值
+ */
+Value builtin_make_qreal(VM* vm, int32_t argc) {
+    Value result = {.type = TYPE_QREAL, .quality = QUALITY_GOOD, .real_val = 0.0};
+    
+    if (argc != 2) {
+        fprintf(stderr, "MakeQReal: 需要2个参数 (实数值, 质量位)\n");
+        return result;
+    }
+    
+    // 参数顺序：第一个参数是质量位，第二个参数是实数值（栈的特性）
+    Value quality_val = vm_get_arg(vm, 0);  // 最后压入的参数
+    Value real_val = vm_get_arg(vm, 1);     // 第一个参数
+    
+    if (real_val.type != TYPE_REAL && real_val.type != TYPE_INT) {
+        fprintf(stderr, "MakeQReal: 第一个参数必须是数值，得到类型: %d\n", real_val.type);
+        return result;
+    }
+    
+    if (quality_val.type != TYPE_INT) {
+        fprintf(stderr, "MakeQReal: 第二个参数必须是整数，得到类型: %d\n", quality_val.type);
+        return result;
+    }
+    
+    // 检查质量位值是否有效
+    int quality = quality_val.int_val;
+    if (quality < 0 || quality > 3) {
+        fprintf(stderr, "MakeQReal: 质量位值必须在0-3之间，得到: %d\n", quality);
+        return result;
+    }
+    
+    result.real_val = (real_val.type == TYPE_REAL) ? real_val.real_val : (double)real_val.int_val;
+    result.quality = (QualityFlag)quality;
+    
+    return result;
+}
+
+/**
+ * @brief ToReal 函数实现
+ * 从质量化类型提取实数值
+ */
+Value builtin_to_real(VM* vm, int32_t argc) {
+    Value result = {.type = TYPE_REAL, .quality = QUALITY_GOOD, .real_val = 0.0};
+    
+    if (argc != 1) {
+        fprintf(stderr, "ToReal: 需要1个参数\n");
+        return result;
+    }
+    
+    Value val = vm_get_arg(vm, 0);
+    
+    // 根据类型提取实数值
+    switch (val.type) {
+        case TYPE_REAL:
+        case TYPE_QREAL:
+            result.real_val = val.real_val;
+            break;
+        case TYPE_INT:
+        case TYPE_QINT:
+            result.real_val = (double)val.int_val;
+            break;
+        default:
+            fprintf(stderr, "ToReal: 参数必须是数值类型\n");
+            break;
+    }
+    
+    return result;
 }
