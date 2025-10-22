@@ -209,11 +209,13 @@ test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_c
 	@./$(BIN_DIR)/test_bitops
 	@echo ""
 	@echo "=== Running Hot Reload Tests ==="
-	@./$(BIN_DIR)/test_hotreload
+	@./$(BIN_DIR)/test_hotreload examples/hotreload_v1.stbc examples/hotreload_v2.stbc
 	@echo ""
 	@echo "=== Running I/O Manager Tests ==="
 	@./$(BIN_DIR)/test_io_manager
-
+	@echo ""
+	@echo "=== Running ST Examples Test ==="
+	@./test_examples_enhanced.sh
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."

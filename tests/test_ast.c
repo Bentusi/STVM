@@ -113,7 +113,7 @@ void test_variable_declaration(void) {
     TypeInfo* type = type_info_create(TYPE_INT);
     
     // 无初始化器的声明
-    ASTNode* var_decl = ast_create_var_decl("count", type, NULL, false);
+    ASTNode* var_decl = ast_create_var_decl("count", type, NULL, false, false);
     assert(var_decl != NULL);
     assert(var_decl->type == AST_VAR_DECL);
     assert(strcmp(var_decl->data.var_decl.name, "count") == 0);
@@ -128,7 +128,7 @@ void test_variable_declaration(void) {
     ASTNode* initializer = ast_create_literal(init_val);
     
     TypeInfo* type2 = type_info_create(TYPE_INT);
-    ASTNode* var_decl2 = ast_create_var_decl("total", type2, initializer, true);
+    ASTNode* var_decl2 = ast_create_var_decl("total", type2, initializer, true, false);
     assert(var_decl2->data.var_decl.initializer == initializer);
     assert(var_decl2->data.var_decl.is_const == true);
     printf("✓ Created constant declaration: total : INT := 10\n");
