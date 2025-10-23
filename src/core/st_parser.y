@@ -89,7 +89,7 @@ ASTNode* parse_result = NULL;
 %type <ast_node> var_decl_list var_decl var_decl_item
 %type <ast_node> function_list function_decl function_params function_local_vars function_var_decl_list external_var_decl_list
 %type <ast_node> statement_list statement
-%type <ast_node> assignment_stmt if_stmt elsif_list while_stmt for_stmt case_stmt return_stmt print_stmt
+%type <ast_node> assignment_stmt if_stmt elsif_list while_stmt for_stmt repeat_stmt case_stmt return_stmt print_stmt
 %type <ast_node> case_element_list case_element case_labels case_label_list
 %type <ast_node> expression or_expr xor_expr and_expr comparison_expr
 %type <ast_node> add_expr mult_expr unary_expr primary_expr
@@ -542,6 +542,7 @@ statement:
     | if_stmt       { $$ = $1; }
     | while_stmt    { $$ = $1; }
     | for_stmt      { $$ = $1; }
+    | repeat_stmt   { $$ = $1; }
     | case_stmt     { $$ = $1; }
     | return_stmt   { $$ = $1; }
     | print_stmt    { $$ = $1; }
@@ -642,6 +643,14 @@ for_stmt:
     | TOKEN_FOR TOKEN_IDENTIFIER TOKEN_ASSIGN expression TOKEN_TO expression TOKEN_BY expression TOKEN_DO statement_list TOKEN_END_FOR
     {
         $$ = ast_create_for($2, $4, $6, $8, $10);
+    }
+    ;
+
+/* REPEAT语句 */
+repeat_stmt:
+    TOKEN_REPEAT statement_list TOKEN_UNTIL expression TOKEN_END_REPEAT
+    {
+        $$ = ast_create_repeat($2, $4);
     }
     ;
 

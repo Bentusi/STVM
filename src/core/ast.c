@@ -197,6 +197,19 @@ ASTNode* ast_create_for(const char* variable, ASTNode* start, ASTNode* end, ASTN
 }
 
 /**
+ * @brief 创建repeat循环节点
+ */
+ASTNode* ast_create_repeat(ASTNode* body, ASTNode* condition) {
+    ASTNode* node = ast_create_node(AST_REPEAT);
+    if (!node) return NULL;
+    
+    node->data.repeat_stmt.body = body;
+    node->data.repeat_stmt.condition = condition;
+    
+    return node;
+}
+
+/**
  * @brief 创建return语句节点
  */
 ASTNode* ast_create_return(ASTNode* value) {
@@ -433,6 +446,11 @@ void ast_free_node(ASTNode* node) {
             if (node->data.for_stmt.variable) mmgr_free(node->data.for_stmt.variable);
             break;
             
+        case AST_REPEAT:
+            ast_free_node(node->data.repeat_stmt.body);
+            ast_free_node(node->data.repeat_stmt.condition);
+            break;
+            
         case AST_RETURN:
             ast_free_node(node->data.return_stmt.value);
             break;
@@ -612,6 +630,28 @@ void ast_print(ASTNode* node, int indent) {
             ast_print(node->data.while_stmt.condition, indent + 2);
             print_indent(indent); printf("  Body:\n");
             ast_print(node->data.while_stmt.body, indent + 2);
+            break;
+            
+        case AST_FOR:
+            printf("FOR: %s\n", node->data.for_stmt.variable ? node->data.for_stmt.variable : "<unnamed>");
+            print_indent(indent); printf("  Start:\n");
+            ast_print(node->data.for_stmt.start, indent + 2);
+            print_indent(indent); printf("  End:\n");
+            ast_print(node->data.for_stmt.end, indent + 2);
+            if (node->data.for_stmt.step) {
+                print_indent(indent); printf("  Step:\n");
+                ast_print(node->data.for_stmt.step, indent + 2);
+            }
+            print_indent(indent); printf("  Body:\n");
+            ast_print(node->data.for_stmt.body, indent + 2);
+            break;
+            
+        case AST_REPEAT:
+            printf("REPEAT\n");
+            print_indent(indent); printf("  Body:\n");
+            ast_print(node->data.repeat_stmt.body, indent + 2);
+            print_indent(indent); printf("  Until:\n");
+            ast_print(node->data.repeat_stmt.condition, indent + 2);
             break;
             
         case AST_CASE:

@@ -44,7 +44,7 @@ LEXER_OBJ = $(OBJ_DIR)/lex.yy.o
 HEADERS = $(wildcard $(INCLUDE_DIR)/*.h)
 
 # Targets
-.PHONY: all clean dirs test release parser stvm help
+.PHONY: all clean dirs test release parser stvm help doc
 
 all: stvm
 
@@ -216,6 +216,12 @@ test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_c
 	@echo ""
 	@echo "=== Running ST Examples Test ==="
 	@./test_examples_enhanced.sh
+
+doc:
+	@echo ""
+	@echo "=== Generating Documentation ==="
+	@pandoc STVM语法说明.md -o STVM语法说明.html
+
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."

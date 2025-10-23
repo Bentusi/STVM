@@ -25,6 +25,7 @@ typedef enum {
     AST_IF,                 // if语句
     AST_WHILE,              // while循环
     AST_FOR,                // for循环
+    AST_REPEAT,             // repeat循环
     AST_CASE,               // case语句
     AST_CASE_ELEMENT,       // case分支元素
     AST_RETURN,             // return语句
@@ -177,6 +178,12 @@ typedef union {
         ASTNode* body;              // 循环体
     } for_stmt;
     
+    // repeat循环
+    struct {
+        ASTNode* body;              // 循环体
+        ASTNode* condition;         // 终止条件（UNTIL）
+    } repeat_stmt;
+    
     // case语句
     struct {
         ASTNode* expression;        // 选择表达式
@@ -302,6 +309,11 @@ ASTNode* ast_create_while(ASTNode* condition, ASTNode* body);
  * @brief 创建for循环节点
  */
 ASTNode* ast_create_for(const char* variable, ASTNode* start, ASTNode* end, ASTNode* step, ASTNode* body);
+
+/**
+ * @brief 创建repeat循环节点
+ */
+ASTNode* ast_create_repeat(ASTNode* body, ASTNode* condition);
 
 /**
  * @brief 创建return语句节点

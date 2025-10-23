@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>STVM 语法说明</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown.min.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">STVM 语法说明</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#stvm-语法说明" id="toc-stvm-语法说明">STVM 语法说明</a>
+<ul>
+<li><a href="#概述" id="toc-概述">概述</a></li>
+<li><a href="#一程序结构" id="toc-一程序结构">一、程序结构</a>
+<ul>
+<li><a href="#基本程序结构" id="toc-基本程序结构">1.1
+基本程序结构</a></li>
+<li><a href="#函数结构" id="toc-函数结构">1.2 函数结构</a></li>
+</ul></li>
+<li><a href="#二数据类型" id="toc-二数据类型">二、数据类型</a>
+<ul>
+<li><a href="#基本数据类型" id="toc-基本数据类型">2.1
+基本数据类型</a></li>
+<li><a href="#质量化数据类型" id="toc-质量化数据类型">2.2
+质量化数据类型</a></li>
+<li><a href="#数组类型" id="toc-数组类型">2.3 数组类型</a></li>
+</ul></li>
+<li><a href="#三变量声明" id="toc-三变量声明">三、变量声明</a>
+<ul>
+<li><a href="#变量声明的位置限制" id="toc-变量声明的位置限制">3.1
+变量声明的位置限制</a></li>
+<li><a href="#变量块类型" id="toc-变量块类型">3.2 变量块类型</a></li>
+<li><a href="#变量初始化" id="toc-变量初始化">3.3 变量初始化</a></li>
+<li><a href="#空变量块" id="toc-空变量块">3.4 空变量块</a></li>
+</ul></li>
+<li><a href="#四运算符" id="toc-四运算符">四、运算符</a>
+<ul>
+<li><a href="#算术运算符" id="toc-算术运算符">4.1 算术运算符</a></li>
+<li><a href="#比较运算符" id="toc-比较运算符">4.2 比较运算符</a></li>
+<li><a href="#逻辑运算符" id="toc-逻辑运算符">4.3 逻辑运算符</a></li>
+<li><a href="#位运算符" id="toc-位运算符">4.4 位运算符</a></li>
+<li><a href="#运算符优先级" id="toc-运算符优先级">4.5
+运算符优先级</a></li>
+</ul></li>
+<li><a href="#五语句" id="toc-五语句">五、语句</a>
+<ul>
+<li><a href="#赋值语句" id="toc-赋值语句">5.1 赋值语句</a></li>
+<li><a href="#条件语句-if" id="toc-条件语句-if">5.2 条件语句
+(IF)</a></li>
+<li><a href="#选择语句-case" id="toc-选择语句-case">5.3 选择语句
+(CASE)</a></li>
+<li><a href="#循环语句" id="toc-循环语句">5.4 循环语句</a></li>
+<li><a href="#函数调用" id="toc-函数调用">5.5 函数调用</a></li>
+<li><a href="#返回语句" id="toc-返回语句">5.6 返回语句</a></li>
+<li><a href="#打印语句" id="toc-打印语句">5.7 打印语句</a></li>
+</ul></li>
+<li><a href="#六导入功能" id="toc-六导入功能">六、导入功能</a>
+<ul>
+<li><a href="#导入整个库" id="toc-导入整个库">6.1 导入整个库</a></li>
+<li><a href="#导入库并使用前缀别名" id="toc-导入库并使用前缀别名">6.2
+导入库并使用前缀别名</a></li>
+<li><a href="#导入特定函数" id="toc-导入特定函数">6.3
+导入特定函数</a></li>
+</ul></li>
+<li><a href="#七注释" id="toc-七注释">七、注释</a>
+<ul>
+<li><a href="#行注释" id="toc-行注释">7.1 行注释</a></li>
+<li><a href="#块注释" id="toc-块注释">7.2 块注释</a></li>
+</ul></li>
+<li><a href="#八字面量" id="toc-八字面量">八、字面量</a>
+<ul>
+<li><a href="#整数字面量" id="toc-整数字面量">8.1 整数字面量</a></li>
+<li><a href="#实数字面量" id="toc-实数字面量">8.2 实数字面量</a></li>
+<li><a href="#布尔字面量" id="toc-布尔字面量">8.3 布尔字面量</a></li>
+<li><a href="#字符串字面量" id="toc-字符串字面量">8.4
+字符串字面量</a></li>
+</ul></li>
+<li><a href="#九标识符规则" id="toc-九标识符规则">九、标识符规则</a>
+<ul>
+<li><a href="#命名规则" id="toc-命名规则">9.1 命名规则</a></li>
+<li><a href="#保留关键字" id="toc-保留关键字">9.2 保留关键字</a></li>
+</ul></li>
+<li><a href="#十完整示例" id="toc-十完整示例">十、完整示例</a>
+<ul>
+<li><a href="#hello-world" id="toc-hello-world">10.1 Hello
+World</a></li>
+<li><a href="#函数示例" id="toc-函数示例">10.2 函数示例</a></li>
+<li><a href="#io-映射示例" id="toc-io-映射示例">10.4 I/O
+映射示例</a></li>
+<li><a href="#质量化数据示例" id="toc-质量化数据示例">10.5
+质量化数据示例</a></li>
+</ul></li>
+<li><a href="#十一循环语句详解"
+id="toc-十一循环语句详解">十一、循环语句详解</a>
+<ul>
+<li><a href="#while-循环-1" id="toc-while-循环-1">11.1 WHILE
+循环</a></li>
+<li><a href="#for-循环-1" id="toc-for-循环-1">11.2 FOR 循环</a></li>
+<li><a href="#repeat-循环-2" id="toc-repeat-循环-2">11.3 REPEAT
+循环</a></li>
+<li><a href="#循环对比总结" id="toc-循环对比总结">11.4
+循环对比总结</a></li>
+</ul></li>
+<li><a href="#十二常见错误和注意事项"
+id="toc-十二常见错误和注意事项">十二、常见错误和注意事项</a>
+<ul>
+<li><a href="#变量声明位置错误" id="toc-变量声明位置错误">12.1
+变量声明位置错误</a></li>
+<li><a href="#赋值符号混淆" id="toc-赋值符号混淆">12.2
+赋值符号混淆</a></li>
+<li><a href="#字符串引号转义" id="toc-字符串引号转义">12.3
+字符串引号转义</a></li>
+<li><a href="#数组索引从-0-开始" id="toc-数组索引从-0-开始">12.4
+数组索引从 0 开始</a></li>
+<li><a href="#repeat-循环条件理解" id="toc-repeat-循环条件理解">12.5
+REPEAT 循环条件理解</a></li>
+<li><a href="#函数返回值赋值方式" id="toc-函数返回值赋值方式">12.6
+函数返回值赋值方式</a></li>
+<li><a href="#赋值符号混淆-1" id="toc-赋值符号混淆-1">11.2
+赋值符号混淆</a></li>
+<li><a href="#字符串引号转义-1" id="toc-字符串引号转义-1">11.3
+字符串引号转义</a></li>
+<li><a href="#数组索引从-0-开始-1" id="toc-数组索引从-0-开始-1">11.4
+数组索引从 0 开始</a></li>
+<li><a href="#函数返回值赋值方式-1" id="toc-函数返回值赋值方式-1">12.6
+函数返回值赋值方式</a></li>
+<li><a href="#关键字大小写" id="toc-关键字大小写">12.7
+关键字大小写</a></li>
+</ul></li>
+<li><a href="#十三文件扩展名"
+id="toc-十三文件扩展名">十三、文件扩展名</a></li>
+<li><a href="#十四编译和运行"
+id="toc-十四编译和运行">十四、编译和运行</a>
+<ul>
+<li><a href="#编译源文件" id="toc-编译源文件">14.1 编译源文件</a></li>
+<li><a href="#直接运行" id="toc-直接运行">14.2 直接运行</a></li>
+<li><a href="#运行字节码" id="toc-运行字节码">14.3 运行字节码</a></li>
+</ul></li>
+<li><a href="#十五版本信息"
+id="toc-十五版本信息">十五、版本信息</a></li>
+<li><a href="#十六参考资料"
+id="toc-十六参考资料">十六、参考资料</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="stvm-语法说明">STVM 语法说明</h1>
+<h2 id="概述">概述</h2>
+<p>STVM (Structured Text Virtual Machine) 是一个基于 IEC 61131-3
+标准的结构化文本 (ST) 语言虚拟机。本文档详细说明了 STVM
+支持的语法特性和使用注意事项。</p>
+<hr />
+<h2 id="一程序结构">一、程序结构</h2>
+<h3 id="基本程序结构">1.1 基本程序结构</h3>
+<pre class="st"><code>PROGRAM ProgramName
+    (* 可选：导入声明 *)
+    (* 可选：变量声明 *)
+    (* 可选：函数定义 *)
+    (* 语句 *)
+END_PROGRAM</code></pre>
+<p>或使用显式的 BEGIN 块：</p>
+<pre class="st"><code>PROGRAM ProgramName
+    (* 可选：导入声明 *)
+    (* 可选：变量声明 *)
+    (* 可选：函数定义 *)
+BEGIN
+    (* 语句 *)
+END_PROGRAM</code></pre>
+<h3 id="函数结构">1.2 函数结构</h3>
+<pre class="st"><code>FUNCTION FunctionName : ReturnType
+VAR_INPUT
+    param1 : Type1;
+    param2 : Type2;
+END_VAR
+VAR_LOCAL
+    local1 : Type3;
+END_VAR
+    (* 语句 *)
+END_FUNCTION</code></pre>
+<p>或不带返回值（过程风格）：</p>
+<pre class="st"><code>FUNCTION FunctionName
+VAR_INPUT
+    param1 : Type1;
+END_VAR
+    (* 语句 *)
+END_FUNCTION</code></pre>
+<hr />
+<h2 id="二数据类型">二、数据类型</h2>
+<h3 id="基本数据类型">2.1 基本数据类型</h3>
+<table>
+<thead>
+<tr class="header">
+<th>类型</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>BOOL</code></td>
+<td>布尔型</td>
+<td><code>TRUE</code>, <code>FALSE</code></td>
+</tr>
+<tr class="even">
+<td><code>INT</code></td>
+<td>整数型 (64位)</td>
+<td><code>42</code>, <code>-10</code>, <code>0</code></td>
+</tr>
+<tr class="odd">
+<td><code>REAL</code></td>
+<td>实数型 (双精度)</td>
+<td><code>3.14</code>, <code>2.5e-3</code></td>
+</tr>
+<tr class="even">
+<td><code>STRING</code></td>
+<td>字符串型</td>
+<td><code>'Hello'</code>, <code>"World"</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="质量化数据类型">2.2 质量化数据类型</h3>
+<p>质量化类型包含 <code>.VAL</code> (值) 和 <code>.QUALITY</code> (质量)
+两个成员：</p>
+<table>
+<thead>
+<tr class="header">
+<th>类型</th>
+<th>说明</th>
+<th>成员访问</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>QBOOL</code></td>
+<td>质量化布尔</td>
+<td><code>var.VAL</code>, <code>var.QUALITY</code></td>
+</tr>
+<tr class="even">
+<td><code>QINT</code></td>
+<td>质量化整数</td>
+<td><code>var.VAL</code>, <code>var.QUALITY</code></td>
+</tr>
+<tr class="odd">
+<td><code>QREAL</code></td>
+<td>质量化实数</td>
+<td><code>var.VAL</code>, <code>var.QUALITY</code></td>
+</tr>
+<tr class="even">
+<td><code>QSTRING</code></td>
+<td>质量化字符串</td>
+<td><code>var.VAL</code>, <code>var.QUALITY</code></td>
+</tr>
+</tbody>
+</table>
+<p>示例：</p>
+<pre class="st"><code>VAR
+    temp : QREAL;
+END_VAR
+    temp.VAL := 25.5;
+    temp.QUALITY := 0;</code></pre>
+<h3 id="数组类型">2.3 数组类型</h3>
+<p>支持一维和多维数组：</p>
+<pre class="st"><code>(* 方式 1: 指定范围 *)
+VAR
+    arr1 : ARRAY[0..9] OF INT;     (* 10个元素，索引 0-9 *)
+END_VAR
+
+(* 方式 2: 指定大小 *)
+VAR
+    arr2 : ARRAY[10] OF REAL;      (* 10个元素，索引 0-9 *)
+END_VAR</code></pre>
+<p>数组访问：</p>
+<pre class="st"><code>arr1[0] := 100;
+x := arr1[5];</code></pre>
+<hr />
+<h2 id="三变量声明">三、变量声明</h2>
+<h3 id="变量声明的位置限制">3.1 变量声明的位置限制</h3>
+<p>⚠️ <strong>重要限制</strong>：变量只能在以下位置声明：</p>
+<ol type="1">
+<li><strong>程序开头</strong>（<code>PROGRAM</code>
+之后、语句之前）</li>
+<li><strong>函数开头</strong>（<code>FUNCTION</code>
+之后、<code>BEGIN</code> 或语句之前）</li>
+</ol>
+<p>❌ <strong>不能在语句中间声明变量</strong></p>
+<p>正确示例：</p>
+<pre class="st"><code>PROGRAM Example
+VAR
+    x : INT;        (* ✓ 在程序开头 *)
+END_VAR
+    x := 10;
+END_PROGRAM</code></pre>
+<p>错误示例：</p>
+<pre class="st"><code>PROGRAM Example
+    x := 10;
+    VAR             (* ✗ 不能在语句后声明 *)
+        y : INT;
+    END_VAR
+END_PROGRAM</code></pre>
+<h3 id="变量块类型">3.2 变量块类型</h3>
+<h4 id="var---全局变量">VAR - 全局变量</h4>
+<pre class="st"><code>VAR
+    global_var : INT := 100;
+END_VAR</code></pre>
+<ul>
+<li>在 PROGRAM 中：全局变量</li>
+<li>在 FUNCTION 中：静态全局变量（函数内也可定义全局变量）</li>
+</ul>
+<h4 id="var_input---函数输入参数">VAR_INPUT - 函数输入参数</h4>
+<pre class="st"><code>FUNCTION Add : INT
+VAR_INPUT
+    x : INT;
+    y : INT;
+END_VAR
+    Add := x + y;
+END_FUNCTION</code></pre>
+<h4 id="var_output---函数输出参数">VAR_OUTPUT - 函数输出参数</h4>
+<pre class="st"><code>VAR_OUTPUT
+    result : INT;
+END_VAR</code></pre>
+<h4 id="var_local---函数局部变量">VAR_LOCAL - 函数局部变量</h4>
+<pre class="st"><code>VAR_LOCAL
+    temp : INT;
+    counter : INT := 0;
+END_VAR</code></pre>
+<h4 id="var_external---外部-io-映射">VAR_EXTERNAL - 外部 I/O 映射</h4>
+<p>用于映射物理 I/O 地址：</p>
+<pre class="st"><code>VAR_EXTERNAL
+    (* 方式 1: 使用字符串地址 *)
+    button AT &quot;GPIO_27&quot; : BOOL;
+    
+    (* 方式 2: 使用直接地址 *)
+    led AT %QX0.0 : BOOL;
+    sensor AT %IX1.2 : INT;
+END_VAR</code></pre>
+<p>直接地址格式：<code>%&lt;位置&gt;&lt;尺寸&gt;&lt;地址&gt;</code> -
+位置：<code>I</code> (输入), <code>Q</code> (输出), <code>M</code>
+(内存) - 尺寸：<code>X</code> (位), <code>B</code> (字节),
+<code>W</code> (字), <code>D</code> (双字), <code>L</code> (长字) -
+地址：如 <code>0.0</code>, <code>1.2</code></p>
+<h3 id="变量初始化">3.3 变量初始化</h3>
+<p>支持在声明时初始化：</p>
+<pre class="st"><code>VAR
+    x : INT := 42;                  (* 整数初始化 *)
+    pi : REAL := 3.14159;          (* 实数初始化 *)
+    flag : BOOL := TRUE;           (* 布尔初始化 *)
+    msg : STRING := &#39;Hello&#39;;       (* 字符串初始化 *)
+END_VAR</code></pre>
+<h3 id="空变量块">3.4 空变量块</h3>
+<p>支持空的变量声明块：</p>
+<pre class="st"><code>VAR
+END_VAR
+
+VAR_INPUT
+END_VAR
+
+VAR_LOCAL
+END_VAR</code></pre>
+<hr />
+<h2 id="四运算符">四、运算符</h2>
+<h3 id="算术运算符">4.1 算术运算符</h3>
+<table>
+<thead>
+<tr class="header">
+<th>运算符</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>+</code></td>
+<td>加法</td>
+<td><code>a + b</code></td>
+</tr>
+<tr class="even">
+<td><code>-</code></td>
+<td>减法 / 负号</td>
+<td><code>a - b</code>, <code>-x</code></td>
+</tr>
+<tr class="odd">
+<td><code>*</code></td>
+<td>乘法</td>
+<td><code>a * b</code></td>
+</tr>
+<tr class="even">
+<td><code>/</code></td>
+<td>除法</td>
+<td><code>a / b</code></td>
+</tr>
+<tr class="odd">
+<td><code>MOD</code></td>
+<td>取模</td>
+<td><code>a MOD b</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="比较运算符">4.2 比较运算符</h3>
+<table>
+<thead>
+<tr class="header">
+<th>运算符</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>=</code></td>
+<td>等于</td>
+<td><code>a = b</code></td>
+</tr>
+<tr class="even">
+<td><code>&lt;&gt;</code></td>
+<td>不等于</td>
+<td><code>a &lt;&gt; b</code></td>
+</tr>
+<tr class="odd">
+<td><code>&lt;</code></td>
+<td>小于</td>
+<td><code>a &lt; b</code></td>
+</tr>
+<tr class="even">
+<td><code>&lt;=</code></td>
+<td>小于等于</td>
+<td><code>a &lt;= b</code></td>
+</tr>
+<tr class="odd">
+<td><code>&gt;</code></td>
+<td>大于</td>
+<td><code>a &gt; b</code></td>
+</tr>
+<tr class="even">
+<td><code>&gt;=</code></td>
+<td>大于等于</td>
+<td><code>a &gt;= b</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="逻辑运算符">4.3 逻辑运算符</h3>
+<table>
+<thead>
+<tr class="header">
+<th>运算符</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>AND</code></td>
+<td>逻辑与</td>
+<td><code>a AND b</code></td>
+</tr>
+<tr class="even">
+<td><code>OR</code></td>
+<td>逻辑或</td>
+<td><code>a OR b</code></td>
+</tr>
+<tr class="odd">
+<td><code>XOR</code></td>
+<td>逻辑异或</td>
+<td><code>a XOR b</code></td>
+</tr>
+<tr class="even">
+<td><code>NOT</code></td>
+<td>逻辑非</td>
+<td><code>NOT a</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="位运算符">4.4 位运算符</h3>
+<table>
+<thead>
+<tr class="header">
+<th>运算符</th>
+<th>说明</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>SHL</code></td>
+<td>左移</td>
+<td><code>x SHL 2</code></td>
+</tr>
+<tr class="even">
+<td><code>SHR</code></td>
+<td>右移</td>
+<td><code>x SHR 1</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="运算符优先级">4.5 运算符优先级</h3>
+<p>从高到低（符合 IEC 61131-3 标准）：</p>
+<ol type="1">
+<li>括号 <code>( )</code></li>
+<li>一元运算符：<code>NOT</code>, <code>-</code> (负号)</li>
+<li>乘除：<code>*</code>, <code>/</code>, <code>MOD</code></li>
+<li>加减和移位：<code>+</code>, <code>-</code>, <code>SHL</code>,
+<code>SHR</code></li>
+<li>比较：<code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>,
+<code>&gt;=</code></li>
+<li>相等：<code>=</code>, <code>&lt;&gt;</code></li>
+<li>逻辑与：<code>AND</code></li>
+<li>逻辑异或：<code>XOR</code></li>
+<li>逻辑或：<code>OR</code></li>
+</ol>
+<hr />
+<h2 id="五语句">五、语句</h2>
+<h3 id="赋值语句">5.1 赋值语句</h3>
+<p>使用 <code>:=</code> 进行赋值：</p>
+<pre class="st"><code>(* 简单赋值 *)
+x := 10;
+
+(* 数组赋值 *)
+arr[0] := 100;
+
+(* 质量化成员赋值 *)
+temp.VAL := 25.5;
+temp.QUALITY := 0;</code></pre>
+<p>⚠️ <strong>注意</strong>：赋值使用 <code>:=</code>，判断相等使用
+<code>=</code></p>
+<h3 id="条件语句-if">5.2 条件语句 (IF)</h3>
+<pre class="st"><code>(* 基本形式 *)
+IF condition THEN
+    statements;
+END_IF;
+
+(* 带 ELSE *)
+IF condition THEN
+    statements1;
+ELSE
+    statements2;
+END_IF;
+
+(* 带 ELSIF *)
+IF condition1 THEN
+    statements1;
+ELSIF condition2 THEN
+    statements2;
+ELSIF condition3 THEN
+    statements3;
+ELSE
+    statements4;
+END_IF;</code></pre>
+<h3 id="选择语句-case">5.3 选择语句 (CASE)</h3>
+<pre class="st"><code>CASE expression OF
+    1: statement1;
+    2: statement2;
+    3, 4, 5: statement3;    (* 多标签 *)
+ELSE
+    default_statement;
+END_CASE;</code></pre>
+<p>示例：</p>
+<pre class="st"><code>CASE x OF
+    1: result := &#39;One&#39;;
+    2: result := &#39;Two&#39;;
+    3: result := &#39;Three&#39;;
+ELSE
+    result := &#39;Other&#39;;
+END_CASE;</code></pre>
+<h3 id="循环语句">5.4 循环语句</h3>
+<h4 id="while-循环">WHILE 循环</h4>
+<pre class="st"><code>WHILE condition DO
+    statements;
+END_WHILE;</code></pre>
+<p>示例：</p>
+<pre class="st"><code>counter := 0;
+WHILE counter &lt; 10 DO
+    counter := counter + 1;
+END_WHILE;</code></pre>
+<h4 id="for-循环">FOR 循环</h4>
+<pre class="st"><code>(* 基本形式，步长为 1 *)
+FOR i := 1 TO 10 DO
+    statements;
+END_FOR;
+
+(* 指定步长 *)
+FOR i := 0 TO 100 BY 10 DO
+    statements;
+END_FOR;</code></pre>
+<p>示例：</p>
+<pre class="st"><code>sum := 0;
+FOR i := 1 TO 10 DO
+    sum := sum + i;
+END_FOR;</code></pre>
+<h4 id="repeat-循环">REPEAT 循环</h4>
+<pre class="st"><code>REPEAT
+    statements;
+UNTIL condition
+END_REPEAT;</code></pre>
+<h4 id="repeat-循环-1">REPEAT 循环</h4>
+<pre class="st"><code>REPEAT
+    statements;
+UNTIL condition
+END_REPEAT;</code></pre>
+<p>示例：</p>
+<pre class="st"><code>counter := 1;
+sum := 0;
+REPEAT
+    sum := sum + counter;
+    counter := counter + 1;
+UNTIL counter &gt; 10
+END_REPEAT;</code></pre>
+<p>⚠️ <strong>注意</strong>： - REPEAT
+循环至少执行一次（先执行循环体，再检查条件） - 当 UNTIL
+后的条件为<strong>真</strong>时退出循环 - 与 WHILE 循环的区别：WHILE
+是条件为真时执行，REPEAT 是条件为真时退出</p>
+<h4 id="循环对比">循环对比</h4>
+<table>
+<thead>
+<tr class="header">
+<th>循环类型</th>
+<th>条件检查时机</th>
+<th>最少执行次数</th>
+<th>退出条件</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>WHILE</strong></td>
+<td>循环开始前</td>
+<td>0次</td>
+<td>条件为假</td>
+</tr>
+<tr class="even">
+<td><strong>FOR</strong></td>
+<td>循环开始前</td>
+<td>0次</td>
+<td>超出范围</td>
+</tr>
+<tr class="odd">
+<td><strong>REPEAT</strong></td>
+<td>循环结束后</td>
+<td>1次</td>
+<td>条件为真</td>
+</tr>
+</tbody>
+</table>
+<p>⚠️ <strong>注意</strong>：REPEAT 语法已定义但可能未完全实现</p>
+<h3 id="函数调用">5.5 函数调用</h3>
+<pre class="st"><code>(* 无参数函数 *)
+result := GetValue();
+
+(* 带参数函数 *)
+sum := Add(5, 10);
+result := Calculate(x, y, z);</code></pre>
+<h3 id="返回语句">5.6 返回语句</h3>
+<pre class="st"><code>(* 无返回值 *)
+RETURN;
+
+(* 有返回值 *)
+RETURN expression;
+
+(* 函数返回值赋值 *)
+FunctionName := result_value;</code></pre>
+<h3 id="打印语句">5.7 打印语句</h3>
+<pre class="st"><code>(* 单参数 *)
+PRINT(&#39;Hello World&#39;);
+
+(* 多参数（格式化） *)
+PRINT(&#39;Result: %d\n&#39;, result);
+PRINT(&#39;x=%d, y=%d\n&#39;, x, y);</code></pre>
+<p>格式化占位符： - <code>%d</code> - 整数 - <code>%f</code> - 实数 -
+<code>%s</code> - 字符串 - <code>%b</code> - 布尔</p>
+<hr />
+<h2 id="六导入功能">六、导入功能</h2>
+<h3 id="导入整个库">6.1 导入整个库</h3>
+<pre class="st"><code>IMPORT &#39;examples/mathlib.stbc&#39;;</code></pre>
+<h3 id="导入库并使用前缀别名">6.2 导入库并使用前缀别名</h3>
+<pre class="st"><code>IMPORT &#39;examples/mathlib.stbc&#39; AS math;</code></pre>
+<h3 id="导入特定函数">6.3 导入特定函数</h3>
+<pre class="st"><code>(* 导入单个函数 *)
+IMPORT Abs FROM &#39;examples/mathlib.stbc&#39;;
+
+(* 导入函数并使用别名 *)
+IMPORT Abs AS MyAbs FROM &#39;examples/mathlib.stbc&#39;;</code></pre>
+<p>⚠️ <strong>注意</strong>： - 导入语句必须在 PROGRAM
+之后、变量声明之前 - 当前仅支持从编译库 (<code>.stbc</code>) 导入</p>
+<hr />
+<h2 id="七注释">七、注释</h2>
+<h3 id="行注释">7.1 行注释</h3>
+<pre class="st"><code>// 这是单行注释
+x := 10;  // 行尾注释</code></pre>
+<h3 id="块注释">7.2 块注释</h3>
+<pre class="st"><code>(* 
+ * 这是多行注释
+ * 可以跨越多行
+ *)
+ 
+(* 简单块注释 *)</code></pre>
+<p>⚠️ <strong>注意</strong>：块注释使用 <code>(* ... *)</code>，不是
+<code>/* ... */</code></p>
+<hr />
+<h2 id="八字面量">八、字面量</h2>
+<h3 id="整数字面量">8.1 整数字面量</h3>
+<pre class="st"><code>42          (* 十进制 *)
+0           (* 零 *)
+-10         (* 负数 *)</code></pre>
+<h3 id="实数字面量">8.2 实数字面量</h3>
+<pre class="st"><code>3.14        (* 标准形式 *)
+2.5e-3      (* 科学计数法 *)
+1.0E+6      (* 大写 E *)</code></pre>
+<h3 id="布尔字面量">8.3 布尔字面量</h3>
+<pre class="st"><code>TRUE        (* 真 *)
+FALSE       (* 假 *)</code></pre>
+<p>⚠️ <strong>注意</strong>：关键字不区分大小写，<code>true</code>,
+<code>True</code>, <code>TRUE</code> 都可以</p>
+<h3 id="字符串字面量">8.4 字符串字面量</h3>
+<pre class="st"><code>&#39;Single quoted string&#39;          (* 单引号 *)
+&quot;Double quoted string&quot;          (* 双引号 *)
+&#39;It&#39;&#39;s a test&#39;                 (* 单引号转义：&#39;&#39; *)
+&quot;Say &quot;&quot;Hello&quot;&quot;&quot;                (* 双引号转义：&quot;&quot; *)</code></pre>
+<hr />
+<h2 id="九标识符规则">九、标识符规则</h2>
+<h3 id="命名规则">9.1 命名规则</h3>
+<ul>
+<li>必须以字母或下划线开头：<code>a-z</code>, <code>A-Z</code>,
+<code>_</code></li>
+<li>后续可包含字母、数字、下划线：<code>a-z</code>, <code>A-Z</code>,
+<code>0-9</code>, <code>_</code></li>
+<li>不区分大小写（但建议保持一致）</li>
+</ul>
+<p>合法标识符：</p>
+<pre class="st"><code>myVariable
+_temp
+counter123
+MyFunction
+GPIO_27</code></pre>
+<p>非法标识符：</p>
+<pre class="st"><code>123abc      (* 不能以数字开头 *)
+my-var      (* 不能包含连字符 *)
+my var      (* 不能包含空格 *)</code></pre>
+<h3 id="保留关键字">9.2 保留关键字</h3>
+<p>以下关键字不能用作标识符：</p>
+<p><strong>程序结构</strong>：<code>PROGRAM</code>,
+<code>END_PROGRAM</code>, <code>FUNCTION</code>,
+<code>END_FUNCTION</code>, <code>BEGIN</code></p>
+<p><strong>变量声明</strong>：<code>VAR</code>, <code>VAR_INPUT</code>,
+<code>VAR_OUTPUT</code>, <code>VAR_LOCAL</code>,
+<code>VAR_EXTERNAL</code>, <code>END_VAR</code>, <code>AT</code></p>
+<p><strong>控制流</strong>：<code>IF</code>, <code>THEN</code>,
+<code>ELSIF</code>, <code>ELSE</code>, <code>END_IF</code>,
+<code>CASE</code>, <code>OF</code>, <code>END_CASE</code>,
+<code>FOR</code>, <code>TO</code>, <code>BY</code>, <code>DO</code>,
+<code>END_FOR</code>, <code>WHILE</code>, <code>END_WHILE</code>,
+<code>REPEAT</code>, <code>UNTIL</code>, <code>END_REPEAT</code>,
+<code>RETURN</code>, <code>EXIT</code></p>
+<p><strong>数据类型</strong>：<code>BOOL</code>, <code>INT</code>,
+<code>REAL</code>, <code>STRING</code>, <code>ARRAY</code>,
+<code>QBOOL</code>, <code>QINT</code>, <code>QREAL</code>,
+<code>QSTRING</code></p>
+<p><strong>运算符</strong>：<code>AND</code>, <code>OR</code>,
+<code>XOR</code>, <code>NOT</code>, <code>MOD</code>, <code>SHL</code>,
+<code>SHR</code></p>
+<p><strong>其他</strong>：<code>TRUE</code>, <code>FALSE</code>,
+<code>PRINT</code>, <code>IMPORT</code>, <code>FROM</code>,
+<code>AS</code>, <code>VAL</code>, <code>QUALITY</code></p>
+<hr />
+<h2 id="十完整示例">十、完整示例</h2>
+<h3 id="hello-world">10.1 Hello World</h3>
+<pre class="st"><code>PROGRAM HelloWorld
+VAR
+    message : STRING := &#39;Hello, STVM!&#39;;
+    counter : INT := 0;
+END_VAR
+
+    counter := 42;
+    PRINT(message);
+    PRINT(&#39;Counter: %d\n&#39;, counter);
+END_PROGRAM</code></pre>
+<h3 id="函数示例">10.2 函数示例</h3>
+<pre class="st"><code>PROGRAM Functions
+VAR
+    a : INT := 5;
+    b : INT := 3;
+    result : INT;
+END_VAR
+
+FUNCTION Add : INT
+VAR_INPUT
+    x : INT;
+    y : INT;
+END_VAR
+    Add := x + y;
+END_FUNCTION
+
+FUNCTION Factorial : INT
+VAR_INPUT
+    n : INT;
+END_VAR
+VAR_LOCAL
+    i : INT;
+    temp : INT;
+END_VAR
+    temp := 1;
+    FOR i := 1 TO n DO
+        temp := temp * i;
+    END_FOR;
+    Factorial := temp;
+END_FUNCTION
+
+    result := Add(a, b);
+    PRINT(&#39;Sum: %d\n&#39;, result);
+    
+    result := Factorial(5);
+    PRINT(&#39;Factorial: %d\n&#39;, result);
+END_PROGRAM</code></pre>
+<h3 id="io-映射示例">10.4 I/O 映射示例</h3>
+<pre class="st"><code>PROGRAM LEDBlink
+
+VAR_EXTERNAL
+    button AT %IX0.0 : BOOL;    (* GPIO输入 *)
+    led AT %QX0.0 : BOOL;       (* GPIO输出 *)
+END_VAR
+
+VAR
+    blink_timer : INT := 0;
+    led_state : BOOL := FALSE;
+END_VAR
+
+    IF button THEN
+        blink_timer := blink_timer + 1;
+        
+        IF blink_timer &gt;= 500 THEN
+            led_state := NOT led_state;
+            led := led_state;
+            blink_timer := 0;
+        END_IF;
+    ELSE
+        led := FALSE;
+        blink_timer := 0;
+    END_IF;
+END_PROGRAM</code></pre>
+<h3 id="质量化数据示例">10.5 质量化数据示例</h3>
+<pre class="st"><code>PROGRAM QualityTest
+VAR
+    temperature : QREAL;
+    sensor_ok : BOOL;
+END_VAR
+
+    temperature.VAL := 25.5;
+    temperature.QUALITY := 192;  (* Good quality *)
+    
+    sensor_ok := (temperature.QUALITY = 192);
+    
+    IF sensor_ok THEN
+        PRINT(&#39;Temp: %f C\n&#39;, temperature.VAL);
+    ELSE
+        PRINT(&#39;Sensor error!\n&#39;);
+    END_IF;
+END_PROGRAM</code></pre>
+<hr />
+<h2 id="十一循环语句详解">十一、循环语句详解</h2>
+<h3 id="while-循环-1">11.1 WHILE 循环</h3>
+<p><strong>语法</strong>：先判断条件，条件为真时执行循环体</p>
+<pre class="st"><code>WHILE condition DO
+    statements;
+END_WHILE;</code></pre>
+<p><strong>特点</strong>： - 条件在循环开始前检查 -
+如果初始条件为假，循环体一次都不执行 - 适合不确定循环次数的场景</p>
+<p><strong>示例</strong>：</p>
+<pre class="st"><code>counter := 0;
+WHILE counter &lt; 10 DO
+    counter := counter + 1;
+END_WHILE;
+(* 如果 counter 初始值 &gt;= 10，循环体不会执行 *)</code></pre>
+<h3 id="for-循环-1">11.2 FOR 循环</h3>
+<p><strong>语法</strong>：指定范围的计数循环</p>
+<pre class="st"><code>FOR variable := start TO end DO
+    statements;
+END_FOR;
+
+FOR variable := start TO end BY step DO
+    statements;
+END_FOR;</code></pre>
+<p><strong>特点</strong>： - 循环次数确定 - 循环变量自动递增 -
+步长可选，默认为 1 - 条件在循环开始前检查</p>
+<p><strong>示例</strong>：</p>
+<pre class="st"><code>(* 1 到 10 *)
+FOR i := 1 TO 10 DO
+    sum := sum + i;
+END_FOR;
+
+(* 0 到 100，步长 10 *)
+FOR i := 0 TO 100 BY 10 DO
+    PRINT(&#39;%d\n&#39;, i);
+END_FOR;</code></pre>
+<h3 id="repeat-循环-2">11.3 REPEAT 循环</h3>
+<p><strong>语法</strong>：至少执行一次，然后检查退出条件</p>
+<pre class="st"><code>REPEAT
+    statements;
+UNTIL condition
+END_REPEAT;</code></pre>
+<p><strong>特点</strong>： - 循环体至少执行一次 - 条件在循环结束后检查 -
+当条件为<strong>真</strong>时退出循环 - 适合需要先执行后判断的场景</p>
+<p><strong>示例</strong>：</p>
+<pre class="st"><code>(* 输入验证 - 至少询问一次 *)
+REPEAT
+    PRINT(&#39;Enter positive number: &#39;);
+    (* ... 读取输入 ... *)
+UNTIL input &gt; 0
+END_REPEAT;
+
+(* 累加到大于 100 *)
+sum := 0;
+counter := 1;
+REPEAT
+    sum := sum + counter;
+    counter := counter + 1;
+UNTIL sum &gt; 100
+END_REPEAT;</code></pre>
+<h3 id="循环对比总结">11.4 循环对比总结</h3>
+<table>
+<thead>
+<tr class="header">
+<th>循环类型</th>
+<th>条件检查时机</th>
+<th>最少执行次数</th>
+<th>退出条件</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>WHILE</strong></td>
+<td>循环开始前</td>
+<td>0次</td>
+<td>条件为假时退出</td>
+<td>不确定次数</td>
+</tr>
+<tr class="even">
+<td><strong>FOR</strong></td>
+<td>循环开始前</td>
+<td>0次</td>
+<td>超出范围时退出</td>
+<td>确定次数</td>
+</tr>
+<tr class="odd">
+<td><strong>REPEAT</strong></td>
+<td>循环结束后</td>
+<td>1次</td>
+<td>条件为真时退出</td>
+<td>至少一次</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="十二常见错误和注意事项">十二、常见错误和注意事项</h2>
+<h3 id="变量声明位置错误">12.1 变量声明位置错误</h3>
+<p>❌ <strong>错误</strong>：</p>
+<pre class="st"><code>PROGRAM Test
+    x := 10;
+    VAR y : INT; END_VAR    (* 错误：不能在语句后声明 *)
+END_PROGRAM</code></pre>
+<p>✓ <strong>正确</strong>： ### 12.1 变量声明位置错误</p>
+<p>❌ <strong>错误</strong>：</p>
+<pre class="st"><code>PROGRAM Test
+    x := 10;
+    VAR y : INT; END_VAR    (* 错误：不能在语句后声明 *)
+END_PROGRAM</code></pre>
+<p>✓ <strong>正确</strong>：</p>
+<pre class="st"><code>PROGRAM Test
+VAR
+    y : INT;
+END_VAR
+    x := 10;
+END_PROGRAM</code></pre>
+<h3 id="赋值符号混淆">12.2 赋值符号混淆</h3>
+<p>❌ <strong>错误</strong>：</p>
+<pre class="st"><code>x = 10;          (* 错误：= 是比较运算符 *)</code></pre>
+<p>✓ <strong>正确</strong>：</p>
+<pre class="st"><code>x := 10;         (* 正确：:= 是赋值运算符 *)
+IF x = 10 THEN   (* 正确：= 用于比较 *)</code></pre>
+<h3 id="字符串引号转义">12.3 字符串引号转义</h3>
+<p>❌ <strong>错误</strong>：</p>
+<pre class="st"><code>msg := &#39;It&#39;s wrong&#39;;     (* 错误：未转义单引号 *)</code></pre>
+<p>✓ <strong>正确</strong>：</p>
+<pre class="st"><code>msg := &#39;It&#39;&#39;s correct&#39;;  (* 正确：单引号转义 *)
+msg := &quot;It&#39;s also OK&quot;;   (* 或使用双引号 *)</code></pre>
+<h3 id="数组索引从-0-开始">12.4 数组索引从 0 开始</h3>
+<pre class="st"><code>VAR
+    arr : ARRAY[0..9] OF INT;    (* 10个元素 *)
+END_VAR
+    arr[0] := 100;   (* 第一个元素 *)
+    arr[9] := 200;   (* 最后一个元素 *)</code></pre>
+<h3 id="repeat-循环条件理解">12.5 REPEAT 循环条件理解</h3>
+<p>❌ <strong>容易混淆</strong>：</p>
+<pre class="st"><code>counter := 0;
+REPEAT
+    counter := counter + 1;
+UNTIL counter &lt; 5        (* 错误理解：以为是继续条件 *)
+END_REPEAT;
+(* 实际：counter = 1 时就退出了！*)</code></pre>
+<p>✓ <strong>正确理解</strong>：</p>
+<pre class="st"><code>counter := 0;
+REPEAT
+    counter := counter + 1;
+UNTIL counter &gt;= 5       (* 正确：条件为真时退出 *)
+END_REPEAT;
+(* counter 达到 5 时退出，循环了 5 次 *)</code></pre>
+<p>⚠️ <strong>关键区别</strong>： - <code>WHILE condition DO</code> -
+condition 为<strong>真</strong>时<strong>继续</strong> -
+<code>REPEAT ... UNTIL condition</code> - condition
+为<strong>真</strong>时<strong>退出</strong></p>
+<h3 id="函数返回值赋值方式">12.6 函数返回值赋值方式</h3>
+<h3 id="赋值符号混淆-1">11.2 赋值符号混淆</h3>
+<p>❌ <strong>错误</strong>：</p>
+<pre class="st"><code>x = 10;          (* 错误：= 是比较运算符 *)</code></pre>
+<p>✓ <strong>正确</strong>：</p>
+<pre class="st"><code>x := 10;         (* 正确：:= 是赋值运算符 *)
+IF x = 10 THEN   (* 正确：= 用于比较 *)</code></pre>
+<h3 id="字符串引号转义-1">11.3 字符串引号转义</h3>
+<p>❌ <strong>错误</strong>：</p>
+<pre class="st"><code>msg := &#39;It&#39;s wrong&#39;;     (* 错误：未转义单引号 *)</code></pre>
+<p>✓ <strong>正确</strong>：</p>
+<pre class="st"><code>msg := &#39;It&#39;&#39;s correct&#39;;  (* 正确：单引号转义 *)
+msg := &quot;It&#39;s also OK&quot;;   (* 或使用双引号 *)</code></pre>
+<h3 id="数组索引从-0-开始-1">11.4 数组索引从 0 开始</h3>
+<pre class="st"><code>VAR
+    arr : ARRAY[0..9] OF INT;    (* 10个元素 *)
+END_VAR
+    arr[0] := 100;   (* 第一个元素 *)
+    arr[9] := 200;   (* 最后一个元素 *)</code></pre>
+<h3 id="函数返回值赋值方式-1">12.6 函数返回值赋值方式</h3>
+<pre class="st"><code>FUNCTION GetValue : INT
+    GetValue := 42;    (* 通过函数名赋值返回 *)
+END_FUNCTION
+
+(* 或使用 RETURN *)
+FUNCTION GetValue : INT
+    RETURN 42;
+END_FUNCTION</code></pre>
+<h3 id="关键字大小写">12.7 关键字大小写</h3>
+<p>所有关键字不区分大小写：</p>
+<pre class="st"><code>PROGRAM Test        (* ✓ *)
+Program Test        (* ✓ *)
+program Test        (* ✓ *)
+
+VAR x : INT;        (* ✓ *)
+var x : int;        (* ✓ *)</code></pre>
+<p>但为了代码可读性，建议保持一致的风格。</p>
+<hr />
+<h2 id="十三文件扩展名">十三、文件扩展名</h2>
+<ul>
+<li><code>.st</code> - 源代码文件</li>
+<li><code>.stbc</code> - 编译后的字节码库文件</li>
+</ul>
+<hr />
+<h2 id="十四编译和运行">十四、编译和运行</h2>
+<h3 id="编译源文件">14.1 编译源文件</h3>
+<div class="sourceCode" id="cb69"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb69-1"><a href="#cb69-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> input.st <span class="at">-o</span> output.stbc</span></code></pre></div>
+<h3 id="直接运行">14.2 直接运行</h3>
+<div class="sourceCode" id="cb70"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> input.st</span></code></pre></div>
+<h3 id="运行字节码">14.3 运行字节码</h3>
+<div class="sourceCode" id="cb71"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> output.stbc</span></code></pre></div>
+<hr />
+<h2 id="十五版本信息">十五、版本信息</h2>
+<ul>
+<li>基于：IEC 61131-3 标准</li>
+<li>词法分析器：Flex</li>
+<li>语法分析器：Bison</li>
+<li>虚拟机：基于栈的字节码虚拟机</li>
+</ul>
+<hr />
+<h2 id="十六参考资料">十六、参考资料</h2>
+<ul>
+<li>IEC 61131-3 标准：可编程控制器编程语言</li>
+<li>源代码：
+<ul>
+<li><code>src/core/st_lexer.l</code> - 词法定义</li>
+<li><code>src/core/st_parser.y</code> - 语法定义</li>
+<li><code>examples/</code> - 示例程序目录</li>
+</ul></li>
+</ul>
+<hr />
+<p><strong>文档版本</strong>: 1.1<br />
+<strong>最后更新</strong>: 2025-10-23<br />
+<strong>更新内容</strong>: 完善 REPEAT…UNTIL 循环支持</p>
+</body>
+</html>

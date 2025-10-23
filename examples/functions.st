@@ -34,7 +34,7 @@ END_VAR
     Factorial := temp;
 END_FUNCTION
 
-FUNCTION MAIN: INT
+FUNCTION MAIN : INT
     (* 调用函数 *)
     result := Add(a, b);
     fact := Factorial(5);
@@ -42,6 +42,8 @@ FUNCTION MAIN: INT
     PRINT("fact: %d\n", fact);
     sum := sum + 1;
     PRINT("SUM := %d\n", sum);
+
+    RETURN 0;
 END_FUNCTION
 
 END_PROGRAM

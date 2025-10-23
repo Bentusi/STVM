@@ -29,6 +29,7 @@ static ErrorCode generate_assign(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_if(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
 static ErrorCode generate_while(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
 static ErrorCode generate_for(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
+static ErrorCode generate_repeat(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
 static ErrorCode generate_case(CodeGenContext* ctx, ASTNode* node, LoopContext* loop_ctx);
 static ErrorCode generate_return(CodeGenContext* ctx, ASTNode* node);
 static ErrorCode generate_block(CodeGenContext* ctx, ASTNode* stmts, LoopContext* loop_ctx);
@@ -961,6 +962,9 @@ ErrorCode codegen_stmt(CodeGenContext* ctx, ASTNode* stmt, LoopContext* loop_ctx
         case AST_FOR:
             return generate_for(ctx, stmt, loop_ctx);
             
+        case AST_REPEAT:
+            return generate_repeat(ctx, stmt, loop_ctx);
+            
         case AST_RETURN:
             return generate_return(ctx, stmt);
             
@@ -1337,6 +1341,53 @@ static ErrorCode generate_for(CodeGenContext* ctx, ASTNode* node, LoopContext* p
     codegen_patch_jump(ctx, jz_index, loop_end);
     codegen_patch_jump_list(ctx, loop_ctx.break_labels, loop_end);
     codegen_patch_jump_list(ctx, loop_ctx.continue_labels, loop_start);
+    
+    // 释放标签
+    jump_label_free_list(loop_ctx.break_labels);
+    jump_label_free_list(loop_ctx.continue_labels);
+    
+    return OK;
+}
+
+/**
+ * @brief 生成repeat循环
+ * REPEAT ... UNTIL condition END_REPEAT
+ * 循环体至少执行一次，然后检查条件，条件为真时退出
+ */
+static ErrorCode generate_repeat(CodeGenContext* ctx, ASTNode* node, LoopContext* parent_loop) {
+    ErrorCode err;
+    
+    // 创建循环上下文
+    LoopContext loop_ctx;
+    loop_ctx.break_labels = NULL;
+    loop_ctx.continue_labels = NULL;
+    loop_ctx.parent = parent_loop;
+    
+    // 循环开始位置
+    int32_t loop_start = codegen_current_position(ctx);
+    
+    // 循环体（至少执行一次）
+    err = generate_block(ctx, node->data.repeat_stmt.body, &loop_ctx);
+    if (err != OK) return err;
+    
+    // continue跳转到这里（检查条件前）
+    int32_t continue_pos = codegen_current_position(ctx);
+    
+    // 计算终止条件
+    err = codegen_expr(ctx, node->data.repeat_stmt.condition);
+    if (err != OK) return err;
+    
+    // JZ（条件为假时）跳回循环开始
+    codegen_emit(ctx, OP_JZ, loop_start);
+    
+    // 循环结束位置
+    int32_t loop_end = codegen_current_position(ctx);
+    
+    // 回填所有break标签到循环结束
+    codegen_patch_jump_list(ctx, loop_ctx.break_labels, loop_end);
+    
+    // 回填所有continue标签到条件检查位置
+    codegen_patch_jump_list(ctx, loop_ctx.continue_labels, continue_pos);
     
     // 释放标签
     jump_label_free_list(loop_ctx.break_labels);
