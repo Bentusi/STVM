@@ -44,6 +44,8 @@ typedef struct {
     int library_path_count;         // 库路径数量
     char* entry_function;           // 入口函数名（运行模式专用）
     int cycle_time_ms;              // 执行周期（毫秒，运行模式专用）
+    bool use_io_simulator;          // 启用IO模拟器
+    char* io_config_file;           // IO配置文件路径
 } CliOptions;
 
 /**

@@ -14,6 +14,7 @@
 #include "mmgr.h"
 #include "libmgr.h"
 #include "debugger.h"
+#include "iomgr.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -71,6 +72,8 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
         {"static",        no_argument,       0, 'S'},
         {"entry",         required_argument, 0, 'e'},
         {"cycle",         required_argument, 0, 'C'},
+        {"io-simulator",  no_argument,       0, 'I'},
+        {"io-config",     required_argument, 0, 'g'},
         {0, 0, 0, 0}
     };
     
@@ -78,7 +81,7 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
     int c;
     
     // 解析选项
-    while ((c = getopt_long(argc, argv, "hvc:r:io:dVOsL:e:C:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "hvc:r:io:dVOsL:e:C:Ig:", long_options, &option_index)) != -1) {
         switch (c) {
             case 'h':
                 options->mode = MODE_HELP;
@@ -154,6 +157,14 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
                     }
                     options->cycle_time_ms = (int)cycle_ms;
                 }
+                break;
+                
+            case 'I':
+                options->use_io_simulator = true;
+                break;
+                
+            case 'g':
+                options->io_config_file = optarg;
                 break;
                 
             case '?':
@@ -237,6 +248,9 @@ void cli_print_help(void) {
     printf("运行模式专用选项:\n");
     printf("  -e, --entry <function>  指定入口函数名（默认：main，不区分大小写）\n");
     printf("  -C, --cycle <ms>        指定执行周期（毫秒，默认：0表示单次执行）\n\n");
+    printf("I/O 选项:\n");
+    printf("  -I, --io-simulator      启用IO模拟器（无需真实硬件）\n");
+    printf("  --io-config <file>      指定IO配置文件（JSON格式）\n\n");
     printf("示例:\n");
     printf("  stvm program.st                    # 编译并运行program.st\n");
     printf("  stvm program.stbc                  # 运行字节码\n");
@@ -244,6 +258,8 @@ void cli_print_help(void) {
     printf("  stvm -c program.st -o prog.stbc    # 编译并指定输出文件\n");
     printf("  stvm -r prog.stbc                  # 运行字节码\n");
     printf("  stvm -r prog.stbc -e MAIN -C 500   # 运行，入口函数MAIN，周期500ms\n");
+    printf("  stvm program.st -I                 # 使用IO模拟器运行\n");
+    printf("  stvm io_blink.st -I -C 100         # IO模拟器，周期100ms\n");
     printf("  stvm program.st -d                 # 调试模式运行\n");
     printf("  stvm -i                            # 启动REPL\n");
 }
@@ -616,6 +632,62 @@ int cli_run(const CliOptions* options) {
         vm_set_library_manager(vm, libmgr);
     }
     
+    // 初始化IO管理器(如果启用)
+    IOManager* iomgr = NULL;
+    IOHardwareAdapter* io_adapter = NULL;
+    
+    if (options->use_io_simulator) {
+        if (options->verbose) {
+            printf("启用IO模拟器...\n");
+        }
+        
+        // 创建模拟器适配器
+        io_adapter = io_adapter_create_simulator();
+        if (!io_adapter) {
+            fprintf(stderr, "错误：无法创建IO模拟器适配器\n");
+            vm_free(vm);
+            if (libmgr) libmgr_free(libmgr);
+            bytecode_module_free(module);
+            mmgr_cleanup();
+            return 1;
+        }
+        
+        // 创建IO管理器
+        iomgr = io_manager_create(io_adapter);
+        if (!iomgr) {
+            fprintf(stderr, "错误：无法创建IO管理器\n");
+            io_adapter_free_simulator(io_adapter);
+            vm_free(vm);
+            if (libmgr) libmgr_free(libmgr);
+            bytecode_module_free(module);
+            mmgr_cleanup();
+            return 1;
+        }
+        
+        // 设置IO管理器到VM
+        vm_set_io_manager(vm, iomgr);
+        
+        // TODO: 加载IO配置文件 (如果提供)
+        if (options->io_config_file) {
+            if (options->verbose) {
+                printf("加载IO配置文件: %s\n", options->io_config_file);
+            }
+            // 这里需要实现JSON配置文件加载
+            // ErrorCode err = io_manager_load_config(iomgr, options->io_config_file);
+            fprintf(stderr, "警告：IO配置文件加载功能尚未实现\n");
+        }
+        
+        // 启动IO自动刷新(10ms周期)
+        ErrorCode err = io_manager_start_refresh(iomgr, 10000);
+        if (err != OK) {
+            fprintf(stderr, "警告：无法启动IO自动刷新\n");
+        }
+        
+        if (options->verbose) {
+            printf("IO模拟器已启用\n");
+        }
+    }
+    
     FunctionEntry* entry_function = NULL;  // 声明在高作用域
     
     // 如果没有指定入口函数，则从程序入口点执行整个脚本
@@ -764,6 +836,13 @@ int cli_run(const CliOptions* options) {
     }
     
     // 清理
+    if (iomgr) {
+        io_manager_stop_refresh(iomgr);
+        io_manager_free(iomgr);
+    }
+    if (io_adapter) {
+        io_adapter_free_simulator(io_adapter);
+    }
     vm_free(vm);
     if (libmgr) libmgr_free(libmgr);
     bytecode_module_free(module);
@@ -951,6 +1030,60 @@ int cli_compile_and_run(const CliOptions* options) {
     // 设置库管理器（用于运行时查找库函数）
     vm_set_library_manager(vm, libmgr);
 
+    // 初始化IO管理器(如果启用)
+    IOManager* iomgr = NULL;
+    IOHardwareAdapter* io_adapter = NULL;
+    
+    if (options->use_io_simulator) {
+        if (options->verbose) {
+            printf("启用IO模拟器...\n");
+        }
+        
+        // 创建模拟器适配器
+        io_adapter = io_adapter_create_simulator();
+        if (!io_adapter) {
+            fprintf(stderr, "错误：无法创建IO模拟器适配器\n");
+            vm_free(vm);
+            bytecode_module_free(module);
+            libmgr_free(libmgr);
+            mmgr_cleanup();
+            return 1;
+        }
+        
+        // 创建IO管理器
+        iomgr = io_manager_create(io_adapter);
+        if (!iomgr) {
+            fprintf(stderr, "错误：无法创建IO管理器\n");
+            io_adapter_free_simulator(io_adapter);
+            vm_free(vm);
+            bytecode_module_free(module);
+            libmgr_free(libmgr);
+            mmgr_cleanup();
+            return 1;
+        }
+        
+        // 设置IO管理器到VM
+        vm_set_io_manager(vm, iomgr);
+        
+        // TODO: 加载IO配置文件 (如果提供)
+        if (options->io_config_file) {
+            if (options->verbose) {
+                printf("加载IO配置文件: %s\n", options->io_config_file);
+            }
+            fprintf(stderr, "警告：IO配置文件加载功能尚未实现\n");
+        }
+        
+        // 启动IO自动刷新(10ms周期)
+        ErrorCode io_err = io_manager_start_refresh(iomgr, 10000);
+        if (io_err != OK) {
+            fprintf(stderr, "警告：无法启动IO自动刷新\n");
+        }
+        
+        if (options->verbose) {
+            printf("IO模拟器已启用\n");
+        }
+    }
+
     // 执行一次全局变量初始化（从程序入口点执行），然后重置执行状态但保留全局变量
     if (options->verbose) {
         printf("初始化全局变量...\n");
@@ -1095,6 +1228,13 @@ int cli_compile_and_run(const CliOptions* options) {
     }
     
     // 清理
+    if (iomgr) {
+        io_manager_stop_refresh(iomgr);
+        io_manager_free(iomgr);
+    }
+    if (io_adapter) {
+        io_adapter_free_simulator(io_adapter);
+    }
     vm_free(vm);
     bytecode_module_free(module);
     libmgr_free(libmgr);
