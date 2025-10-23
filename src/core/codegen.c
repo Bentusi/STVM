@@ -408,19 +408,21 @@ ErrorCode codegen_function(CodeGenContext* ctx, ASTNode* func_decl) {
     }
     
     // 注册函数名作为返回值变量（IEC 61131-3 特性）
-    // 在参数之后定义
+    // 仅当函数有返回类型时
     const char* func_name = func_decl->data.function_decl.name;
     TypeInfo* return_type = func_sym->type->func_info.return_type;
-    if (!symtbl_define_variable(ctx->symtbl, func_name, return_type, false)) {
-        snprintf(ctx->error_msg, sizeof(ctx->error_msg),
-                "Cannot define return value variable: %s", func_name);
-        ctx->error_code = ERR_NAME;
-        symtbl_leave_scope(ctx->symtbl);
-        return ERR_NAME;
+    if (return_type != NULL) {
+        if (!symtbl_define_variable(ctx->symtbl, func_name, return_type, false)) {
+            snprintf(ctx->error_msg, sizeof(ctx->error_msg),
+                    "Cannot define return value variable: %s", func_name);
+            ctx->error_code = ERR_NAME;
+            symtbl_leave_scope(ctx->symtbl);
+            return ERR_NAME;
+        }
+        // 记录返回值变量的 offset
+        (void)ctx->symtbl->local_var_offset;  // 返回值变量的 offset，当前未使用
+        ctx->local_var_count++;
     }
-    // 记录返回值变量的 offset
-    (void)ctx->symtbl->local_var_offset;  // 返回值变量的 offset，当前未使用
-    ctx->local_var_count++;
     
     // 注册局部变量到符号表（在生成初始化代码之前）
     // 跳过静态变量（is_global=true），它们已在类型检查阶段添加到全局符号表

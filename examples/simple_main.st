@@ -1,3 +1,8 @@
+PROGRAM TestProgram
+VAR
+    result : INT;
+END_VAR
+
 FUNCTION main : INT
 VAR
     x : INT := 42;
@@ -6,9 +11,4 @@ END_VAR
     main := x;
 END_FUNCTION
 
-PROGRAM TestProgram
-VAR
-    result : INT;
-END_VAR
-    result := main();
 END_PROGRAM

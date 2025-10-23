@@ -171,6 +171,9 @@
 <li><a href="#hello-world" id="toc-hello-world">10.1 Hello
 World</a></li>
 <li><a href="#函数示例" id="toc-函数示例">10.2 函数示例</a></li>
+<li><a href="#无返回值函数示例-voidprocedure-风格"
+id="toc-无返回值函数示例-voidprocedure-风格">10.3 无返回值函数示例
+(VOID/PROCEDURE 风格)</a></li>
 <li><a href="#io-映射示例" id="toc-io-映射示例">10.4 I/O
 映射示例</a></li>
 <li><a href="#质量化数据示例" id="toc-质量化数据示例">10.5
@@ -252,6 +255,7 @@ BEGIN
     (* 语句 *)
 END_PROGRAM</code></pre>
 <h3 id="函数结构">1.2 函数结构</h3>
+<p><strong>有返回值的函数</strong>：</p>
 <pre class="st"><code>FUNCTION FunctionName : ReturnType
 VAR_INPUT
     param1 : Type1;
@@ -262,13 +266,17 @@ VAR_LOCAL
 END_VAR
     (* 语句 *)
 END_FUNCTION</code></pre>
-<p>或不带返回值（过程风格）：</p>
+<p><strong>无返回值的函数（PROCEDURE 风格）</strong>：</p>
 <pre class="st"><code>FUNCTION FunctionName
 VAR_INPUT
     param1 : Type1;
 END_VAR
     (* 语句 *)
 END_FUNCTION</code></pre>
+<p>⚠️ <strong>注意</strong>： -
+有返回值的函数通过函数名赋值返回：<code>FunctionName := result;</code> -
+无返回值的函数类似过程（PROCEDURE），只执行操作不返回值 -
+函数调用可以作为独立语句（无返回值或忽略返回值）</p>
 <hr />
 <h2 id="二数据类型">二、数据类型</h2>
 <h3 id="基本数据类型">2.1 基本数据类型</h3>
@@ -723,14 +731,24 @@ END_REPEAT;</code></pre>
 </tr>
 </tbody>
 </table>
-<p>⚠️ <strong>注意</strong>：REPEAT 语法已定义但可能未完全实现</p>
 <h3 id="函数调用">5.5 函数调用</h3>
+<p><strong>在表达式中使用（获取返回值）</strong>：</p>
 <pre class="st"><code>(* 无参数函数 *)
 result := GetValue();
 
 (* 带参数函数 *)
 sum := Add(5, 10);
 result := Calculate(x, y, z);</code></pre>
+<p><strong>作为独立语句（无返回值或忽略返回值）</strong>：</p>
+<pre class="st"><code>(* 调用无返回值函数 - PROCEDURE 风格 *)
+PrintMessage(&#39;Hello&#39;);
+DoSomething();
+
+(* 调用有返回值函数但忽略返回值 *)
+Calculate(x, y);  (* 返回值被忽略 *)</code></pre>
+<p>⚠️ <strong>注意</strong>： -
+有返回值的函数可以在表达式中使用，也可以作为语句调用（忽略返回值） -
+无返回值的函数只能作为语句调用，不能在表达式中使用</p>
 <h3 id="返回语句">5.6 返回语句</h3>
 <pre class="st"><code>(* 无返回值 *)
 RETURN;
@@ -891,6 +909,52 @@ END_FUNCTION
     
     result := Factorial(5);
     PRINT(&#39;Factorial: %d\n&#39;, result);
+END_PROGRAM</code></pre>
+<h3 id="无返回值函数示例-voidprocedure-风格">10.3 无返回值函数示例
+(VOID/PROCEDURE 风格)</h3>
+<pre class="st"><code>PROGRAM VoidFunctionDemo
+VAR
+    result : INT := 0;
+END_VAR
+
+(* 无返回值函数 - 简单打印 *)
+FUNCTION PrintHeader
+    PRINT(&#39;===================\n&#39;);
+    PRINT(&#39;  STVM Demo\n&#39;);
+    PRINT(&#39;===================\n&#39;);
+END_FUNCTION
+
+(* 无返回值函数 - 带参数 *)
+FUNCTION PrintValue
+VAR_INPUT
+    label : STRING;
+    value : INT;
+END_VAR
+    PRINT(&#39;%s: %d\n&#39;, label, value);
+END_FUNCTION
+
+(* 有返回值函数 - 对比 *)
+FUNCTION Multiply : INT
+VAR_INPUT
+    x : INT;
+    y : INT;
+END_VAR
+    Multiply := x * y;
+END_FUNCTION
+
+BEGIN
+    (* 调用无返回值函数 - 只能作为语句 *)
+    PrintHeader();
+    PrintValue(&#39;Test Value&#39;, 42);
+    
+    (* 调用有返回值函数 - 获取返回值 *)
+    result := Multiply(6, 7);
+    PRINT(&#39;Result: %d\n&#39;, result);
+    
+    (* 调用有返回值函数 - 忽略返回值 *)
+    Multiply(3, 4);
+    
+    PrintHeader();
 END_PROGRAM</code></pre>
 <h3 id="io-映射示例">10.4 I/O 映射示例</h3>
 <pre class="st"><code>PROGRAM LEDBlink
@@ -1135,14 +1199,14 @@ var x : int;        (* ✓ *)</code></pre>
 <hr />
 <h2 id="十四编译和运行">十四、编译和运行</h2>
 <h3 id="编译源文件">14.1 编译源文件</h3>
-<div class="sourceCode" id="cb69"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb69-1"><a href="#cb69-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> input.st <span class="at">-o</span> output.stbc</span></code></pre></div>
-<h3 id="直接运行">14.2 直接运行</h3>
-<div class="sourceCode" id="cb70"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb70-1"><a href="#cb70-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> input.st</span></code></pre></div>
-<h3 id="运行字节码">14.3 运行字节码</h3>
 <div class="sourceCode" id="cb71"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> output.stbc</span></code></pre></div>
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb71-1"><a href="#cb71-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> input.st <span class="at">-o</span> output.stbc</span></code></pre></div>
+<h3 id="直接运行">14.2 直接运行</h3>
+<div class="sourceCode" id="cb72"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb72-1"><a href="#cb72-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> input.st</span></code></pre></div>
+<h3 id="运行字节码">14.3 运行字节码</h3>
+<div class="sourceCode" id="cb73"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb73-1"><a href="#cb73-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./stvm</span> output.stbc</span></code></pre></div>
 <hr />
 <h2 id="十五版本信息">十五、版本信息</h2>
 <ul>
@@ -1163,8 +1227,9 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb71-1"><a href=
 </ul></li>
 </ul>
 <hr />
-<p><strong>文档版本</strong>: 1.1<br />
+<p><strong>文档版本</strong>: 1.2<br />
 <strong>最后更新</strong>: 2025-10-23<br />
-<strong>更新内容</strong>: 完善 REPEAT…UNTIL 循环支持</p>
+<strong>更新内容</strong>: - v1.1: 完善 REPEAT…UNTIL 循环支持 - v1.2:
+完善无返回值函数（VOID/PROCEDURE 风格）支持，函数调用可作为独立语句</p>
 </body>
 </html>

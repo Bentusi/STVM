@@ -546,6 +546,34 @@ statement:
     | case_stmt     { $$ = $1; }
     | return_stmt   { $$ = $1; }
     | print_stmt    { $$ = $1; }
+    | TOKEN_IDENTIFIER TOKEN_LPAREN argument_list TOKEN_RPAREN TOKEN_SEMICOLON
+    {
+        // 函数调用语句（无返回值或忽略返回值）
+        int arg_count = 0;
+        ASTNode* arg = $3;
+        while (arg) {
+            arg_count++;
+            arg = arg->next;
+        }
+        
+        ASTNode** args = NULL;
+        if (arg_count > 0) {
+            args = (ASTNode**)mmgr_alloc(sizeof(ASTNode*) * arg_count);
+            arg = $3;
+            for (int i = 0; i < arg_count; i++) {
+                args[i] = arg;
+                arg = arg->next;
+                args[i]->next = NULL;
+            }
+        }
+        
+        $$ = ast_create_function_call($1, args, arg_count);
+    }
+    | TOKEN_IDENTIFIER TOKEN_LPAREN TOKEN_RPAREN TOKEN_SEMICOLON
+    {
+        // 无参数的函数调用语句
+        $$ = ast_create_function_call($1, NULL, 0);
+    }
     | TOKEN_SEMICOLON { $$ = NULL; } /* 空语句 */
     ;
 

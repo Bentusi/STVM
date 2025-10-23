@@ -34,7 +34,34 @@ END_VAR
     Factorial := temp;
 END_FUNCTION
 
-FUNCTION MAIN : INT
+// 实现带质量位的三取二逻辑
+// 任意质量为异常则退出表决，退化为二取一，如果两个质量异常则直接用质量为好的输出
+FUNCTION vote_2oo3 : QBOOL
+VAR_INPUT
+    a : QBOOL;
+    b : QBOOL;
+    c : QBOOL;
+END_VAR
+    IF a.quality = 0 AND b.quality = 0 THEN
+        vote_2oo3 := a;
+    ELSIF a.quality = 0 AND c.quality = 0 THEN
+        vote_2oo3 := a;
+    ELSIF b.quality = 0 AND c.quality = 0 THEN
+        vote_2oo3 := b;
+    ELSIF a.quality = 1 THEN
+        vote_2oo3 := a;
+    ELSIF b.quality = 1 THEN
+        vote_2oo3 := b;
+    ELSIF c.quality = 1 THEN
+        vote_2oo3 := c;
+    ELSE
+        // 全部异常，返回0并标记异常
+        vote_2oo3 := FALSE;
+        vote_2oo3.quality := 1;
+    END_IF;
+END_FUNCTION
+
+FUNCTION MAIN
     (* 调用函数 *)
     result := Add(a, b);
     fact := Factorial(5);
@@ -42,8 +69,6 @@ FUNCTION MAIN : INT
     PRINT("fact: %d\n", fact);
     sum := sum + 1;
     PRINT("SUM := %d\n", sum);
-
-    RETURN 0;
 END_FUNCTION
 
 END_PROGRAM
