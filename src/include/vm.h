@@ -154,6 +154,7 @@ ErrorCode vm_get_result(VM* vm, Value* result);
  * @param vm 虚拟机实例
  */
 void vm_reset(VM* vm);
+void vm_reset_execution_state(VM* vm);
 
 /**
  * @brief 打印虚拟机状态（调试用）

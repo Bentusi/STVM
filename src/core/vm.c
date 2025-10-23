@@ -195,6 +195,24 @@ void vm_reset(VM* vm) {
 }
 
 /**
+ * @brief 重置虚拟机执行状态但保留全局变量
+ * @param vm 虚拟机实例
+ */
+void vm_reset_execution_state(VM* vm) {
+    if (!vm) return;
+    
+    vm->sp = -1;
+    vm->call_sp = -1;
+    vm->pc = 0;
+    vm->running = false;
+    vm->error_code = OK;
+    vm->error_msg[0] = '\0';
+    vm->instruction_count = 0;
+    
+    // 注意：不重置全局变量，保持它们的值用于周期执行
+}
+
+/**
  * @brief 获取局部变量或全局变量
  */
 static inline Value* vm_get_variable(VM* vm, uint16_t index, bool is_global) {

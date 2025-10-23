@@ -6,6 +6,7 @@ VAR
     b : INT := 3;
     result : INT;
     fact : INT;
+    sum : INT :=0;
 END_VAR
 
 (* 计算两个数的和 *)
@@ -33,7 +34,14 @@ END_VAR
     Factorial := temp;
 END_FUNCTION
 
+FUNCTION MAIN: INT
     (* 调用函数 *)
     result := Add(a, b);
     fact := Factorial(5);
+    PRINT("result: %d\n", result);
+    PRINT("fact: %d\n", fact);
+    sum := sum + 1;
+    PRINT("SUM := %d\n", sum);
+END_FUNCTION
+
 END_PROGRAM

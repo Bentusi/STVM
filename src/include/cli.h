@@ -42,6 +42,8 @@ typedef struct {
     bool static_link;               // 静态链接库（将库代码合并到输出）
     char* library_paths[16];        // 库搜索路径
     int library_path_count;         // 库路径数量
+    char* entry_function;           // 入口函数名（运行模式专用）
+    int cycle_time_ms;              // 执行周期（毫秒，运行模式专用）
 } CliOptions;
 
 /**

@@ -19,6 +19,15 @@
 #include <string.h>
 #include <errno.h>
 #include <getopt.h>
+#include <strings.h>
+#include <unistd.h>
+
+#ifdef _POSIX_C_SOURCE
+#if _POSIX_C_SOURCE < 200112L
+#undef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200112L
+#endif
+#endif
 
 // 版本信息
 #define STVM_VERSION_MAJOR 1
@@ -38,6 +47,8 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
     // 初始化默认值
     memset(options, 0, sizeof(CliOptions));
     options->mode = MODE_HELP;
+    options->entry_function = NULL;  // 默认为NULL，运行时设为"main"
+    options->cycle_time_ms = 0;   // 默认执行一次
     
     if (argc < 2) {
         return true; // 显示帮助
@@ -58,6 +69,8 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
         {"dump-bytecode", no_argument,       0, 'B'},
         {"stats",         no_argument,       0, 's'},
         {"static",        no_argument,       0, 'S'},
+        {"entry",         required_argument, 0, 'e'},
+        {"cycle",         required_argument, 0, 'C'},
         {0, 0, 0, 0}
     };
     
@@ -65,7 +78,7 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
     int c;
     
     // 解析选项
-    while ((c = getopt_long(argc, argv, "hvc:r:io:dVOsL:", long_options, &option_index)) != -1) {
+    while ((c = getopt_long(argc, argv, "hvc:r:io:dVOsL:e:C:", long_options, &option_index)) != -1) {
         switch (c) {
             case 'h':
                 options->mode = MODE_HELP;
@@ -124,6 +137,22 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
             case 'L':
                 if (options->library_path_count < 16) {
                     options->library_paths[options->library_path_count++] = optarg;
+                }
+                break;
+                
+            case 'e':
+                options->entry_function = optarg;
+                break;
+                
+            case 'C':
+                {
+                    char* endptr;
+                    long cycle_ms = strtol(optarg, &endptr, 10);
+                    if (*endptr != '\0' || cycle_ms < 0 || cycle_ms > 3600000) { // 允许0-3600000毫秒
+                        fprintf(stderr, "错误：无效的执行周期 '%s'（应为0-3600000毫秒，0表示单次执行）\n", optarg);
+                        return false;
+                    }
+                    options->cycle_time_ms = (int)cycle_ms;
                 }
                 break;
                 
@@ -205,14 +234,18 @@ void cli_print_help(void) {
     printf("  -L <path>               添加库搜索路径\n");
     printf("  --dump-ast              打印抽象语法树\n");
     printf("  --dump-bytecode         打印字节码\n\n");
+    printf("运行模式专用选项:\n");
+    printf("  -e, --entry <function>  指定入口函数名（默认：main，不区分大小写）\n");
+    printf("  -C, --cycle <ms>        指定执行周期（毫秒，默认：0表示单次执行）\n\n");
     printf("示例:\n");
-    printf("  stvm program.st                  # 编译并运行program.st\n");
-    printf("  stvm program.stbc                # 运行字节码\n");
-    printf("  stvm -c program.st               # 仅编译program.st\n");
-    printf("  stvm -c program.st -o prog.stbc  # 编译并指定输出文件\n");
-    printf("  stvm -r prog.stbc                # 运行字节码\n");
-    printf("  stvm program.st -d               # 调试模式运行\n");
-    printf("  stvm -i                          # 启动REPL\n");
+    printf("  stvm program.st                    # 编译并运行program.st\n");
+    printf("  stvm program.stbc                  # 运行字节码\n");
+    printf("  stvm -c program.st                 # 仅编译program.st\n");
+    printf("  stvm -c program.st -o prog.stbc    # 编译并指定输出文件\n");
+    printf("  stvm -r prog.stbc                  # 运行字节码\n");
+    printf("  stvm -r prog.stbc -e MAIN -C 500   # 运行，入口函数MAIN，周期500ms\n");
+    printf("  stvm program.st -d                 # 调试模式运行\n");
+    printf("  stvm -i                            # 启动REPL\n");
 }
 
 /**
@@ -522,14 +555,7 @@ int cli_run(const CliOptions* options) {
         mmgr_cleanup();
         return 1;
     }
-    
-    if (options->verbose) {
-        printf("字节码加载完成\n");
-        printf("入口点: %d\n", module->entry_point);
-        printf("全局变量数: %d\n", module->global_count);
-        printf("库依赖数: %d\n", module->library_dep_count);
-    }
-    
+
     // 加载库依赖(新增)
     LibraryManager* libmgr = NULL;
     if (module->library_dep_count > 0) {
@@ -590,45 +616,150 @@ int cli_run(const CliOptions* options) {
         vm_set_library_manager(vm, libmgr);
     }
     
-    // 调试模式
-    if (options->debug) {
+    FunctionEntry* entry_function = NULL;  // 声明在高作用域
+    
+    // 如果没有指定入口函数，则从程序入口点执行整个脚本
+    if (!options->entry_function) {
         if (options->verbose) {
-            printf("启动调试器...\n");
+            printf("未指定入口函数，从程序入口点执行完整脚本\n");
         }
         
-        Debugger* debugger = debugger_create(vm);
-        if (!debugger) {
-            fprintf(stderr, "错误：无法创建调试器\n");
-            vm_free(vm);
-            bytecode_module_free(module);
-            mmgr_cleanup();
-            return 1;
-        }
-        
-        exit_code = debugger_run(debugger);
-        debugger_free(debugger);
-    } else {
-        // 正常执行
-        if (options->verbose) {
-            printf("开始执行...\n");
-        }
-        
-        ErrorCode err = vm_run(vm);
+        // 执行完整程序（包括全局变量初始化和所有代码）
+        ErrorCode err = vm_run_from(vm, module->entry_point);
         if (err != OK) {
             fprintf(stderr, "运行时错误: %s\n", vm->error_msg);
             exit_code = 1;
         } else if (options->verbose) {
-            printf("执行完成\n");
+            printf("脚本执行完成\n");
+        }
+    } else {
+        // 指定了入口函数，按原有逻辑执行
+        const char* entry_name = options->entry_function;
+        
+        if (options->verbose) {
+            printf("字节码加载完成\n");
+            printf("入口点: %d\n", module->entry_point);
+            printf("全局变量数: %d\n", module->global_count);
+            printf("库依赖数: %d\n", module->library_dep_count);
+            printf("指定入口函数: %s\n", entry_name);
+            printf("执行周期: %d 毫秒\n", options->cycle_time_ms);
         }
         
-        // 显示统计信息
-        if (options->statistics) {
-            printf("\n=== 统计信息 ===\n");
-            printf("执行指令数: %lu\n", (unsigned long)vm->instruction_count);
+        // 查找指定的入口函数
+        entry_function = bytecode_find_function(module, entry_name);
+        if (!entry_function) {
+            // 尝试不区分大小写的查找
+            bool found = false;
+            for (uint32_t i = 0; i < module->function_count; i++) {
+                FunctionEntry* func = &module->functions[i];
+                if (strcasecmp(func->name, entry_name) == 0) {
+                    entry_function = func;
+                    found = true;
+                    break;
+                }
+            }
             
-            const MemoryStats* stats = mmgr_get_stats();
-            printf("内存使用: %zu 字节\n", stats->total_allocated);
-            printf("内存峰值: %zu 字节\n", stats->peak_usage);
+            if (!found) {
+                fprintf(stderr, "错误：找不到入口函数 '%s'\n", entry_name);
+                fprintf(stderr, "可用函数列表:\n");
+                for (uint32_t i = 0; i < module->function_count; i++) {
+                    fprintf(stderr, "  %s\n", module->functions[i].name);
+                }
+                vm_free(vm);
+                if (libmgr) libmgr_free(libmgr);
+                bytecode_module_free(module);
+                mmgr_cleanup();
+                return 1;
+            }
+        }
+        
+        if (entry_function && options->verbose) {
+            printf("找到入口函数: %s (地址: %d)\n", entry_function->name, entry_function->address);
+        }
+    }
+    
+    // 只有在指定了入口函数时才执行调试或正常执行模式
+    if (entry_function) {
+        // 调试模式
+        if (options->debug) {
+            if (options->verbose) {
+                printf("启动调试器...\n");
+            }
+            
+            Debugger* debugger = debugger_create(vm);
+            if (!debugger) {
+                fprintf(stderr, "错误：无法创建调试器\n");
+                vm_free(vm);
+                if (libmgr) libmgr_free(libmgr);
+                bytecode_module_free(module);
+                mmgr_cleanup();
+                return 1;
+            }
+            
+            // 设置入口点为指定函数
+            vm->pc = entry_function->address;
+            
+            exit_code = debugger_run(debugger);
+            debugger_free(debugger);
+        } else {
+            // 正常执行模式 - 支持周期性执行
+            if (options->verbose) {
+                printf("开始执行...\n");
+            }
+            
+            // 如果执行周期大于0，则进行周期性执行；等于0则单次执行
+            if (options->cycle_time_ms > 0) {
+                printf("周期性执行模式 - 每 %d 毫秒执行一次函数 '%s'\n", 
+                       options->cycle_time_ms, entry_function->name);
+                printf("按 Ctrl+C 停止执行\n\n");
+                
+                uint64_t cycle_count = 0;
+                while (true) {
+                    // 重置VM执行状态但保留全局变量
+                    vm_reset_execution_state(vm);
+                    
+                    if (options->verbose) {
+                        printf("执行周期 %lu 开始...\n", cycle_count + 1);
+                    }
+                    
+                    // 执行一次函数
+                    ErrorCode err = vm_run_from(vm, entry_function->address);
+                    if (err != OK) {
+                        fprintf(stderr, "运行时错误 (周期 %lu): %s\n", cycle_count + 1, vm->error_msg);
+                        // 在周期性执行中，继续下一个周期而不是退出
+                        if (options->verbose) {
+                            printf("忽略错误，继续执行下一个周期...\n");
+                        }
+                    } else if (options->verbose) {
+                        printf("周期 %lu 执行完成\n", cycle_count + 1);
+                    }
+                    
+                    cycle_count++;
+                    
+                    // 等待指定的时间间隔
+                    usleep(options->cycle_time_ms * 1000); // 转换为微秒
+                }
+            } else {
+                // 单次执行模式
+                // 直接调用 vm_run_from 使用指定的入口函数地址
+                ErrorCode err = vm_run_from(vm, entry_function->address);
+                if (err != OK) {
+                    fprintf(stderr, "运行时错误: %s\n", vm->error_msg);
+                    exit_code = 1;
+                } else if (options->verbose) {
+                    printf("执行完成\n");
+                }
+            }
+            
+            // 显示统计信息
+            if (options->statistics) {
+                printf("\n=== 统计信息 ===\n");
+                printf("执行指令数: %lu\n", (unsigned long)vm->instruction_count);
+                
+                const MemoryStats* stats = mmgr_get_stats();
+                printf("内存使用: %zu 字节\n", stats->total_allocated);
+                printf("内存峰值: %zu 字节\n", stats->peak_usage);
+            }
         }
     }
     
@@ -819,43 +950,147 @@ int cli_compile_and_run(const CliOptions* options) {
     
     // 设置库管理器（用于运行时查找库函数）
     vm_set_library_manager(vm, libmgr);
-    
-    // 调试模式
-    if (options->debug) {
+
+    // 执行一次全局变量初始化（从程序入口点执行），然后重置执行状态但保留全局变量
+    if (options->verbose) {
+        printf("初始化全局变量...\n");
+    }
+    ErrorCode init_err = vm_run_from(vm, module->entry_point);
+    if (init_err != OK) {
         if (options->verbose) {
-            printf("启动调试器...\n");
+            printf("全局变量初始化完成（程序结束或错误）：%s\n", vm->error_msg);
         }
-        
-        Debugger* debugger = debugger_create(vm);
-        if (!debugger) {
-            fprintf(stderr, "错误：无法创建调试器\n");
-            vm_free(vm);
-            bytecode_module_free(module);
-            mmgr_cleanup();
-            return 1;
-        }
-        
-        exit_code = debugger_run(debugger);
-        debugger_free(debugger);
     } else {
-        // 正常执行
-        err = vm_run(vm);
+        if (options->verbose) {
+            printf("全局变量初始化完成\n");
+        }
+    }
+    vm_reset_execution_state(vm);
+    
+    // 如果没有指定入口函数，则从程序入口点执行整个脚本
+    if (!options->entry_function) {
+        if (options->verbose) {
+            printf("未指定入口函数，从程序入口点执行完整脚本\n");
+        }
+        
+        // 执行完整程序（包括全局变量初始化和所有代码）
+        ErrorCode err = vm_run_from(vm, module->entry_point);
         if (err != OK) {
             fprintf(stderr, "运行时错误: %s\n", vm->error_msg);
             exit_code = 1;
         } else if (options->verbose) {
-            printf("执行完成\n");
+            printf("脚本执行完成\n");
+        }
+    } else {
+        // 指定了入口函数，按原有逻辑执行
+        const char* entry_name = options->entry_function;
+        
+        // 查找指定的入口函数
+        FunctionEntry* entry_function = bytecode_find_function(module, entry_name);
+        if (!entry_function) {
+            // 尝试不区分大小写的查找
+            bool found = false;
+            for (uint32_t i = 0; i < module->function_count; i++) {
+                FunctionEntry* func = &module->functions[i];
+                if (strcasecmp(func->name, entry_name) == 0) {
+                    entry_function = func;
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found) {
+                fprintf(stderr, "错误：找不到入口函数 '%s'\n", entry_name);
+                fprintf(stderr, "可用函数列表:\n");
+                for (uint32_t i = 0; i < module->function_count; i++) {
+                    fprintf(stderr, "  %s\n", module->functions[i].name);
+                }
+                vm_free(vm);
+                bytecode_module_free(module);
+                libmgr_free(libmgr);
+                mmgr_cleanup();
+                return 1;
+            }
         }
         
-        // 显示统计信息
-        if (options->statistics) {
-            printf("\n=== 统计信息 ===\n");
-            printf("指令数量: %d\n", module->instruction_count);
-            printf("执行指令数: %lu\n", (unsigned long)vm->instruction_count);
+        if (options->verbose) {
+            printf("找到入口函数: %s (地址: %d)\n", entry_function->name, entry_function->address);
+            printf("执行周期: %d 毫秒\n", options->cycle_time_ms);
+        }
+        
+        // 调试模式
+        if (options->debug) {
+            if (options->verbose) {
+                printf("启动调试器...\n");
+            }
             
-            const MemoryStats* stats = mmgr_get_stats();
-            printf("内存使用: %zu 字节\n", stats->total_allocated);
-            printf("内存峰值: %zu 字节\n", stats->peak_usage);
+            Debugger* debugger = debugger_create(vm);
+            if (!debugger) {
+                fprintf(stderr, "错误：无法创建调试器\n");
+                vm_free(vm);
+                bytecode_module_free(module);
+                mmgr_cleanup();
+                return 1;
+            }
+            
+            // 设置入口点为指定函数
+            vm->pc = entry_function->address;
+            
+            exit_code = debugger_run(debugger);
+            debugger_free(debugger);
+        } else {
+            // 正常执行模式 - 支持周期性执行
+            if (options->cycle_time_ms > 0) {
+                printf("周期性执行模式 - 每 %d 毫秒执行一次函数 '%s'\n", 
+                       options->cycle_time_ms, entry_function->name);
+                printf("按 Ctrl+C 停止执行\n\n");
+                
+                uint64_t cycle_count = 0;
+                while (true) {
+                    // 重置VM状态到入口函数（保留全局变量）
+                    vm_reset_execution_state(vm);
+                    
+                    if (options->verbose) {
+                        printf("执行周期 %lu 开始...\n", cycle_count + 1);
+                    }
+                    
+                    // 执行一次函数
+                    ErrorCode err = vm_run_from(vm, entry_function->address);
+                    if (err != OK) {
+                        fprintf(stderr, "运行时错误 (周期 %lu): %s\n", cycle_count + 1, vm->error_msg);
+                        if (options->verbose) {
+                            printf("忽略错误，继续执行下一个周期...\n");
+                        }
+                    } else if (options->verbose) {
+                        printf("周期 %lu 执行完成\n", cycle_count + 1);
+                    }
+                    
+                    cycle_count++;
+                    
+                    // 等待指定的时间间隔
+                    usleep(options->cycle_time_ms * 1000); // 转换为微秒
+                }
+            } else {
+                // 单次执行模式
+                ErrorCode err = vm_run_from(vm, entry_function->address);
+                if (err != OK) {
+                    fprintf(stderr, "运行时错误: %s\n", vm->error_msg);
+                    exit_code = 1;
+                } else if (options->verbose) {
+                    printf("执行完成\n");
+                }
+            }
+            
+            // 显示统计信息
+            if (options->statistics) {
+                printf("\n=== 统计信息 ===\n");
+                printf("指令数量: %d\n", module->instruction_count);
+                printf("执行指令数: %lu\n", (unsigned long)vm->instruction_count);
+                
+                const MemoryStats* stats = mmgr_get_stats();
+                printf("内存使用: %zu 字节\n", stats->total_allocated);
+                printf("内存峰值: %zu 字节\n", stats->peak_usage);
+            }
         }
     }
     
