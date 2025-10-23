@@ -1,0 +1,24 @@
+{
+  "points": [
+    {
+      "address": "%IX0.0",
+      "type": "digital_in",
+      "pin": 27
+    },
+    {
+      "address": "%QX0.0",
+      "type": "digital_out",
+      "pin": 17
+    },
+    {
+      "address": "%IW0",
+      "type": "analog_in",
+      "pin": 0
+    },
+    {
+      "address": "%QW0",
+      "type": "pwm",
+      "pin": 18
+    }
+  ]
+}

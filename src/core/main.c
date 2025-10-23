@@ -667,14 +667,67 @@ int cli_run(const CliOptions* options) {
         // 设置IO管理器到VM
         vm_set_io_manager(vm, iomgr);
         
-        // TODO: 加载IO配置文件 (如果提供)
+        // 加载IO配置文件 (如果提供) 或添加默认IO点
         if (options->io_config_file) {
             if (options->verbose) {
                 printf("加载IO配置文件: %s\n", options->io_config_file);
             }
-            // 这里需要实现JSON配置文件加载
-            // ErrorCode err = io_manager_load_config(iomgr, options->io_config_file);
-            fprintf(stderr, "警告：IO配置文件加载功能尚未实现\n");
+            ErrorCode cfg_err = io_manager_load_config_simple(iomgr, options->io_config_file);
+            if (cfg_err != OK) {
+                fprintf(stderr, "警告：IO配置文件加载失败,使用默认配置\n");
+                // 加载失败，使用默认配置
+                goto add_default_io_points;
+            }
+        } else {
+add_default_io_points:
+            // 添加默认的IO点(用于测试和演示)
+            if (options->verbose) {
+                printf("使用默认IO配置\n");
+            }
+            
+            IOPointConfig io_config;
+            
+            // %IX0.0 - 数字输入
+            IOAddress addr_ix0;
+            io_address_parse("%IX0.0", &addr_ix0);
+            io_config.address = addr_ix0;
+            io_config.device_type = IO_DEV_GPIO_IN;
+            io_config.access_mode = IO_ACCESS_READ;
+            io_config.hardware_path = NULL;
+            io_config.hardware_address = 0;
+            io_config.scale = 1.0;
+            io_config.offset = 0.0;
+            io_config.enable_filter = false;
+            io_config.filter_samples = 1;
+            io_manager_add_point(iomgr, &io_config);
+            
+            // %QX0.0 - 数字输出
+            IOAddress addr_qx0;
+            io_address_parse("%QX0.0", &addr_qx0);
+            io_config.address = addr_qx0;
+            io_config.device_type = IO_DEV_GPIO_OUT;
+            io_config.access_mode = IO_ACCESS_WRITE;
+            io_manager_add_point(iomgr, &io_config);
+            
+            // %IW0 - 模拟输入 (ADC)
+            IOAddress addr_iw0;
+            io_address_parse("%IW0", &addr_iw0);
+            io_config.address = addr_iw0;
+            io_config.device_type = IO_DEV_ADC;
+            io_config.access_mode = IO_ACCESS_READ;
+            io_manager_add_point(iomgr, &io_config);
+            
+            // %QW0 - 模拟输出 (PWM/DAC)
+            IOAddress addr_qw0;
+            io_address_parse("%QW0", &addr_qw0);
+            io_config.address = addr_qw0;
+            io_config.device_type = IO_DEV_PWM;
+            io_config.access_mode = IO_ACCESS_WRITE;
+            io_manager_add_point(iomgr, &io_config);
+            
+            if (options->verbose) {
+                printf("已添加默认IO点: %%IX0.0, %%QX0.0, %%IW0, %%QW0\n");
+            }
         }
         
         // 启动IO自动刷新(10ms周期)
@@ -1065,12 +1118,67 @@ int cli_compile_and_run(const CliOptions* options) {
         // 设置IO管理器到VM
         vm_set_io_manager(vm, iomgr);
         
-        // TODO: 加载IO配置文件 (如果提供)
+        // 加载IO配置文件 (如果提供) 或添加默认IO点
         if (options->io_config_file) {
             if (options->verbose) {
                 printf("加载IO配置文件: %s\n", options->io_config_file);
             }
-            fprintf(stderr, "警告：IO配置文件加载功能尚未实现\n");
+            ErrorCode cfg_err = io_manager_load_config_simple(iomgr, options->io_config_file);
+            if (cfg_err != OK) {
+                fprintf(stderr, "警告：IO配置文件加载失败,使用默认配置\n");
+                // 加载失败，使用默认配置
+                goto add_default_io_points_2;
+            }
+        } else {
+add_default_io_points_2:
+            // 添加默认的IO点(用于测试和演示)
+            if (options->verbose) {
+                printf("使用默认IO配置\n");
+            }
+            
+            IOPointConfig io_config;
+            
+            // %IX0.0 - 数字输入
+            IOAddress addr_ix0;
+            io_address_parse("%IX0.0", &addr_ix0);
+            io_config.address = addr_ix0;
+            io_config.device_type = IO_DEV_GPIO_IN;
+            io_config.access_mode = IO_ACCESS_READ;
+            io_config.hardware_path = NULL;
+            io_config.hardware_address = 0;
+            io_config.scale = 1.0;
+            io_config.offset = 0.0;
+            io_config.enable_filter = false;
+            io_config.filter_samples = 1;
+            io_manager_add_point(iomgr, &io_config);
+            
+            // %QX0.0 - 数字输出
+            IOAddress addr_qx0;
+            io_address_parse("%QX0.0", &addr_qx0);
+            io_config.address = addr_qx0;
+            io_config.device_type = IO_DEV_GPIO_OUT;
+            io_config.access_mode = IO_ACCESS_WRITE;
+            io_manager_add_point(iomgr, &io_config);
+            
+            // %IW0 - 模拟输入 (ADC)
+            IOAddress addr_iw0;
+            io_address_parse("%IW0", &addr_iw0);
+            io_config.address = addr_iw0;
+            io_config.device_type = IO_DEV_ADC;
+            io_config.access_mode = IO_ACCESS_READ;
+            io_manager_add_point(iomgr, &io_config);
+            
+            // %QW0 - 模拟输出 (PWM/DAC)
+            IOAddress addr_qw0;
+            io_address_parse("%QW0", &addr_qw0);
+            io_config.address = addr_qw0;
+            io_config.device_type = IO_DEV_PWM;
+            io_config.access_mode = IO_ACCESS_WRITE;
+            io_manager_add_point(iomgr, &io_config);
+            
+            if (options->verbose) {
+                printf("已添加默认IO点: %%IX0.0, %%QX0.0, %%IW0, %%QW0\n");
+            }
         }
         
         // 启动IO自动刷新(10ms周期)

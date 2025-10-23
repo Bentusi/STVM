@@ -193,4 +193,7 @@ IOPoint* io_manager_get_point(IOManager* mgr, uint32_t index);
 IOHardwareAdapter* io_adapter_create_simulator(void);
 void io_adapter_free_simulator(IOHardwareAdapter* adapter);
 
+// 配置文件加载
+ErrorCode io_manager_load_config_simple(IOManager* mgr, const char* config_file);
+
 #endif // STVM_IOMGR_H
