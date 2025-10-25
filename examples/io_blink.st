@@ -13,6 +13,11 @@
 
 PROGRAM LEDBlink
 
+FUNCTION MAIN
+    PRINT("开始 LED 闪烁示例程序(DUMMY)\n");
+END_FUNCTION
+
+FUNCTION IO_Blink
 VAR_EXTERNAL
     (* 输入：按钮 *)
     button AT %IX0.0 : BOOL;        (* GPIO 27 - 按钮输入 *)
@@ -31,9 +36,10 @@ IF button THEN
     (* 按钮按下，LED闪烁 *)
     blink_timer := blink_timer + 1;
     
-    IF blink_timer >= 500 THEN  (* 500ms 周期 *)
+    IF blink_timer >= 5 THEN  (* 5循环周期 *)
         led_state := NOT led_state;
         led := led_state;
+        PRINT("按钮按下，LED状态切换:%b\n", led_state);
         blink_timer := 0;
     END_IF;
 ELSE
@@ -41,6 +47,8 @@ ELSE
     led := FALSE;
     led_state := FALSE;
     blink_timer := 0;
+    PRINT("按钮未按下，LED熄灭: %b\n", led_state);
 END_IF;
+END_FUNCTION
 
 END_PROGRAM

@@ -632,13 +632,27 @@ int cli_run(const CliOptions* options) {
         vm_set_library_manager(vm, libmgr);
     }
     
-    // 初始化IO管理器(如果启用)
+    // 检测字节码是否包含IO指令
+    bool needs_io_manager = false;
+    for (uint32_t i = 0; i < module->instruction_count; i++) {
+        Instruction* instr = &module->instructions[i];
+        if (instr->opcode == OP_IO_READ || instr->opcode == OP_IO_WRITE) {
+            needs_io_manager = true;
+            break;
+        }
+    }
+    
+    // 初始化IO管理器(如果启用或需要)
     IOManager* iomgr = NULL;
     IOHardwareAdapter* io_adapter = NULL;
     
-    if (options->use_io_simulator) {
+    if (options->use_io_simulator || needs_io_manager) {
         if (options->verbose) {
-            printf("启用IO模拟器...\n");
+            if (options->use_io_simulator) {
+                printf("启用IO模拟器...\n");
+            } else if (needs_io_manager) {
+                printf("检测到IO指令,自动启用IO模拟器...\n");
+            }
         }
         
         // 创建模拟器适配器
@@ -731,7 +745,7 @@ add_default_io_points:
         }
         
         // 启动IO自动刷新(10ms周期)
-        ErrorCode err = io_manager_start_refresh(iomgr, 10000);
+        ErrorCode err = io_manager_start_refresh(iomgr, 1000000);
         if (err != OK) {
             fprintf(stderr, "警告：无法启动IO自动刷新\n");
         }
@@ -1083,13 +1097,27 @@ int cli_compile_and_run(const CliOptions* options) {
     // 设置库管理器（用于运行时查找库函数）
     vm_set_library_manager(vm, libmgr);
 
-    // 初始化IO管理器(如果启用)
+    // 检测字节码是否包含IO指令
+    bool needs_io_manager = false;
+    for (uint32_t i = 0; i < module->instruction_count; i++) {
+        Instruction* instr = &module->instructions[i];
+        if (instr->opcode == OP_IO_READ || instr->opcode == OP_IO_WRITE) {
+            needs_io_manager = true;
+            break;
+        }
+    }
+    
+    // 初始化IO管理器(如果启用或需要)
     IOManager* iomgr = NULL;
     IOHardwareAdapter* io_adapter = NULL;
     
-    if (options->use_io_simulator) {
+    if (options->use_io_simulator || needs_io_manager) {
         if (options->verbose) {
-            printf("启用IO模拟器...\n");
+            if (options->use_io_simulator) {
+                printf("启用IO模拟器...\n");
+            } else if (needs_io_manager) {
+                printf("检测到IO指令,自动启用IO模拟器...\n");
+            }
         }
         
         // 创建模拟器适配器
@@ -1182,7 +1210,7 @@ add_default_io_points_2:
         }
         
         // 启动IO自动刷新(10ms周期)
-        ErrorCode io_err = io_manager_start_refresh(iomgr, 10000);
+        ErrorCode io_err = io_manager_start_refresh(iomgr, 1000000);
         if (io_err != OK) {
             fprintf(stderr, "警告：无法启动IO自动刷新\n");
         }

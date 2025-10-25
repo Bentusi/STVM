@@ -2,7 +2,7 @@
   "io_config": {
     "platform": "linux",
     "auto_refresh": true,
-    "refresh_cycle_us": 10000,
+    "refresh_cycle_us": 5000000,
     
     "points": [
       {
@@ -10,8 +10,8 @@
         "address": "%IX0.0",
         "type": "digital_in",
         "hardware": {
-          "path": "/sys/class/gpio/gpio27",
-          "pin": 27
+          "path": "/sys/class/gpio/gpio1",
+          "pin": 1
         },
         "properties": {
           "invert": false,
@@ -22,8 +22,8 @@
         "address": "%QX0.0",
         "type": "digital_out",
         "hardware": {
-          "path": "/sys/class/gpio/gpio17",
-          "pin": 17
+          "path": "/sys/class/gpio/gpio100",
+          "pin": 100
         },
         "properties": {
           "force_write": false,
