@@ -176,7 +176,7 @@ release: CFLAGS += $(RELEASE_FLAGS)
 release: clean all
 
 # Run all tests
-test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr test_bitops
+test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_codegen test_vm test_libmgr test_bitops test_hotreload test_io_manager
 	@echo ""
 	@echo "=== Running Memory Manager Tests ==="
 	@./$(BIN_DIR)/test_mmgr
@@ -209,7 +209,13 @@ test: test_mmgr test_types test_bytecode test_ast test_symtbl test_parser test_c
 	@./$(BIN_DIR)/test_bitops
 	@echo ""
 	@echo "=== Running Hot Reload Tests ==="
-	@./$(BIN_DIR)/test_hotreload examples/hotreload_v1.stbc examples/hotreload_v2.stbc
+	@if [ -f examples/hotreload_v1.stbc ] && [ -f examples/hotreload_v2.stbc ]; then \
+		./$(BIN_DIR)/test_hotreload examples/hotreload_v1.stbc examples/hotreload_v2.stbc; \
+	else \
+		echo "Skipping hot reload tests (bytecode files not found)"; \
+		echo "Run: ./build/bin/stvm -c examples/hotreload_v1.st -o examples/hotreload_v1.stbc"; \
+		echo "     ./build/bin/stvm -c examples/hotreload_v2.st -o examples/hotreload_v2.stbc"; \
+	fi
 	@echo ""
 	@echo "=== Running I/O Manager Tests ==="
 	@./$(BIN_DIR)/test_io_manager

@@ -1,7 +1,7 @@
 PROGRAM IOTest
 VAR_EXTERNAL
-    button : BOOL AT "%IX0.0";
-    led : BOOL AT "%QX0.0";
+    button  AT "%IX0.0" : BOOL;
+    led  AT "%QX0.0" : BOOL;
 END_VAR
 
 BEGIN

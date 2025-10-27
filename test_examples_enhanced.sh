@@ -147,7 +147,17 @@ test_file() {
     
     # 步骤 2: 执行字节码
     local exit_code=0
-    if ! timeout 5s "$STVM_BIN" -r "$stbc_file" > "$log_file" 2> "$err_file"; then
+    local run_cmd="$STVM_BIN -r $stbc_file"
+    
+    # 如果是 IO 测试文件，添加 -I 参数和 IO 配置
+    if [[ "$basename" == io_* ]]; then
+        local io_config="$EXAMPLES_DIR/io_config.json"
+        if [ -f "$io_config" ]; then
+            run_cmd="$STVM_BIN -I --io-config $io_config -r $stbc_file"
+        fi
+    fi
+    
+    if ! timeout 5s $run_cmd > "$log_file" 2> "$err_file"; then
         exit_code=$?
         
         if [ $exit_code -eq 124 ]; then

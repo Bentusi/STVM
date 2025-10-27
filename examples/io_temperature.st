@@ -1,4 +1,4 @@
-/**
+(**
  * @file example_io_adc.st
  * @brief ADC 模拟输入示例 - 温度监控
  * 
@@ -11,7 +11,7 @@
  * - 读取温度传感器值
  * - 温度过高时启动风扇
  * - 温度危险时触发报警
- */
+ *)
 
 PROGRAM TemperatureMonitor
 
@@ -26,7 +26,7 @@ END_VAR
 
 VAR
     temperature : REAL;             (* 实际温度 (摄氏度) *)
-    fan_speed : INT;                (* 风扇速度百分比 *)
+    fan_speed : REAL;                (* 风扇速度百分比 *)
     
     (* 温度阈值 *)
     TEMP_FAN_ON : REAL := 30.0;     (* 30°C 启动风扇 *)
@@ -35,20 +35,20 @@ VAR
 END_VAR
 
 (* ADC 转温度：假设 0-4095 对应 0-100°C *)
-temperature := INT_TO_REAL(temp_raw) * 100.0 / 4095.0;
+temperature := temp_raw * 100.0 / 4095.0;
 
 (* 风扇控制逻辑 *)
 IF temperature < TEMP_FAN_ON THEN
     (* 温度正常，风扇关闭 *)
-    fan_speed := 0;
+    fan_speed := 0.0;
     
 ELSIF temperature >= TEMP_FAN_ON AND temperature < TEMP_MAX THEN
     (* 温度升高，风扇线性加速 *)
-    fan_speed := REAL_TO_INT((temperature - TEMP_FAN_ON) / (TEMP_MAX - TEMP_FAN_ON) * 100.0);
+    fan_speed := (temperature - TEMP_FAN_ON) / (TEMP_MAX - TEMP_FAN_ON) * 100.0;
     
 ELSE
     (* 温度过高，风扇全速 *)
-    fan_speed := 100;
+    fan_speed := 100.0;
 END_IF;
 
 (* 输出风扇速度 *)
@@ -62,6 +62,6 @@ ELSE
 END_IF;
 
 (* 调试输出 *)
-PRINT("Temperature: %.1f C, Fan: %d%%", temperature, fan_speed);
+PRINT("Temperature: %.1f C, Fan: %.1f%%", temperature, fan_speed);
 
 END_PROGRAM
