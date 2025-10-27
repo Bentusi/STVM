@@ -163,6 +163,12 @@ $(BIN_DIR)/test_hotreload_integration: $(TESTS_DIR)/test_hotreload_integration.c
 	@echo "Building test_hotreload_integration..."
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_force: $(BIN_DIR)/test_force
+
+$(BIN_DIR)/test_force: $(TESTS_DIR)/test_force.c $(OBJ_DIR)/force.o $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o | dirs
+	@echo "Building test_force..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Main programs
 stvm: $(BIN_DIR)/stvm
 

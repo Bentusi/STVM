@@ -15,6 +15,7 @@
 #include "builtins.h"
 #include "libmgr.h"
 #include "iomgr.h"
+#include "force.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -120,6 +121,12 @@ VM* vm_create(BytecodeModule* module) {
     vm->hotreload_check_interval = 0;
     vm->instructions_since_check = 0;
     
+    // 初始化变量强制管理器
+    vm->force_mgr = force_manager_create();
+    if (!vm->force_mgr) {
+        fprintf(stderr, "警告：Force Manager 创建失败\n");
+    }
+    
     // 注册内置函数
     if (!builtins_register_all(vm)) {
         fprintf(stderr, "警告：内置函数注册失败\n");
@@ -155,6 +162,12 @@ void vm_free(VM* vm) {
     // 清理热加载管理器
     if (vm->hotreload) {
         vm_disable_hotreload(vm);
+    }
+    
+    // 清理变量强制管理器
+    if (vm->force_mgr) {
+        force_manager_destroy(vm->force_mgr);
+        vm->force_mgr = NULL;
     }
     
     if (vm->stack) mmgr_free(vm->stack);
@@ -221,6 +234,15 @@ static inline Value* vm_get_variable(VM* vm, uint16_t index, bool is_global) {
             vm->error_code = ERR_OUT_OF_BOUNDS;
             return NULL;
         }
+        
+        // 检查是否有强制值
+        if (vm->force_mgr && force_is_forced_by_index(vm->force_mgr, index)) {
+            Value* forced = force_get_forced_value_by_index(vm->force_mgr, index);
+            if (forced) {
+                return forced;
+            }
+        }
+        
         return &vm->globals[index];
     } else {
         // 局部变量：基于当前调用帧的栈帧
@@ -2225,4 +2247,94 @@ Value vm_get_arg(VM* vm, int32_t index) {
     }
     
     return vm->stack[arg_pos];
+}
+
+// ========================= Force (变量强制) API 实现 =========================
+
+/**
+ * @brief 设置虚拟机的变量强制管理器
+ */
+void vm_set_force_manager(VM* vm, struct ForceManager* force_mgr) {
+    if (!vm) return;
+    
+    // 如果已有Force Manager，先销毁
+    if (vm->force_mgr) {
+        force_manager_destroy(vm->force_mgr);
+    }
+    
+    vm->force_mgr = force_mgr;
+}
+
+/**
+ * @brief 获取虚拟机的变量强制管理器
+ */
+struct ForceManager* vm_get_force_manager(VM* vm) {
+    return vm ? vm->force_mgr : NULL;
+}
+
+/**
+ * @brief 通过变量名强制变量值
+ */
+bool vm_force_variable(VM* vm, const char* var_name, Value value, bool persistent) {
+    if (!vm || !vm->force_mgr) return false;
+    return force_variable(vm->force_mgr, var_name, value, persistent);
+}
+
+/**
+ * @brief 通过变量索引强制变量值
+ */
+bool vm_force_variable_by_index(VM* vm, int32_t var_index, Value value, bool persistent) {
+    if (!vm || !vm->force_mgr) return false;
+    return force_variable_by_index(vm->force_mgr, var_index, value, persistent);
+}
+
+/**
+ * @brief 取消变量强制
+ */
+bool vm_unforce_variable(VM* vm, const char* var_name) {
+    if (!vm || !vm->force_mgr) return false;
+    return unforce_variable(vm->force_mgr, var_name);
+}
+
+/**
+ * @brief 取消所有变量强制
+ */
+int32_t vm_unforce_all(VM* vm) {
+    if (!vm || !vm->force_mgr) return 0;
+    return unforce_all(vm->force_mgr);
+}
+
+/**
+ * @brief 检查变量是否被强制
+ */
+bool vm_is_forced(VM* vm, const char* var_name) {
+    if (!vm || !vm->force_mgr) return false;
+    return force_is_forced(vm->force_mgr, var_name);
+}
+
+/**
+ * @brief 打印所有强制的变量状态
+ */
+void vm_print_force_status(VM* vm) {
+    if (!vm || !vm->force_mgr) {
+        printf("Force Manager not available\n");
+        return;
+    }
+    force_print_status(vm->force_mgr);
+}
+
+/**
+ * @brief 启用/禁用变量强制功能
+ */
+void vm_force_enable(VM* vm, bool enabled) {
+    if (!vm || !vm->force_mgr) return;
+    force_enable(vm->force_mgr, enabled);
+}
+
+/**
+ * @brief 检查变量强制功能是否启用
+ */
+bool vm_is_force_enabled(VM* vm) {
+    if (!vm || !vm->force_mgr) return false;
+    return force_is_enabled(vm->force_mgr);
 }

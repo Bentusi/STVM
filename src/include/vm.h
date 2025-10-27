@@ -11,6 +11,7 @@
 struct IOManager;
 struct HotReloadManager;
 struct HotReloadStats;
+struct ForceManager;
 
 /**
  * @brief 调用帧结构 - 保存函数调用上下文
@@ -73,6 +74,9 @@ typedef struct VM {
     bool hotreload_auto_apply;        // 是否自动应用更新
     uint32_t hotreload_check_interval; // 检查间隔（指令数，0=每次循环）
     uint32_t instructions_since_check; // 自上次检查以来的指令数
+    
+    // 变量强制管理器（用于调试时强制变量值）
+    struct ForceManager* force_mgr;
 } VM;
 
 /**
@@ -256,6 +260,85 @@ const struct HotReloadStats* vm_get_hotreload_stats(VM* vm);
  * @param vm 虚拟机实例
  * @return 错误码（仅供内部使用）
  */
-ErrorCode vm_check_hotreload(VM* vm);
+ErrorCode vm_check_hotreload_internal(VM* vm);
+
+// ========================= Force (变量强制) API =========================
+
+/**
+ * @brief 设置虚拟机的变量强制管理器
+ * @param vm 虚拟机实例
+ * @param force_mgr Force管理器实例
+ */
+void vm_set_force_manager(VM* vm, struct ForceManager* force_mgr);
+
+/**
+ * @brief 获取虚拟机的变量强制管理器
+ * @param vm 虚拟机实例
+ * @return Force管理器实例
+ */
+struct ForceManager* vm_get_force_manager(VM* vm);
+
+/**
+ * @brief 通过变量名强制变量值
+ * @param vm 虚拟机实例
+ * @param var_name 变量名
+ * @param value 强制的值
+ * @param persistent 是否持久化（跨循环保持）
+ * @return 是否成功
+ */
+bool vm_force_variable(VM* vm, const char* var_name, Value value, bool persistent);
+
+/**
+ * @brief 通过变量索引强制变量值
+ * @param vm 虚拟机实例
+ * @param var_index 全局变量索引
+ * @param value 强制的值
+ * @param persistent 是否持久化
+ * @return 是否成功
+ */
+bool vm_force_variable_by_index(VM* vm, int32_t var_index, Value value, bool persistent);
+
+/**
+ * @brief 取消变量强制
+ * @param vm 虚拟机实例
+ * @param var_name 变量名
+ * @return 是否成功
+ */
+bool vm_unforce_variable(VM* vm, const char* var_name);
+
+/**
+ * @brief 取消所有变量强制
+ * @param vm 虚拟机实例
+ * @return 取消的强制数量
+ */
+int32_t vm_unforce_all(VM* vm);
+
+/**
+ * @brief 检查变量是否被强制
+ * @param vm 虚拟机实例
+ * @param var_name 变量名
+ * @return 是否被强制
+ */
+bool vm_is_forced(VM* vm, const char* var_name);
+
+/**
+ * @brief 打印所有强制的变量状态
+ * @param vm 虚拟机实例
+ */
+void vm_print_force_status(VM* vm);
+
+/**
+ * @brief 启用/禁用变量强制功能
+ * @param vm 虚拟机实例
+ * @param enabled 是否启用
+ */
+void vm_force_enable(VM* vm, bool enabled);
+
+/**
+ * @brief 检查变量强制功能是否启用
+ * @param vm 虚拟机实例
+ * @return 是否启用
+ */
+bool vm_is_force_enabled(VM* vm);
 
 #endif // STVM_VM_H
