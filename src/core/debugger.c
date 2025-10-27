@@ -13,6 +13,10 @@
 #include "mmgr.h"
 #include "error.h"
 #include "bytecode_io.h"
+#include "force.h"
+
+// 辅助函数：将字符串解析为Value
+static bool parse_value_from_string(const char* type_str, const char* value_str, Value* out_value);
 
 /**
  * @brief 创建调试器
@@ -497,6 +501,243 @@ ErrorCode debugger_continue(Debugger* dbg) {
     return OK;
 }
 
+// ========================= Force 命令辅助函数 =========================
+
+/**
+ * @brief 将字符串解析为Value
+ * @param type_str 类型字符串 ("int", "real", "bool", "string")
+ * @param value_str 值字符串
+ * @param out_value 输出Value
+ * @return 成功返回true
+ */
+static bool parse_value_from_string(const char* type_str, const char* value_str, Value* out_value) {
+    if (!type_str || !value_str || !out_value) {
+        return false;
+    }
+    
+    // INT
+    if (strcasecmp(type_str, "int") == 0) {
+        out_value->type = TYPE_INT;
+        out_value->int_val = atoi(value_str);
+        out_value->quality = QUALITY_GOOD;
+        return true;
+    }
+    // REAL
+    else if (strcasecmp(type_str, "real") == 0 || strcasecmp(type_str, "float") == 0) {
+        out_value->type = TYPE_REAL;
+        out_value->real_val = atof(value_str);
+        out_value->quality = QUALITY_GOOD;
+        return true;
+    }
+    // BOOL
+    else if (strcasecmp(type_str, "bool") == 0) {
+        out_value->type = TYPE_BOOL;
+        if (strcasecmp(value_str, "true") == 0 || strcmp(value_str, "1") == 0) {
+            out_value->bool_val = true;
+        } else if (strcasecmp(value_str, "false") == 0 || strcmp(value_str, "0") == 0) {
+            out_value->bool_val = false;
+        } else {
+            return false;
+        }
+        out_value->quality = QUALITY_GOOD;
+        return true;
+    }
+    // STRING
+    else if (strcasecmp(type_str, "string") == 0) {
+        out_value->type = TYPE_STRING;
+        strncpy(out_value->string_val, value_str, sizeof(out_value->string_val) - 1);
+        out_value->string_val[sizeof(out_value->string_val) - 1] = '\0';
+        out_value->quality = QUALITY_GOOD;
+        return true;
+    }
+    // 质量化类型
+    else if (strcasecmp(type_str, "qint") == 0) {
+        out_value->type = TYPE_QINT;
+        out_value->int_val = atoi(value_str);
+        out_value->quality = QUALITY_GOOD;
+        return true;
+    }
+    else if (strcasecmp(type_str, "qreal") == 0) {
+        out_value->type = TYPE_QREAL;
+        out_value->real_val = atof(value_str);
+        out_value->quality = QUALITY_GOOD;
+        return true;
+    }
+    else if (strcasecmp(type_str, "qbool") == 0) {
+        out_value->type = TYPE_QBOOL;
+        out_value->bool_val = (strcasecmp(value_str, "true") == 0 || strcmp(value_str, "1") == 0);
+        out_value->quality = QUALITY_GOOD;
+        return true;
+    }
+    
+    return false;
+}
+
+/**
+ * @brief 处理 force 命令
+ * 用法: force <var_name> <type> <value> [persistent]
+ * 例如: force counter int 100
+ *       force temperature real 25.5 persistent
+ */
+static void cmd_force(Debugger* dbg, char* args) {
+    if (!dbg || !dbg->vm) {
+        printf("错误：无效的调试器或VM实例\n");
+        return;
+    }
+    
+    ForceManager* mgr = vm_get_force_manager(dbg->vm);
+    if (!mgr) {
+        printf("错误：Force Manager 未初始化\n");
+        return;
+    }
+    
+    // 解析参数
+    char* var_name = strtok(args, " \t");
+    char* type_str = strtok(NULL, " \t");
+    char* value_str = strtok(NULL, " \t");
+    char* persist_str = strtok(NULL, " \t");
+    
+    if (!var_name || !type_str || !value_str) {
+        printf("用法: force <var_name> <type> <value> [persistent]\n");
+        printf("类型: int, real, bool, string, qint, qreal, qbool\n");
+        printf("示例: force counter int 100\n");
+        printf("      force temp real 25.5 persistent\n");
+        return;
+    }
+    
+    // 解析值
+    Value value;
+    if (!parse_value_from_string(type_str, value_str, &value)) {
+        printf("错误：无法解析类型 '%s' 的值 '%s'\n", type_str, value_str);
+        return;
+    }
+    
+    // 检查是否持久化
+    bool persistent = false;
+    if (persist_str && strcasecmp(persist_str, "persistent") == 0) {
+        persistent = true;
+    }
+    
+    // 强制变量
+    if (vm_force_variable(dbg->vm, var_name, value, persistent)) {
+        printf("已强制变量 '%s' = ", var_name);
+        switch (value.type) {
+            case TYPE_INT:
+            case TYPE_QINT:
+                printf("%d", value.int_val);
+                break;
+            case TYPE_REAL:
+            case TYPE_QREAL:
+                printf("%f", value.real_val);
+                break;
+            case TYPE_BOOL:
+            case TYPE_QBOOL:
+                printf("%s", value.bool_val ? "TRUE" : "FALSE");
+                break;
+            case TYPE_STRING:
+                printf("\"%s\"", value.string_val);
+                break;
+            default:
+                printf("?");
+        }
+        printf(" (%s)\n", persistent ? "持久化" : "临时");
+    } else {
+        printf("错误：无法强制变量 '%s'\n", var_name);
+    }
+}
+
+/**
+ * @brief 处理 unforce 命令
+ * 用法: unforce <var_name> | all
+ */
+static void cmd_unforce(Debugger* dbg, char* args) {
+    if (!dbg || !dbg->vm) {
+        printf("错误：无效的调试器或VM实例\n");
+        return;
+    }
+    
+    ForceManager* mgr = vm_get_force_manager(dbg->vm);
+    if (!mgr) {
+        printf("错误：Force Manager 未初始化\n");
+        return;
+    }
+    
+    char* var_name = strtok(args, " \t");
+    if (!var_name) {
+        printf("用法: unforce <var_name> | all\n");
+        printf("示例: unforce counter\n");
+        printf("      unforce all\n");
+        return;
+    }
+    
+    // 取消全部
+    if (strcasecmp(var_name, "all") == 0) {
+        int32_t count = vm_unforce_all(dbg->vm);
+        printf("已取消 %d 个强制变量\n", count);
+    }
+    // 取消单个
+    else {
+        if (vm_unforce_variable(dbg->vm, var_name)) {
+            printf("已取消变量 '%s' 的强制\n", var_name);
+        } else {
+            printf("变量 '%s' 未被强制\n", var_name);
+        }
+    }
+}
+
+/**
+ * @brief 处理 force_status 命令
+ * 显示所有强制变量的状态
+ */
+static void cmd_force_status(Debugger* dbg) {
+    if (!dbg || !dbg->vm) {
+        printf("错误：无效的调试器或VM实例\n");
+        return;
+    }
+    
+    vm_print_force_status(dbg->vm);
+}
+
+/**
+ * @brief 处理 force_enable 命令
+ * 用法: force_enable on | off
+ */
+static void cmd_force_enable(Debugger* dbg, char* args) {
+    if (!dbg || !dbg->vm) {
+        printf("错误：无效的调试器或VM实例\n");
+        return;
+    }
+    
+    ForceManager* mgr = vm_get_force_manager(dbg->vm);
+    if (!mgr) {
+        printf("错误：Force Manager 未初始化\n");
+        return;
+    }
+    
+    char* state_str = strtok(args, " \t");
+    if (!state_str) {
+        // 显示当前状态
+        bool enabled = vm_is_force_enabled(dbg->vm);
+        printf("Force 功能当前状态: %s\n", enabled ? "启用" : "禁用");
+        return;
+    }
+    
+    // 设置状态
+    if (strcasecmp(state_str, "on") == 0 || strcasecmp(state_str, "1") == 0 || 
+        strcasecmp(state_str, "true") == 0) {
+        vm_force_enable(dbg->vm, true);
+        printf("Force 功能已启用\n");
+    } else if (strcasecmp(state_str, "off") == 0 || strcasecmp(state_str, "0") == 0 || 
+               strcasecmp(state_str, "false") == 0) {
+        vm_force_enable(dbg->vm, false);
+        printf("Force 功能已禁用\n");
+    } else {
+        printf("用法: force_enable [on|off]\n");
+        printf("示例: force_enable on\n");
+        printf("      force_enable off\n");
+    }
+}
+
 /**
  * @brief 打印调试帮助信息
  */
@@ -518,6 +759,16 @@ void debugger_print_help(void) {
     printf("  print <name>         打印变量\n");
     printf("  stack                显示操作数栈\n");
     printf("  disasm [addr] [n]    反汇编代码\n");
+    printf("\n变量强制命令 (Force):\n");
+    printf("  force <var> <type> <val> [persistent]  强制变量值\n");
+    printf("                       类型: int, real, bool, string\n");
+    printf("                       示例: force counter int 100\n");
+    printf("                             force temp real 25.5 persistent\n");
+    printf("  unforce <var>        取消变量强制\n");
+    printf("  unforce all          取消所有强制\n");
+    printf("  force_status         显示所有强制变量状态\n");
+    printf("  force_enable [on|off] 启用/禁用Force功能\n");
+    printf("\n");
     printf("  q, quit              退出调试器\n");
 }
 
@@ -632,6 +883,22 @@ bool debugger_handle_command(Debugger* dbg, const char* command) {
         int count = count_str ? atoi(count_str) : 10;
         
         debugger_disassemble(dbg, addr, count);
+    }
+    // Force 命令
+    else if (strcmp(token, "force") == 0) {
+        char* remaining = strtok(NULL, "");  // 获取剩余所有参数
+        cmd_force(dbg, remaining);
+    }
+    else if (strcmp(token, "unforce") == 0) {
+        char* remaining = strtok(NULL, "");
+        cmd_unforce(dbg, remaining);
+    }
+    else if (strcmp(token, "force_status") == 0) {
+        cmd_force_status(dbg);
+    }
+    else if (strcmp(token, "force_enable") == 0) {
+        char* remaining = strtok(NULL, "");
+        cmd_force_enable(dbg, remaining);
     }
     // 退出
     else if (strcmp(token, "q") == 0 || strcmp(token, "quit") == 0) {
