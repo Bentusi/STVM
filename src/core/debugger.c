@@ -595,13 +595,15 @@ static void cmd_force(Debugger* dbg, char* args) {
     char* var_name = strtok(args, " \t");
     char* type_str = strtok(NULL, " \t");
     char* value_str = strtok(NULL, " \t");
-    char* persist_str = strtok(NULL, " \t");
+    char* next_arg = strtok(NULL, " \t");
     
     if (!var_name || !type_str || !value_str) {
-        printf("用法: force <var_name> <type> <value> [persistent]\n");
-        printf("类型: int, real, bool, string, qint, qreal, qbool\n");
+        printf("用法: force <var_name> <type> <value> [quality] [persistent]\n");
+        printf("类型: int, real, bool, string, qint, qreal, qbool, qstring\n");
+        printf("质量位: good, uncertain, bad, error (仅对质量化类型有效)\n");
         printf("示例: force counter int 100\n");
-        printf("      force temp real 25.5 persistent\n");
+        printf("      force temp qreal 25.5 bad persistent\n");
+        printf("      force alarm qbool 1 uncertain\n");
         return;
     }
     
@@ -612,10 +614,31 @@ static void cmd_force(Debugger* dbg, char* args) {
         return;
     }
     
-    // 检查是否持久化
+    // 解析可选参数（质量位和persistent）
     bool persistent = false;
-    if (persist_str && strcasecmp(persist_str, "persistent") == 0) {
-        persistent = true;
+    QualityFlag quality = QUALITY_GOOD;
+    
+    while (next_arg) {
+        if (strcasecmp(next_arg, "persistent") == 0) {
+            persistent = true;
+        } else if (strcasecmp(next_arg, "good") == 0 || strcmp(next_arg, "0") == 0) {
+            quality = QUALITY_GOOD;
+        } else if (strcasecmp(next_arg, "uncertain") == 0 || strcmp(next_arg, "1") == 0) {
+            quality = QUALITY_UNCERTAIN;
+        } else if (strcasecmp(next_arg, "bad") == 0 || strcmp(next_arg, "2") == 0) {
+            quality = QUALITY_BAD;
+        } else if (strcasecmp(next_arg, "error") == 0 || strcmp(next_arg, "3") == 0) {
+            quality = QUALITY_ERROR;
+        } else {
+            printf("警告：忽略未知参数 '%s'\n", next_arg);
+        }
+        next_arg = strtok(NULL, " \t");
+    }
+    
+    // 对于质量化类型，设置质量位
+    if (value.type == TYPE_QINT || value.type == TYPE_QREAL || 
+        value.type == TYPE_QBOOL || value.type == TYPE_QSTRING) {
+        value.quality = quality;
     }
     
     // 强制变量
@@ -635,11 +658,19 @@ static void cmd_force(Debugger* dbg, char* args) {
                 printf("%s", value.bool_val ? "TRUE" : "FALSE");
                 break;
             case TYPE_STRING:
+            case TYPE_QSTRING:
                 printf("\"%s\"", value.string_val);
                 break;
             default:
                 printf("?");
         }
+        
+        // 显示质量位
+        if (value.type == TYPE_QINT || value.type == TYPE_QREAL || 
+            value.type == TYPE_QBOOL || value.type == TYPE_QSTRING) {
+            printf(" [%s]", quality_to_string(value.quality));
+        }
+        
         printf(" (%s)\n", persistent ? "持久化" : "临时");
     } else {
         printf("错误：无法强制变量 '%s'\n", var_name);

@@ -405,19 +405,39 @@ void force_print_status(ForceManager* mgr) {
             snprintf(name_buf, sizeof(name_buf), "[%d]", current->var_index);
         }
         
-        char value_buf[32];
+        char value_buf[64];  // 增大缓冲区以容纳质量位信息
         switch (current->forced_value.type) {
             case TYPE_INT:
                 snprintf(value_buf, sizeof(value_buf), "%d", current->forced_value.int_val);
                 break;
+            case TYPE_QINT:
+                snprintf(value_buf, sizeof(value_buf), "%d [%s]", 
+                         current->forced_value.int_val, 
+                         quality_to_string(current->forced_value.quality));
+                break;
             case TYPE_REAL:
                 snprintf(value_buf, sizeof(value_buf), "%.6f", current->forced_value.real_val);
+                break;
+            case TYPE_QREAL:
+                snprintf(value_buf, sizeof(value_buf), "%.6f [%s]", 
+                         current->forced_value.real_val, 
+                         quality_to_string(current->forced_value.quality));
                 break;
             case TYPE_BOOL:
                 snprintf(value_buf, sizeof(value_buf), "%s", current->forced_value.bool_val ? "TRUE" : "FALSE");
                 break;
+            case TYPE_QBOOL:
+                snprintf(value_buf, sizeof(value_buf), "%s [%s]", 
+                         current->forced_value.bool_val ? "TRUE" : "FALSE", 
+                         quality_to_string(current->forced_value.quality));
+                break;
             case TYPE_STRING:
                 snprintf(value_buf, sizeof(value_buf), "\"%s\"", current->forced_value.string_val ? current->forced_value.string_val : "");
+                break;
+            case TYPE_QSTRING:
+                snprintf(value_buf, sizeof(value_buf), "\"%s\" [%s]", 
+                         current->forced_value.string_val ? current->forced_value.string_val : "", 
+                         quality_to_string(current->forced_value.quality));
                 break;
             default:
                 snprintf(value_buf, sizeof(value_buf), "(unknown)");
@@ -458,6 +478,18 @@ bool force_save_to_file(ForceManager* mgr, const char* filename) {
         }
         
         fprintf(f, "type=%s\n", type_to_string(current->forced_value.type));
+        
+        // 对于质量化类型，保存质量位
+        switch (current->forced_value.type) {
+            case TYPE_QINT:
+            case TYPE_QREAL:
+            case TYPE_QBOOL:
+            case TYPE_QSTRING:
+                fprintf(f, "quality=%s\n", quality_to_string(current->forced_value.quality));
+                break;
+            default:
+                break;
+        }
         
         switch (current->forced_value.type) {
             case TYPE_INT:
@@ -562,12 +594,16 @@ bool force_load_from_file(ForceManager* mgr, const char* filename) {
                 } else {
                     value_type = TYPE_VOID;
                 }
+                // 初始化value
+                value.type = value_type;
+                value.quality = QUALITY_GOOD;  // 默认质量为GOOD
+            }
+            else if (strcmp(key, "quality") == 0) {
+                // 解析质量位（仅对质量化类型有效）
+                value.quality = string_to_quality(val);
             }
             else if (strcmp(key, "value") == 0) {
                 // 根据类型解析值
-                value.type = value_type;
-                value.quality = QUALITY_GOOD;
-                
                 switch (value_type) {
                     case TYPE_INT:
                     case TYPE_QINT:

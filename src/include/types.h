@@ -98,6 +98,20 @@ typedef struct TypeInfo {
 const char* type_to_string(DataType type);
 
 /**
+ * @brief 获取质量位名称字符串
+ * @param quality 质量位
+ * @return 质量位名称
+ */
+const char* quality_to_string(QualityFlag quality);
+
+/**
+ * @brief 从字符串解析质量位
+ * @param str 质量位字符串 (good/uncertain/bad/error 或 0/1/2/3)
+ * @return 解析的质量位，失败返回QUALITY_GOOD
+ */
+QualityFlag string_to_quality(const char* str);
+
+/**
  * @brief 创建简单类型信息
  * @param type 数据类型
  * @return 类型信息指针

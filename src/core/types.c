@@ -30,6 +30,40 @@ const char* type_to_string(DataType type) {
 }
 
 /**
+ * @brief 获取质量位名称字符串
+ */
+const char* quality_to_string(QualityFlag quality) {
+    switch (quality) {
+        case QUALITY_GOOD:      return "good";
+        case QUALITY_UNCERTAIN: return "uncertain";
+        case QUALITY_BAD:       return "bad";
+        case QUALITY_ERROR:     return "error";
+        default:                return "unknown";
+    }
+}
+
+/**
+ * @brief 从字符串解析质量位
+ * @param str 质量位字符串
+ * @return 解析的质量位，失败返回QUALITY_GOOD
+ */
+QualityFlag string_to_quality(const char* str) {
+    if (!str) return QUALITY_GOOD;
+    
+    if (strcmp(str, "good") == 0 || strcmp(str, "0") == 0) {
+        return QUALITY_GOOD;
+    } else if (strcmp(str, "uncertain") == 0 || strcmp(str, "1") == 0) {
+        return QUALITY_UNCERTAIN;
+    } else if (strcmp(str, "bad") == 0 || strcmp(str, "2") == 0) {
+        return QUALITY_BAD;
+    } else if (strcmp(str, "error") == 0 || strcmp(str, "3") == 0) {
+        return QUALITY_ERROR;
+    }
+    
+    return QUALITY_GOOD;  // 默认为GOOD
+}
+
+/**
  * @brief 创建简单类型信息
  */
 TypeInfo* type_info_create(DataType type) {
