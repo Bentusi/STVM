@@ -113,14 +113,31 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
 
     /* 字符串字面量 - 单引号 */
 {STRING_SQ}         {
-                        /* 去掉首尾引号，处理转义的单引号 '' -> ' */
+                        /* 去掉首尾引号，处理转义序列 */
                         int len = yyleng - 2;
                         char* str = mmgr_alloc(len + 1);
                         int j = 0;
                         for (int i = 1; i < yyleng - 1; i++) {
-                            str[j++] = yytext[i];
                             if (yytext[i] == '\'' && yytext[i+1] == '\'') {
-                                i++; /* 跳过第二个单引号 */
+                                str[j++] = '\'';  /* 转义的单引号 '' -> ' */
+                                i++;  /* 跳过第二个单引号 */
+                            } else if (yytext[i] == '\\' && i + 1 < yyleng - 1) {
+                                /* 处理反斜杠转义序列 */
+                                i++;
+                                switch (yytext[i]) {
+                                    case 'n': str[j++] = '\n'; break;
+                                    case 't': str[j++] = '\t'; break;
+                                    case 'r': str[j++] = '\r'; break;
+                                    case '\\': str[j++] = '\\'; break;
+                                    case '\'': str[j++] = '\''; break;
+                                    case '"': str[j++] = '"'; break;
+                                    default: 
+                                        str[j++] = '\\';
+                                        str[j++] = yytext[i];
+                                        break;
+                                }
+                            } else {
+                                str[j++] = yytext[i];
                             }
                         }
                         str[j] = '\0';
@@ -130,14 +147,31 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
 
     /* 字符串字面量 - 双引号 */
 {STRING_DQ}         {
-                        /* 去掉首尾引号，处理转义的双引号 "" -> " */
+                        /* 去掉首尾引号，处理转义序列 */
                         int len = yyleng - 2;
                         char* str = mmgr_alloc(len + 1);
                         int j = 0;
                         for (int i = 1; i < yyleng - 1; i++) {
-                            str[j++] = yytext[i];
                             if (yytext[i] == '"' && yytext[i+1] == '"') {
-                                i++; /* 跳过第二个双引号 */
+                                str[j++] = '"';  /* 转义的双引号 "" -> " */
+                                i++;  /* 跳过第二个双引号 */
+                            } else if (yytext[i] == '\\' && i + 1 < yyleng - 1) {
+                                /* 处理反斜杠转义序列 */
+                                i++;
+                                switch (yytext[i]) {
+                                    case 'n': str[j++] = '\n'; break;
+                                    case 't': str[j++] = '\t'; break;
+                                    case 'r': str[j++] = '\r'; break;
+                                    case '\\': str[j++] = '\\'; break;
+                                    case '\'': str[j++] = '\''; break;
+                                    case '"': str[j++] = '"'; break;
+                                    default: 
+                                        str[j++] = '\\';
+                                        str[j++] = yytext[i];
+                                        break;
+                                }
+                            } else {
+                                str[j++] = yytext[i];
                             }
                         }
                         str[j] = '\0';
