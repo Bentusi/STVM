@@ -461,15 +461,19 @@ bool force_save_to_file(ForceManager* mgr, const char* filename) {
         
         switch (current->forced_value.type) {
             case TYPE_INT:
+            case TYPE_QINT:
                 fprintf(f, "value=%d\n", current->forced_value.int_val);
                 break;
             case TYPE_REAL:
+            case TYPE_QREAL:
                 fprintf(f, "value=%f\n", current->forced_value.real_val);
                 break;
             case TYPE_BOOL:
+            case TYPE_QBOOL:
                 fprintf(f, "value=%d\n", current->forced_value.bool_val);
                 break;
             case TYPE_STRING:
+            case TYPE_QSTRING:
                 fprintf(f, "value=%s\n", current->forced_value.string_val ? current->forced_value.string_val : "");
                 break;
             default:
@@ -485,10 +489,146 @@ bool force_save_to_file(ForceManager* mgr, const char* filename) {
 }
 
 bool force_load_from_file(ForceManager* mgr, const char* filename) {
-    // TODO: 实现从文件加载
-    // 需要解析文件格式并重建强制列表
-    fprintf(stderr, "Force: load_from_file not yet implemented\n");
-    return false;
+    if (!mgr || !filename) return false;
+    
+    FILE* f = fopen(filename, "r");
+    if (!f) {
+        fprintf(stderr, "Force: Cannot open file '%s' for reading\n", filename);
+        return false;
+    }
+    
+    char line[512];
+    char var_name[256] = {0};
+    int var_index = -1;
+    DataType value_type = TYPE_VOID;
+    Value value = {0};
+    bool persistent = false;
+    bool has_var = false;
+    int loaded_count = 0;
+    
+    while (fgets(line, sizeof(line), f)) {
+        // 移除换行符
+        size_t len = strlen(line);
+        if (len > 0 && line[len-1] == '\n') {
+            line[len-1] = '\0';
+        }
+        
+        // 跳过注释和空行
+        if (line[0] == '#' || line[0] == '\0') {
+            continue;
+        }
+        
+        // 解析配置项
+        char key[256], val[256];
+        if (sscanf(line, "%255[^=]=%255s", key, val) == 2) {
+            // 全局配置
+            if (strcmp(key, "force_enabled") == 0) {
+                mgr->force_enabled = atoi(val) != 0;
+            }
+            else if (strcmp(key, "force_count") == 0) {
+                // 仅用于验证，实际计数由添加操作更新
+                continue;
+            }
+            // 变量配置
+            else if (strcmp(key, "force_var") == 0) {
+                strncpy(var_name, val, sizeof(var_name) - 1);
+                var_name[sizeof(var_name) - 1] = '\0';
+                var_index = -1;
+                has_var = true;
+            }
+            else if (strcmp(key, "force_index") == 0) {
+                var_index = atoi(val);
+                var_name[0] = '\0';
+                has_var = true;
+            }
+            else if (strcmp(key, "type") == 0) {
+                // 解析类型字符串
+                if (strcmp(val, "int") == 0) {
+                    value_type = TYPE_INT;
+                } else if (strcmp(val, "real") == 0) {
+                    value_type = TYPE_REAL;
+                } else if (strcmp(val, "bool") == 0) {
+                    value_type = TYPE_BOOL;
+                } else if (strcmp(val, "string") == 0) {
+                    value_type = TYPE_STRING;
+                } else if (strcmp(val, "qint") == 0) {
+                    value_type = TYPE_QINT;
+                } else if (strcmp(val, "qreal") == 0) {
+                    value_type = TYPE_QREAL;
+                } else if (strcmp(val, "qbool") == 0) {
+                    value_type = TYPE_QBOOL;
+                } else if (strcmp(val, "qstring") == 0) {
+                    value_type = TYPE_QSTRING;
+                } else {
+                    value_type = TYPE_VOID;
+                }
+            }
+            else if (strcmp(key, "value") == 0) {
+                // 根据类型解析值
+                value.type = value_type;
+                value.quality = QUALITY_GOOD;
+                
+                switch (value_type) {
+                    case TYPE_INT:
+                    case TYPE_QINT:
+                        value.int_val = atoi(val);
+                        break;
+                    case TYPE_REAL:
+                    case TYPE_QREAL:
+                        value.real_val = atof(val);
+                        break;
+                    case TYPE_BOOL:
+                    case TYPE_QBOOL:
+                        value.bool_val = atoi(val) != 0;
+                        break;
+                    case TYPE_STRING:
+                    case TYPE_QSTRING:
+                        strncpy(value.string_val, val, sizeof(value.string_val) - 1);
+                        value.string_val[sizeof(value.string_val) - 1] = '\0';
+                        break;
+                    default:
+                        break;
+                }
+            }
+            else if (strcmp(key, "persistent") == 0) {
+                persistent = atoi(val) != 0;
+                
+                // 此时已有完整的变量信息，添加强制
+                if (has_var && value_type != TYPE_VOID) {
+                    bool success = false;
+                    
+                    if (var_name[0] != '\0') {
+                        // 按名称强制
+                        success = force_variable(mgr, var_name, value, persistent);
+                    } else if (var_index >= 0) {
+                        // 按索引强制
+                        success = force_variable_by_index(mgr, var_index, value, persistent);
+                    }
+                    
+                    if (success) {
+                        loaded_count++;
+                    }
+                    
+                    // 重置状态
+                    var_name[0] = '\0';
+                    var_index = -1;
+                    value_type = TYPE_VOID;
+                    persistent = false;
+                    has_var = false;
+                }
+            }
+        }
+    }
+    
+    fclose(f);
+    
+    if (loaded_count > 0) {
+        printf("Force: Loaded %d force variables from '%s'\n", loaded_count, filename);
+    } else {
+        printf("Force: No valid force variables found in '%s'\n", filename);
+    }
+    
+    return loaded_count > 0;
 }
 
 char* force_export_json(ForceManager* mgr) {

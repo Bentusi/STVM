@@ -169,6 +169,12 @@ $(BIN_DIR)/test_force: $(TESTS_DIR)/test_force.c $(OBJ_DIR)/force.o $(OBJ_DIR)/m
 	@echo "Building test_force..."
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_force_file: $(BIN_DIR)/test_force_file
+
+$(BIN_DIR)/test_force_file: $(TESTS_DIR)/test_force_file.c $(OBJ_DIR)/force.o $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o | dirs
+	@echo "Building test_force_file..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Main programs
 stvm: $(BIN_DIR)/stvm
 

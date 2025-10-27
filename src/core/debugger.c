@@ -739,6 +739,68 @@ static void cmd_force_enable(Debugger* dbg, char* args) {
 }
 
 /**
+ * @brief 处理 force_save 命令
+ * 用法: force_save <filename>
+ */
+static void cmd_force_save(Debugger* dbg, char* args) {
+    if (!dbg || !dbg->vm) {
+        printf("错误：无效的调试器或VM实例\n");
+        return;
+    }
+    
+    ForceManager* mgr = vm_get_force_manager(dbg->vm);
+    if (!mgr) {
+        printf("错误：Force Manager 未初始化\n");
+        return;
+    }
+    
+    char* filename = strtok(args, " \t");
+    if (!filename) {
+        printf("用法: force_save <filename>\n");
+        printf("示例: force_save debug.force\n");
+        printf("      force_save /tmp/my_forces.txt\n");
+        return;
+    }
+    
+    if (force_save_to_file(mgr, filename)) {
+        printf("Force 配置已保存到 '%s'\n", filename);
+    } else {
+        printf("错误：无法保存到 '%s'\n", filename);
+    }
+}
+
+/**
+ * @brief 处理 force_load 命令
+ * 用法: force_load <filename>
+ */
+static void cmd_force_load(Debugger* dbg, char* args) {
+    if (!dbg || !dbg->vm) {
+        printf("错误：无效的调试器或VM实例\n");
+        return;
+    }
+    
+    ForceManager* mgr = vm_get_force_manager(dbg->vm);
+    if (!mgr) {
+        printf("错误：Force Manager 未初始化\n");
+        return;
+    }
+    
+    char* filename = strtok(args, " \t");
+    if (!filename) {
+        printf("用法: force_load <filename>\n");
+        printf("示例: force_load debug.force\n");
+        printf("      force_load /tmp/my_forces.txt\n");
+        return;
+    }
+    
+    if (force_load_from_file(mgr, filename)) {
+        printf("Force 配置已从 '%s' 加载\n", filename);
+    } else {
+        printf("错误：无法从 '%s' 加载\n", filename);
+    }
+}
+
+/**
  * @brief 打印调试帮助信息
  */
 void debugger_print_help(void) {
@@ -768,6 +830,8 @@ void debugger_print_help(void) {
     printf("  unforce all          取消所有强制\n");
     printf("  force_status         显示所有强制变量状态\n");
     printf("  force_enable [on|off] 启用/禁用Force功能\n");
+    printf("  force_save <file>    保存Force配置到文件\n");
+    printf("  force_load <file>    从文件加载Force配置\n");
     printf("\n");
     printf("  q, quit              退出调试器\n");
 }
@@ -899,6 +963,14 @@ bool debugger_handle_command(Debugger* dbg, const char* command) {
     else if (strcmp(token, "force_enable") == 0) {
         char* remaining = strtok(NULL, "");
         cmd_force_enable(dbg, remaining);
+    }
+    else if (strcmp(token, "force_save") == 0) {
+        char* remaining = strtok(NULL, "");
+        cmd_force_save(dbg, remaining);
+    }
+    else if (strcmp(token, "force_load") == 0) {
+        char* remaining = strtok(NULL, "");
+        cmd_force_load(dbg, remaining);
     }
     // 退出
     else if (strcmp(token, "q") == 0 || strcmp(token, "quit") == 0) {
