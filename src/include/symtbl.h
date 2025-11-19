@@ -10,6 +10,8 @@
 #include <stdbool.h>
 #include "types.h"
 
+#define SYMBOL_TABLE_SIZE 256  // 哈希表大小
+
 /**
  * @brief 符号类型
  */

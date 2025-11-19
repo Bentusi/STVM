@@ -317,6 +317,63 @@ static ErrorCode load_functions(BytecodeModule* module, FILE* fp, int32_t count)
 }
 
 /**
+ * @brief 保存全局变量元数据
+ */
+static ErrorCode save_globals(const BytecodeModule* module, FILE* fp) {
+    if (module->global_count > 0 && module->globals_info) {
+        for (uint32_t i = 0; i < module->global_count; i++) {
+            GlobalEntry* entry = &module->globals_info[i];
+            // 写入名字长度
+            uint16_t name_len = entry->name ? strlen(entry->name) : 0;
+            if (fwrite(&name_len, sizeof(uint16_t), 1, fp) != 1) return ERR_FILE_IO;
+            // 写入名字
+            if (name_len > 0) {
+                if (fwrite(entry->name, 1, name_len, fp) != name_len) return ERR_FILE_IO;
+            }
+            // 写入类型
+            if (fwrite(&entry->type, sizeof(DataType), 1, fp) != 1) return ERR_FILE_IO;
+            // 写入索引
+            if (fwrite(&entry->index, sizeof(int32_t), 1, fp) != 1) return ERR_FILE_IO;
+        }
+    }
+    return OK;
+}
+
+/**
+ * @brief 加载全局变量元数据
+ */
+static ErrorCode load_globals(BytecodeModule* module, FILE* fp, uint32_t count) {
+    if (count == 0) return OK;
+    
+    module->globals_info = (GlobalEntry*)mmgr_calloc(sizeof(GlobalEntry) * count);
+    if (!module->globals_info) return ERR_OUT_OF_MEMORY;
+    
+    for (uint32_t i = 0; i < count; i++) {
+        GlobalEntry* entry = &module->globals_info[i];
+        
+        // 读取名字长度
+        uint16_t name_len;
+        if (fread(&name_len, sizeof(uint16_t), 1, fp) != 1) return ERR_FILE_IO;
+        
+        // 读取名字
+        if (name_len > 0) {
+            entry->name = (char*)mmgr_alloc(name_len + 1);
+            if (!entry->name) return ERR_OUT_OF_MEMORY;
+            if (fread(entry->name, 1, name_len, fp) != name_len) return ERR_FILE_IO;
+            entry->name[name_len] = '\0';
+        } else {
+            entry->name = NULL;
+        }
+        
+        // 读取类型
+        if (fread(&entry->type, sizeof(DataType), 1, fp) != 1) return ERR_FILE_IO;
+        // 读取索引
+        if (fread(&entry->index, sizeof(int32_t), 1, fp) != 1) return ERR_FILE_IO;
+    }
+    return OK;
+}
+
+/**
  * @brief 保存指令数组
  */
 static ErrorCode save_instructions(const BytecodeModule* module, FILE* fp) {
@@ -407,6 +464,10 @@ ErrorCode bytecode_save_to_stream(const BytecodeModule* module, FILE* fp) {
     err = save_functions(module, fp);
     if (err != OK) return err;
     
+    // 写入全局变量元数据
+    err = save_globals(module, fp);
+    if (err != OK) return err;
+    
     // 写入指令数组
     err = save_instructions(module, fp);
     if (err != OK) return err;
@@ -423,6 +484,10 @@ ErrorCode bytecode_save_to_stream(const BytecodeModule* module, FILE* fp) {
             return ERR_FILE_IO;
         }
     }
+    
+    // 写入全局变量元数据（新增）
+    err = save_globals(module, fp);
+    if (err != OK) return err;
     
     return OK;
 }
@@ -478,6 +543,13 @@ BytecodeModule* bytecode_load_from_stream(FILE* fp) {
         return NULL;
     }
     
+    // 加载全局变量元数据
+    err = load_globals(module, fp, header.global_var_count);
+    if (err != OK) {
+        bytecode_module_free(module);
+        return NULL;
+    }
+    
     // 释放 bytecode_module_create() 分配的初始指令数组
     // 因为 load_instructions() 会重新分配
     if (module->instructions) {
@@ -522,6 +594,13 @@ BytecodeModule* bytecode_load_from_stream(FILE* fp) {
             }
             module->library_deps[i][len] = '\0';
         }
+    }
+    
+    // 加载全局变量元数据（新增）
+    err = load_globals(module, fp, header.global_var_count);
+    if (err != OK) {
+        bytecode_module_free(module);
+        return NULL;
     }
     
     // 验证校验和

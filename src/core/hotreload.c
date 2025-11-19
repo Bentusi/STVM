@@ -244,14 +244,21 @@ bool hotreload_check_compatibility(HotReloadManager* mgr, BytecodeModule* new_mo
     
     BytecodeModule* old_module = mgr->active_module;
     
-    // 检查 1: 全局变量数量（当前实现要求相同）
+    // 检查 1: 全局变量数量
     if (old_module->global_count != new_module->global_count) {
-        if (mgr->verbose) {
-            printf("[HotReload] Incompatible: Global count changed (%u -> %u)\n",
-                   old_module->global_count, new_module->global_count);
+        // 如果有元数据，允许数量变化（支持迁移）
+        if (old_module->globals_info && new_module->globals_info) {
+            if (mgr->verbose) {
+                printf("[HotReload] Global count changed (%u -> %u), will migrate by name\n",
+                       old_module->global_count, new_module->global_count);
+            }
+        } else {
+            if (mgr->verbose) {
+                printf("[HotReload] Incompatible: Global count changed (%u -> %u) without metadata\n",
+                       old_module->global_count, new_module->global_count);
+            }
+            return false;
         }
-        // 注意：这是简化的检查，未来可以支持全局变量迁移
-        return false;
     }
     
     // 检查 2: 确保关键函数签名不变（如果有入口函数）
@@ -411,34 +418,101 @@ static ErrorCode analyze_module_diff(HotReloadManager* mgr) {
 static ErrorCode merge_modules(HotReloadManager* mgr) {
     BytecodeModule* old_mod = mgr->active_module;
     BytecodeModule* new_mod = mgr->staged_module;
+    VM* vm = mgr->vm;
     
-    if (!old_mod || !new_mod) return ERR_RUNTIME;
-    
-    // 策略：直接替换 VM 的模块指针
-    // 注意：这是简化的实现，真实场景需要更复杂的合并逻辑
+    if (!old_mod || !new_mod || !vm) return ERR_RUNTIME;
     
     if (mgr->verbose) {
         printf("[HotReload] Replacing module %p with %p\n", 
                (void*)old_mod, (void*)new_mod);
     }
     
-    // 替换 VM 的模块
-    mgr->vm->module = new_mod;
-    mgr->active_module = new_mod;
-    
-    // 如果需要保留全局状态，复制全局变量
-    if (mgr->preserve_global_state && old_mod->global_count == new_mod->global_count) {
-        // 全局变量已经在 vm->globals 中，不需要额外操作
-        if (mgr->verbose) {
-            printf("[HotReload] Global state preserved (%u variables)\n", 
-                   old_mod->global_count);
+    // 1. 迁移全局变量
+    if (mgr->preserve_global_state) {
+        // 分配新的全局变量数组
+        Value* new_globals = NULL;
+        if (new_mod->global_count > 0) {
+            new_globals = (Value*)mmgr_calloc(sizeof(Value) * new_mod->global_count);
+            if (!new_globals) return ERR_OUT_OF_MEMORY;
+        }
+        
+        // 迁移数据
+        if (new_mod->globals_info && old_mod->globals_info) {
+            for (uint32_t i = 0; i < new_mod->global_count; i++) {
+                GlobalEntry* new_entry = &new_mod->globals_info[i];
+                
+                // 在旧模块中查找同名变量
+                bool found = false;
+                for (uint32_t j = 0; j < old_mod->global_count; j++) {
+                    GlobalEntry* old_entry = &old_mod->globals_info[j];
+                    if (old_entry->name && new_entry->name && 
+                        strcmp(old_entry->name, new_entry->name) == 0) {
+                        
+                        // 检查类型兼容性
+                        if (old_entry->type == new_entry->type) {
+                            // 复制值
+                            if (vm->globals) {
+                                new_globals[i] = vm->globals[j];
+                                found = true;
+                                if (mgr->verbose) {
+                                    printf("[HotReload] Migrated global '%s' (idx %d -> %d)\n", 
+                                           new_entry->name, j, i);
+                                }
+                            }
+                        } else {
+                            if (mgr->verbose) {
+                                printf("[HotReload] Global '%s' type changed, resetting value\n", 
+                                       new_entry->name);
+                            }
+                        }
+                        break;
+                    }
+                }
+                
+                if (!found && mgr->verbose) {
+                    printf("[HotReload] New global '%s' initialized to default\n", 
+                           new_entry->name ? new_entry->name : "?");
+                }
+            }
+        } else if (old_mod->global_count == new_mod->global_count) {
+            // 如果没有元数据但数量相同，尝试直接复制（兼容旧行为）
+             if (vm->globals && new_globals) {
+                memcpy(new_globals, vm->globals, sizeof(Value) * new_mod->global_count);
+             }
+        }
+        
+        // 替换全局变量数组
+        if (vm->globals) {
+            mmgr_free(vm->globals);
+        }
+        vm->globals = new_globals;
+        vm->global_count = new_mod->global_count;
+    } else {
+        // 不保留状态，重新分配并清零
+        if (vm->globals) {
+            mmgr_free(vm->globals);
+        }
+        vm->global_count = new_mod->global_count;
+        if (vm->global_count > 0) {
+            vm->globals = (Value*)mmgr_calloc(sizeof(Value) * vm->global_count);
+        } else {
+            vm->globals = NULL;
         }
     }
     
-    // 重置 PC 到新模块的入口点
-    mgr->vm->pc = new_mod->entry_point;
+    // 2. 替换模块
+    vm->module = new_mod;
+    mgr->active_module = new_mod;
     
-    // 注意：旧模块会在下次 hotreload_stage 或 hotreload_free 时释放
+    // 3. 重置 PC 到新模块的入口点
+    vm->pc = new_mod->entry_point;
+    
+    // 重置栈指针，确保从头开始执行时栈是干净的
+    vm->sp = -1;
+    vm->call_sp = -1;
+    
+    // 4. 释放旧模块
+    bytecode_module_free(old_mod);
     
     return OK;
 }

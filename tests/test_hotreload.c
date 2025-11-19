@@ -109,8 +109,8 @@ int main(int argc, char** argv) {
     // ========== 阶段 6: 运行更新后的代码 ==========
     printf("▶ Phase 6: Running reloaded code...\n\n");
     
-    // 重置 VM 状态
-    vm_reset(vm);
+    // 重置 VM 状态 (保留全局变量)
+    vm_reset_execution_state(vm);
     
     err = vm_run(vm);
     if (err != OK) {

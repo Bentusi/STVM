@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define SYMBOL_TABLE_SIZE 256  // 哈希表大小
+// SYMBOL_TABLE_SIZE moved to symtbl.h
 
 /**
  * @brief 简单的字符串哈希函数

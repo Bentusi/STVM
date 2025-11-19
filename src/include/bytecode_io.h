@@ -23,7 +23,7 @@ struct SymbolTable;
  * @brief STBC文件版本
  */
 #define STBC_VERSION_MAJOR 1
-#define STBC_VERSION_MINOR 0
+#define STBC_VERSION_MINOR 1
 
 /**
  * @brief STBC文件头

@@ -74,6 +74,7 @@ BytecodeModule* bytecode_module_create(void) {
     module->source_file = NULL;
     module->library_deps = NULL;
     module->library_dep_count = 0;
+    module->globals_info = NULL;
     
     return module;
 }
@@ -87,6 +88,16 @@ void bytecode_module_free(BytecodeModule* module) {
     // 释放指令数组
     if (module->instructions) {
         mmgr_free(module->instructions);
+    }
+    
+    // 释放全局变量元数据
+    if (module->globals_info) {
+        for (uint32_t i = 0; i < module->global_count; i++) {
+            if (module->globals_info[i].name) {
+                mmgr_free(module->globals_info[i].name);
+            }
+        }
+        mmgr_free(module->globals_info);
     }
     
     // 释放常量池中的字符串

@@ -147,6 +147,15 @@ typedef struct {
 } FunctionEntry;
 
 /**
+ * @brief 全局变量表条目（用于热加载）
+ */
+typedef struct {
+    char* name;             // 变量名
+    DataType type;          // 变量类型
+    int32_t index;          // 在全局数组中的索引
+} GlobalEntry;
+
+/**
  * @brief 字节码模块
  */
 typedef struct {
@@ -167,6 +176,7 @@ typedef struct {
     
     // 全局变量
     uint32_t global_count;
+    GlobalEntry* globals_info; // 全局变量元数据（新增，用于热加载）
     
     // 入口点
     uint32_t entry_point;

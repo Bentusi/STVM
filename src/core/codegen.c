@@ -202,6 +202,34 @@ static ErrorCode generate_program(CodeGenContext* ctx, ASTNode* program) {
     // 设置模块的全局变量计数（typecheck已定义全局变量，symtbl保存了计数）
     ctx->module->global_count = ctx->symtbl->global_var_count;
     
+    // 填充全局变量元数据（用于热加载）
+    if (ctx->module->global_count > 0) {
+        ctx->module->globals_info = (GlobalEntry*)mmgr_calloc(sizeof(GlobalEntry) * ctx->module->global_count);
+        if (!ctx->module->globals_info) {
+            ctx->error_code = ERR_OUT_OF_MEMORY;
+            return ERR_OUT_OF_MEMORY;
+        }
+        
+        // 遍历符号表填充元数据
+        Scope* scope = ctx->symtbl->global_scope;
+        if (scope && scope->symbols) {
+            for (int i = 0; i < SYMBOL_TABLE_SIZE; i++) {
+                Symbol* sym = scope->symbols[i];
+                while (sym) {
+                    if (sym->kind == SYM_VARIABLE && sym->is_global) {
+                        int32_t idx = sym->index;
+                        if (idx >= 0 && idx < (int32_t)ctx->module->global_count) {
+                            ctx->module->globals_info[idx].name = mmgr_strdup(sym->name);
+                            ctx->module->globals_info[idx].type = sym->type->base_type;
+                            ctx->module->globals_info[idx].index = idx;
+                        }
+                    }
+                    sym = sym->next;
+                }
+            }
+        }
+    }
+    
     // 设置入口点为0（从头开始执行）
     ctx->module->entry_point = 0;
     
@@ -311,38 +339,43 @@ static ErrorCode generate_var_decls(CodeGenContext* ctx, ASTNode* var_decls) {
             } else if (sym->type && sym->type->base_type != TYPE_ARRAY && sym->type->base_type != TYPE_FUNCTION) {
                 // 没有初始化表达式，且不是数组或函数类型，生成默认值
                 // 数组和函数不需要显式初始化
-                Value default_val = {.type = TYPE_VOID};
-                default_val.type = sym->type->base_type;
-                switch (default_val.type) {
-                    case TYPE_INT:
-                        default_val.int_val = 0;
-                        break;
-                    case TYPE_REAL:
-                        default_val.real_val = 0.0;
-                        break;
-                    case TYPE_BOOL:
-                        default_val.bool_val = false;
-                        break;
-                    case TYPE_STRING:
-                        default_val.string_val = "";
-                        break;
-                    default:
-                        // 跳过其他类型（TYPE_VOID等）
-                        decl = decl->next;
-                        continue;
-                }
                 
-                int32_t const_index = codegen_add_constant(ctx, default_val);
-                if (const_index < 0) {
-                    ctx->error_code = ERR_OUT_OF_MEMORY;
-                    return ERR_OUT_OF_MEMORY;
+                // 仅对局部变量生成默认初始化代码
+                // 全局变量由VM初始化为0，且在热更新时需要保留值，不应重置
+                if (!sym->is_global) {
+                    Value default_val = {.type = TYPE_VOID};
+                    default_val.type = sym->type->base_type;
+                    switch (default_val.type) {
+                        case TYPE_INT:
+                            default_val.int_val = 0;
+                            break;
+                        case TYPE_REAL:
+                            default_val.real_val = 0.0;
+                            break;
+                        case TYPE_BOOL:
+                            default_val.bool_val = false;
+                            break;
+                        case TYPE_STRING:
+                            default_val.string_val = "";
+                            break;
+                        default:
+                            // 跳过其他类型（TYPE_VOID等）
+                            decl = decl->next;
+                            continue;
+                    }
+                    
+                    int32_t const_index = codegen_add_constant(ctx, default_val);
+                    if (const_index < 0) {
+                        ctx->error_code = ERR_OUT_OF_MEMORY;
+                        return ERR_OUT_OF_MEMORY;
+                    }
+                    codegen_emit(ctx, OP_PUSH, (uint16_t)const_index);
+                    
+                    // 生成STORE指令：使用正确的索引/偏移
+                    uint8_t flags = sym->is_global ? 0x01 : 0x00;
+                    uint16_t addr = sym->is_global ? sym->index : sym->offset;
+                    codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
                 }
-                codegen_emit(ctx, OP_PUSH, (uint16_t)const_index);
-                
-                // 生成STORE指令：使用正确的索引/偏移
-                uint8_t flags = sym->is_global ? 0x01 : 0x00;
-                uint16_t addr = sym->is_global ? sym->index : sym->offset;
-                codegen_emit_with_flags(ctx, OP_STORE, flags, addr);
             }
             
             /* 变量计数由调用者（codegen_function 或程序级别）负责
@@ -879,11 +912,6 @@ static ErrorCode generate_array_access(CodeGenContext* ctx, ASTNode* node) {
     
     // 生成LOAD指令
     // 使用 is_global 判断全局/局部
-    codegen_emit(ctx, OP_LOAD, offset);
-    if (array_sym->is_global) {
-        // 设置全局标志
-        ctx->module->instructions[ctx->module->instruction_count - 1].flags = FLAG_GLOBAL;
-    }
     
     return OK;
 }
