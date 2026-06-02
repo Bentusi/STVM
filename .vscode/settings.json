@@ -1,6 +1,21 @@
 {
     "files.associations": {
         "typeinfo": "c",
-        "vm.h": "c"
+        "vm.h": "c",
+        "ast.h": "c",
+        "string.h": "c",
+        "ms_sync.h": "c",
+        "symbol_table.h": "c",
+        "stdint.h": "c",
+        "time.h": "c",
+        "stdio.h": "c",
+        "bytecode_generator.h": "c",
+        "array": "cpp",
+        "compare": "cpp",
+        "functional": "cpp",
+        "tuple": "cpp",
+        "type_traits": "cpp",
+        "utility": "cpp",
+        "builtins.h": "c"
     }
 }

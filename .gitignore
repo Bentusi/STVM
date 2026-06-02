@@ -1,6 +1,12 @@
-./vscode
+.vscode
 *.o
 st_compiler
+st_lexer.c
 st_parser.tab.c
 st_parser.tab.h
-st_lexer.c
+stvm
+*.bak
+build/
+*.stbc
+*.md
+test_results.txt
