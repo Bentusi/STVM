@@ -21,6 +21,7 @@ typedef enum {
     MODE_RUN,               // 运行模式
     MODE_COMPILE_AND_RUN,   // 编译并运行模式
     MODE_REPL,              // 交互模式
+    MODE_WCET,              // WCET 分析模式
     MODE_HELP,              // 显示帮助
     MODE_VERSION            // 显示版本
 } CliMode;
@@ -46,6 +47,13 @@ typedef struct {
     int cycle_time_ms;              // 执行周期（毫秒，运行模式专用）
     bool use_io_simulator;          // 启用IO模拟器
     char* io_config_file;           // IO配置文件路径
+    
+    // WCET 分析选项
+    bool run_wcet;                  // 运行 WCET 分析
+    char* wcet_entry;               // WCET 分析的入口函数
+    double wcet_cpu_freq_mhz;       // WCET 目标 CPU 频率
+    bool wcet_verbose;              // WCET 详细输出
+    char* wcet_source_file;         // WCET 标注解析的 ST 源文件
 } CliOptions;
 
 /**
@@ -87,6 +95,13 @@ int cli_run(const CliOptions* options);
  * @return 成功返回0，失败返回错误码
  */
 int cli_compile_and_run(const CliOptions* options);
+
+/**
+ * @brief WCET 分析模式入口
+ * @param options 命令行选项
+ * @return 成功返回0，失败返回错误码
+ */
+int cli_wcet(const CliOptions* options);
 
 /**
  * @brief REPL模式入口

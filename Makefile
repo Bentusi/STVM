@@ -181,6 +181,12 @@ $(BIN_DIR)/test_force_quality: $(TESTS_DIR)/test_force_quality.c $(OBJ_DIR)/forc
 	@echo "Building test_force_quality..."
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
+test_wcet: $(BIN_DIR)/test_wcet
+
+$(BIN_DIR)/test_wcet: $(TESTS_DIR)/test_wcet.c $(OBJ_DIR)/wcet.o $(OBJ_DIR)/mmgr.o $(OBJ_DIR)/types.o $(OBJ_DIR)/bytecode.o $(OBJ_DIR)/bytecode_io.o | dirs
+	@echo "Building test_wcet..."
+	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
 # Main programs
 stvm: $(BIN_DIR)/stvm
 
@@ -278,6 +284,7 @@ help:
 	@echo "  test_bitops   - Build bitwise operations test"
 	@echo "  test_hotreload- Build hot reload test"
 	@echo "  test_io_manager - Build I/O manager test"
+	@echo "  test_wcet    - Build WCET analyzer test"
 	@echo "  test          - Build and run all tests"
 	@echo ""
 	@echo "Usage examples:"

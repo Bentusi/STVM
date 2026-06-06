@@ -15,6 +15,7 @@
 #include "libmgr.h"
 #include "debugger.h"
 #include "iomgr.h"
+#include "wcet.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,6 +75,10 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
         {"cycle",         required_argument, 0, 'C'},
         {"io-simulator",  no_argument,       0, 'I'},
         {"io-config",     required_argument, 0, 'g'},
+        {"wcet",          no_argument,       0, 'W'},
+        {"wcet-entry",    required_argument, 0, 'E'},
+        {"wcet-source",   required_argument, 0, 'F'},
+        {"wcet-cpu",      required_argument, 0, 'P'},
         {0, 0, 0, 0}
     };
     
@@ -167,6 +172,29 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
                 options->io_config_file = optarg;
                 break;
                 
+            case 'W':
+                options->mode = MODE_WCET;
+                options->run_wcet = true;
+                break;
+                
+            case 'E':
+                options->wcet_entry = optarg;
+                break;
+                
+            case 'F':
+                options->wcet_source_file = optarg;
+                break;
+                
+            case 'P':
+                {
+                    char* endptr;
+                    options->wcet_cpu_freq_mhz = strtod(optarg, &endptr);
+                    if (*endptr != '\0' || options->wcet_cpu_freq_mhz <= 0) {
+                        options->wcet_cpu_freq_mhz = 168.0;
+                    }
+                }
+                break;
+                
             case '?':
                 // getopt_long 已经打印了错误消息
                 return false;
@@ -219,6 +247,91 @@ bool cli_parse_args(int argc, char** argv, CliOptions* options) {
     }
     
     return true;
+}
+
+/**
+ * @brief WCET 分析模式入口
+ */
+int cli_wcet(const CliOptions* options) {
+    if (!options->input_file) {
+        fprintf(stderr, "错误：WCET 分析需要指定字节码文件\n");
+        fprintf(stderr, "用法: stvm --wcet <file.stbc>\n");
+        return 1;
+    }
+    
+    if (!mmgr_init()) {
+        fprintf(stderr, "错误：无法初始化内存管理器\n");
+        return 1;
+    }
+    
+    // 加载字节码
+    BytecodeModule* module = bytecode_load(options->input_file);
+    if (!module) {
+        fprintf(stderr, "错误：无法加载字节码文件 '%s'\n", options->input_file);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    printf("已加载字节码: %s\n", options->input_file);
+    printf("  指令数:   %u\n", module->instruction_count);
+    printf("  函数数:   %u\n", module->function_count);
+    printf("  全局变量: %u\n", module->global_count);
+    
+    // 配置 WCET 分析器
+    WcetConfig wcet_cfg;
+    wcet_config_init(&wcet_cfg);
+    
+    if (options->wcet_cpu_freq_mhz > 0) {
+        wcet_cfg.cpu_frequency_mhz = options->wcet_cpu_freq_mhz;
+    }
+    if (options->wcet_verbose) {
+        wcet_cfg.verbose = true;
+    }
+    // 设置默认循环边界为 100（适用于未标注的测试程序）
+    wcet_cfg.default_loop_bound = 100;
+    
+    // 创建分析器
+    WcetAnalyzer* analyzer = wcet_analyzer_create(module, &wcet_cfg);
+    if (!analyzer) {
+        fprintf(stderr, "错误：无法创建 WCET 分析器\n");
+        bytecode_module_free(module);
+        mmgr_cleanup();
+        return 1;
+    }
+    
+    // 从 ST 源文件解析 @LOOP_MAX 标注
+    if (options->wcet_source_file) {
+        LoopBound bounds[WCET_MAX_LOOP_BOUNDS];
+        uint32_t bound_count = wcet_parse_loop_bounds_from_source(
+            options->wcet_source_file, bounds, WCET_MAX_LOOP_BOUNDS);
+        
+        for (uint32_t i = 0; i < bound_count; i++) {
+            wcet_add_loop_bound(analyzer, bounds[i].function_name,
+                                bounds[i].address, bounds[i].max_iterations);
+        }
+        printf("从源文件解析到 %u 个 @LOOP_MAX 标注\n", bound_count);
+    }
+    
+    // 运行分析
+    WcetResult result;
+    ErrorCode err = wcet_analyze(analyzer, options->wcet_entry, &result);
+    
+    if (err == OK) {
+        // 打印分析报告
+        wcet_print_report(&result);
+        
+        // 周期预算验证
+        int cycle_ms = options->cycle_time_ms > 0 ? options->cycle_time_ms : 10;
+        wcet_validate_cycle_budget(&result, (uint32_t)cycle_ms, 20);
+    } else {
+        fprintf(stderr, "错误：WCET 分析失败: %s\n", result.error_msg);
+    }
+    
+    wcet_analyzer_free(analyzer);
+    bytecode_module_free(module);
+    mmgr_cleanup();
+    
+    return (err == OK) ? 0 : 1;
 }
 
 /**
@@ -1542,6 +1655,9 @@ int main(int argc, char** argv) {
             
         case MODE_REPL:
             return cli_repl(&options);
+            
+        case MODE_WCET:
+            return cli_wcet(&options);
             
         default:
             fprintf(stderr, "错误：未知模式\n");
