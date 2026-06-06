@@ -16,10 +16,13 @@
 #include "libmgr.h"
 #include "iomgr.h"
 #include "force.h"
+#include "vm_hotreload.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <limits.h>
+#include <float.h>
 
 // 默认栈大小
 #define VM_STACK_DEFAULT_SIZE 4096
@@ -316,17 +319,74 @@ static ErrorCode vm_execute_arithmetic(VM* vm, Opcode op) {
             default:
                 return ERR_INVALID_INSTRUCTION;
         }
+        
+        // IEC 61508: 检测浮点异常 (NaN/Inf)
+        if (isnan(result.real_val)) {
+            vm->error_code = ERR_NAN_RESULT;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "NaN result detected at PC=%u", vm->pc);
+            return ERR_NAN_RESULT;
+        }
+        if (isinf(result.real_val)) {
+            vm->error_code = ERR_INF_RESULT;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), "Inf result detected at PC=%u", vm->pc);
+            return ERR_INF_RESULT;
+        }
     } else {
-        // 整数运算
+        // 整数运算 - IEC 61508: 添加有符号溢出检测
         switch (op) {
-            case OP_ADD: result.int_val = a.int_val + b.int_val; break;
-            case OP_SUB: result.int_val = a.int_val - b.int_val; break;
-            case OP_MUL: result.int_val = a.int_val * b.int_val; break;
+            case OP_ADD:
+                // 检测有符号溢出: 同号相加变符号
+                if ((a.int_val > 0 && b.int_val > 0 && a.int_val + b.int_val <= 0) ||
+                    (a.int_val < 0 && b.int_val < 0 && a.int_val + b.int_val >= 0)) {
+                    vm->error_code = ERR_ARITHMETIC_OVERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Integer overflow in ADD at PC=%u", vm->pc);
+                    return ERR_ARITHMETIC_OVERFLOW;
+                }
+                result.int_val = a.int_val + b.int_val;
+                break;
+            case OP_SUB:
+                // 检测有符号溢出: 异号相减变与减数同号
+                if ((b.int_val == INT_MIN && a.int_val >= 0) ||
+                    (b.int_val != INT_MIN &&
+                     ((a.int_val > 0 && b.int_val < 0 && a.int_val - b.int_val <= 0) ||
+                      (a.int_val < 0 && b.int_val > 0 && a.int_val - b.int_val >= 0)))) {
+                    vm->error_code = ERR_ARITHMETIC_OVERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Integer overflow in SUB at PC=%u", vm->pc);
+                    return ERR_ARITHMETIC_OVERFLOW;
+                }
+                result.int_val = a.int_val - b.int_val;
+                break;
+            case OP_MUL:
+                // 检测有符号溢出
+                if (a.int_val != 0 && b.int_val != 0) {
+                    if (a.int_val == INT_MIN || b.int_val == INT_MIN) {
+                        if ((a.int_val == INT_MIN && b.int_val == INT_MIN) ||
+                            (a.int_val == -1 && b.int_val == INT_MIN) ||
+                            (a.int_val == INT_MIN && b.int_val == -1)) {
+                            vm->error_code = ERR_ARITHMETIC_OVERFLOW;
+                            snprintf(vm->error_msg, sizeof(vm->error_msg), "Integer overflow in MUL at PC=%u", vm->pc);
+                            return ERR_ARITHMETIC_OVERFLOW;
+                        }
+                    }
+                    if (labs((long)a.int_val * (long)b.int_val) > (long)INT_MAX) {
+                        vm->error_code = ERR_ARITHMETIC_OVERFLOW;
+                        snprintf(vm->error_msg, sizeof(vm->error_msg), "Integer overflow in MUL at PC=%u", vm->pc);
+                        return ERR_ARITHMETIC_OVERFLOW;
+                    }
+                }
+                result.int_val = a.int_val * b.int_val;
+                break;
             case OP_DIV:
                 if (b.int_val == 0) {
                     vm->error_code = ERR_DIV_ZERO;
                     snprintf(vm->error_msg, sizeof(vm->error_msg), "Division by zero at PC=%u", vm->pc);
                     return ERR_DIV_ZERO;
+                }
+                // 检测 INT_MIN / -1 溢出
+                if (a.int_val == INT_MIN && b.int_val == -1) {
+                    vm->error_code = ERR_ARITHMETIC_OVERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Integer overflow in DIV at PC=%u", vm->pc);
+                    return ERR_ARITHMETIC_OVERFLOW;
                 }
                 result.int_val = a.int_val / b.int_val;
                 break;
@@ -334,6 +394,12 @@ static ErrorCode vm_execute_arithmetic(VM* vm, Opcode op) {
                 if (b.int_val == 0) {
                     vm->error_code = ERR_DIV_ZERO;
                     return ERR_DIV_ZERO;
+                }
+                // 检测 INT_MIN % -1 溢出
+                if (a.int_val == INT_MIN && b.int_val == -1) {
+                    vm->error_code = ERR_ARITHMETIC_OVERFLOW;
+                    snprintf(vm->error_msg, sizeof(vm->error_msg), "Integer overflow in MOD at PC=%u", vm->pc);
+                    return ERR_ARITHMETIC_OVERFLOW;
                 }
                 result.int_val = a.int_val % b.int_val;
                 break;
@@ -348,6 +414,9 @@ static ErrorCode vm_execute_arithmetic(VM* vm, Opcode op) {
 
 /**
  * @brief 执行比较运算
+ * 
+ * IEC 61508: 质量位传播 - 比较结果的质量位由操作数质量决定
+ * 如果任一操作数质量异常，比较结果的质量位也异常
  */
 static ErrorCode vm_execute_comparison(VM* vm, Opcode op) {
     CHECK_STACK(2);
@@ -356,6 +425,7 @@ static ErrorCode vm_execute_comparison(VM* vm, Opcode op) {
     Value a = POP();
     Value result;
     result.type = TYPE_BOOL;
+    result.quality = QUALITY_GOOD;
     
     // 类型转换
     if (a.type == TYPE_REAL || b.type == TYPE_REAL) {
@@ -383,32 +453,72 @@ static ErrorCode vm_execute_comparison(VM* vm, Opcode op) {
         }
     }
     
+    // IEC 61508: 传播质量位 - 任一操作数质量异常则比较结果也异常
+    QualityFlag quality_a = is_qualified_type(a.type) ? a.quality : QUALITY_GOOD;
+    QualityFlag quality_b = is_qualified_type(b.type) ? b.quality : QUALITY_GOOD;
+    result.quality = quality_propagate(quality_a, quality_b);
+    
     PUSH(result);
     return OK;
 }
 
 /**
  * @brief 执行逻辑运算
+ * 
+ * IEC 61508: 
+ * - 操作数必须为 BOOL 类型（避免类型混淆 UB）
+ * - 质量位传播：任一操作数质量异常则结果质量异常
  */
 static ErrorCode vm_execute_logical(VM* vm, Opcode op) {
     Value result;
     result.type = TYPE_BOOL;
+    result.quality = QUALITY_GOOD;
     
     if (op == OP_NOT) {
         CHECK_STACK(1);
         Value a = POP();
-        result.bool_val = !a.bool_val;
+        
+        // 类型检查：必须为 BOOL 或 INT（兼容 bool/int 混用）
+        if (a.type != TYPE_BOOL && a.type != TYPE_INT) {
+            vm->error_code = ERR_TYPE;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                    "NOT requires BOOL or INT type at PC=%u", vm->pc);
+            return ERR_TYPE;
+        }
+        
+        result.bool_val = (a.type == TYPE_BOOL) ? !a.bool_val : (a.int_val == 0);
+        
+        // 传播质量位
+        QualityFlag quality_a = is_qualified_type(a.type) ? a.quality : QUALITY_GOOD;
+        result.quality = quality_a;
     } else {
         CHECK_STACK(2);
         Value b = POP();
         Value a = POP();
         
+        // 类型检查：必须为 BOOL 或 INT
+        if ((a.type != TYPE_BOOL && a.type != TYPE_INT) ||
+            (b.type != TYPE_BOOL && b.type != TYPE_INT)) {
+            vm->error_code = ERR_TYPE;
+            snprintf(vm->error_msg, sizeof(vm->error_msg), 
+                    "Logic ops require BOOL or INT types at PC=%u", vm->pc);
+            return ERR_TYPE;
+        }
+        
+        bool bool_a = (a.type == TYPE_BOOL) ? a.bool_val : (a.int_val != 0);
+        bool bool_b = (b.type == TYPE_BOOL) ? b.bool_val : (b.int_val != 0);
+        
         switch (op) {
-            case OP_AND: result.bool_val = a.bool_val && b.bool_val; break;
-            case OP_OR:  result.bool_val = a.bool_val || b.bool_val; break;
-            case OP_XOR: result.bool_val = (a.bool_val != b.bool_val); break;  // 逻辑异或
+            case OP_AND: result.bool_val = bool_a && bool_b; break;
+            case OP_OR:  result.bool_val = bool_a || bool_b; break;
+            case OP_XOR: result.bool_val = (bool_a != bool_b); break;
             default: return ERR_INVALID_INSTRUCTION;
         }
+        
+        // IEC 61508: 传播质量位
+        QualityFlag quality_a = is_qualified_type(a.type) ? a.quality : QUALITY_GOOD;
+        QualityFlag quality_b = is_qualified_type(b.type) ? b.quality : QUALITY_GOOD;
+        result.quality = quality_propagate(quality_a, quality_b);
     }
     
     PUSH(result);
@@ -2337,4 +2447,123 @@ void vm_force_enable(VM* vm, bool enabled) {
 bool vm_is_force_enabled(VM* vm) {
     if (!vm || !vm->force_mgr) return false;
     return force_is_enabled(vm->force_mgr);
+}
+
+// ========================= IEC 61508 安全状态实现 =========================
+
+/**
+ * @brief 配置安全状态参数
+ */
+void vm_configure_safe_state(VM* vm, uint32_t max_errors, 
+                              const int32_t* safe_defaults, uint32_t count) {
+    if (!vm) return;
+    
+    vm->max_error_threshold = max_errors;
+    vm->error_count = 0;
+    vm->safe_state_active = false;
+    vm->safe_state_default_count = (count > 32) ? 32 : count;
+    
+    if (safe_defaults && vm->safe_state_default_count > 0) {
+        memcpy(vm->safe_state_defaults, safe_defaults, 
+               vm->safe_state_default_count * sizeof(uint32_t));
+    }
+}
+
+/**
+ * @brief 激活安全状态
+ */
+bool vm_activate_safe_state(VM* vm) {
+    if (!vm || vm->safe_state_active) return false;
+    
+    vm->safe_state_active = true;
+    vm->running = false;
+    vm->error_code = ERR_SAFE_STATE;
+    snprintf(vm->error_msg, sizeof(vm->error_msg), 
+             "Safe state activated after %u errors", vm->error_count);
+    
+    // 将所有全局变量设置为安全默认值
+    for (uint32_t i = 0; i < vm->safe_state_default_count && i < (uint32_t)vm->global_count; i++) {
+        vm->globals[i].type = TYPE_INT;
+        vm->globals[i].int_val = (int32_t)vm->safe_state_defaults[i];
+        vm->globals[i].quality = QUALITY_GOOD;
+    }
+    
+    // 将剩余全局变量设为 0（安全默认值）
+    for (int32_t i = (int32_t)vm->safe_state_default_count; i < vm->global_count; i++) {
+        vm->globals[i].type = TYPE_INT;
+        vm->globals[i].int_val = 0;
+        vm->globals[i].quality = QUALITY_GOOD;
+    }
+    
+    fprintf(stderr, "[SAFE STATE] Activated. Errors: %u. All variables set to safe defaults.\n",
+            vm->error_count);
+    
+    return true;
+}
+
+/**
+ * @brief 退出安全状态
+ */
+void vm_deactivate_safe_state(VM* vm) {
+    if (!vm || !vm->safe_state_active) return;
+    
+    vm->safe_state_active = false;
+    vm->error_code = OK;
+    vm->error_msg[0] = '\0';
+    vm->error_count = 0;
+    
+    fprintf(stderr, "[SAFE STATE] Deactivated. VM ready to resume.\n");
+}
+
+/**
+ * @brief 检查是否处于安全状态
+ */
+bool vm_is_safe_state(VM* vm) {
+    return vm ? vm->safe_state_active : false;
+}
+
+/**
+ * @brief 获取 VM 累计错误计数
+ */
+uint32_t vm_get_error_count(VM* vm) {
+    return vm ? vm->error_count : 0;
+}
+
+// ========================= 看门狗实现 =========================
+
+/**
+ * @brief 配置看门狗
+ */
+void vm_watchdog_configure(VM* vm, uint32_t timeout_instructions) {
+    if (!vm) return;
+    
+    vm->watchdog_timeout = timeout_instructions;
+    vm->instructions_since_kick = 0;
+    vm->watchdog_timed_out = false;
+}
+
+/**
+ * @brief 喂狗（重置看门狗）
+ */
+void vm_watchdog_kick(VM* vm) {
+    if (!vm) return;
+    vm->instructions_since_kick = 0;
+    vm->watchdog_timed_out = false;
+}
+
+/**
+ * @brief 检查看门狗是否超时
+ */
+bool vm_watchdog_is_expired(VM* vm) {
+    if (!vm) return false;
+    
+    if (vm->watchdog_timeout > 0 && 
+        vm->instructions_since_kick >= vm->watchdog_timeout) {
+        vm->watchdog_timed_out = true;
+        vm->error_code = ERR_WATCHDOG;
+        snprintf(vm->error_msg, sizeof(vm->error_msg),
+                "Watchdog timed out after %u instructions", vm->instructions_since_kick);
+        return true;
+    }
+    return false;
 }

@@ -37,7 +37,12 @@ typedef enum {
     ERR_PERMISSION_DENIED,  // 权限拒绝
     ERR_DEVICE_NOT_OPEN,    // 设备未打开
     ERR_SYSTEM_ERROR,       // 系统错误
-    ERR_UNKNOWN             // 未知错误
+    ERR_UNKNOWN,            // 未知错误
+    ERR_ARITHMETIC_OVERFLOW,// 算术溢出 (IEC 61508 安全要求)
+    ERR_NAN_RESULT,         // 浮点NaN结果
+    ERR_INF_RESULT,         // 浮点无穷大结果
+    ERR_SAFE_STATE,         // 安全状态激活
+    ERR_WATCHDOG            // 看门狗超时
 } ErrorCode;
 
 /**

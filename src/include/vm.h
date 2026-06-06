@@ -77,6 +77,18 @@ typedef struct VM {
     
     // 变量强制管理器（用于调试时强制变量值）
     struct ForceManager* force_mgr;
+    
+    // === IEC 61508 安全机制 ===
+    uint32_t error_count;             // 累计错误计数
+    uint32_t max_error_threshold;     // 错误阈值（超过此值触发安全状态，0=禁用）
+    bool safe_state_active;           // 安全状态是否激活
+    uint32_t safe_state_defaults[32]; // 安全状态下的默认变量值（最多32个全局变量）
+    uint32_t safe_state_default_count;// 安全默认值数量
+    
+    // 看门狗
+    uint32_t watchdog_timeout;        // 看门狗超时（指令数，0=禁用）
+    uint32_t instructions_since_kick; // 上次喂狗以来的指令数
+    bool watchdog_timed_out;          // 是否已超时
 } VM;
 
 /**
@@ -340,5 +352,70 @@ void vm_force_enable(VM* vm, bool enabled);
  * @return 是否启用
  */
 bool vm_is_force_enabled(VM* vm);
+
+// ============================================================================
+// IEC 61508 安全状态 API
+// ============================================================================
+
+/**
+ * @brief 配置安全状态参数
+ * @param vm 虚拟机实例
+ * @param max_errors 最大允许错误数（0=禁用安全状态）
+ * @param safe_defaults 安全状态下的默认变量值数组
+ * @param count 默认值数量
+ */
+void vm_configure_safe_state(VM* vm, uint32_t max_errors, 
+                              const int32_t* safe_defaults, uint32_t count);
+
+/**
+ * @brief 激活安全状态
+ * @param vm 虚拟机实例
+ * @return 是否成功激活
+ */
+bool vm_activate_safe_state(VM* vm);
+
+/**
+ * @brief 退出安全状态
+ * @param vm 虚拟机实例
+ */
+void vm_deactivate_safe_state(VM* vm);
+
+/**
+ * @brief 检查是否处于安全状态
+ * @param vm 虚拟机实例
+ * @return 是否处于安全状态
+ */
+bool vm_is_safe_state(VM* vm);
+
+/**
+ * @brief 获取 VM 累计错误计数
+ * @param vm 虚拟机实例
+ * @return 错误计数
+ */
+uint32_t vm_get_error_count(VM* vm);
+
+// ============================================================================
+// 看门狗 API
+// ============================================================================
+
+/**
+ * @brief 配置看门狗
+ * @param vm 虚拟机实例
+ * @param timeout_instructions 超时指令数（0=禁用）
+ */
+void vm_watchdog_configure(VM* vm, uint32_t timeout_instructions);
+
+/**
+ * @brief 喂狗（重置看门狗）
+ * @param vm 虚拟机实例
+ */
+void vm_watchdog_kick(VM* vm);
+
+/**
+ * @brief 检查看门狗是否超时
+ * @param vm 虚拟机实例
+ * @return 是否超时
+ */
+bool vm_watchdog_is_expired(VM* vm);
 
 #endif // STVM_VM_H

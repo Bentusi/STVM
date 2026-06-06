@@ -876,7 +876,13 @@ add_default_io_points:
                     cycle_count++;
                     
                     // 等待指定的时间间隔
-                    usleep(options->cycle_time_ms * 1000); // 转换为微秒
+                    // POSIX: 使用 nanosleep 替代已废弃的 usleep (功能安全兼容)
+                    {
+                        struct timespec ts;
+                        ts.tv_sec = options->cycle_time_ms / 1000;
+                        ts.tv_nsec = (options->cycle_time_ms % 1000) * 1000000L;
+                        nanosleep(&ts, NULL);
+                    }
                 }
             } else {
                 // 单次执行模式
@@ -1337,7 +1343,13 @@ add_default_io_points_2:
                     cycle_count++;
                     
                     // 等待指定的时间间隔
-                    usleep(options->cycle_time_ms * 1000); // 转换为微秒
+                    // POSIX: 使用 nanosleep 替代已废弃的 usleep (功能安全兼容)
+                    {
+                        struct timespec ts;
+                        ts.tv_sec = options->cycle_time_ms / 1000;
+                        ts.tv_nsec = (options->cycle_time_ms % 1000) * 1000000L;
+                        nanosleep(&ts, NULL);
+                    }
                 }
             } else {
                 // 单次执行模式
