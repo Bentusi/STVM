@@ -214,8 +214,10 @@ STRING_DQ   \"([^\"\n]|\"\")*\"
 ">"                 { return TOKEN_GT; }
 "+"                 { return TOKEN_PLUS; }
 "-"                 { return TOKEN_MINUS; }
+"**"                { return TOKEN_POWER; }
 "*"                 { return TOKEN_MULTIPLY; }
 "/"                 { return TOKEN_DIVIDE; }
+"~"                 { return TOKEN_BIT_NOT; }
 
     /* 分隔符 */
 ";"                 { return TOKEN_SEMICOLON; }

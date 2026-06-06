@@ -69,6 +69,8 @@ Value builtin_print(VM* vm, int32_t argc) {
                     Value arg = vm_get_arg(vm, arg_index--);
                     if (arg.type == TYPE_INT) {
                         printf("%d", arg.int_val);
+                    } else if (arg.type == TYPE_BOOL) {
+                        printf("%d", arg.bool_val ? 1 : 0);
                     } else {
                         fprintf(stderr, "PRINT: %%d 需要 INT 类型，得到 %s\n", type2str(arg.type));
                     }

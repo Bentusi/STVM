@@ -76,6 +76,7 @@ ASTNode* parse_result = NULL;
 
 %token TOKEN_ASSIGN TOKEN_EQ TOKEN_NE TOKEN_LT TOKEN_LE TOKEN_GT TOKEN_GE
 %token TOKEN_PLUS TOKEN_MINUS TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MOD
+%token TOKEN_POWER TOKEN_BIT_NOT
 %token TOKEN_AND TOKEN_OR TOKEN_XOR TOKEN_NOT
 %token TOKEN_SHL TOKEN_SHR
 
@@ -93,7 +94,7 @@ ASTNode* parse_result = NULL;
 %type <ast_node> case_element_list case_element case_labels case_label_list
 %type <ast_node> expression or_expr xor_expr and_expr comparison_expr
 %type <ast_node> add_expr mult_expr unary_expr primary_expr
-%type <ast_node> argument_list
+%type <ast_node> argument_list identifier_list
 %type <type_info> type_spec
 
 /* 运算符优先级和结合性（符合 IEC 61131-3）*/
@@ -105,9 +106,11 @@ ASTNode* parse_result = NULL;
 %left TOKEN_PLUS TOKEN_MINUS
 %left TOKEN_SHL TOKEN_SHR  /* 移位操作与加减同级 */
 %left TOKEN_MULTIPLY TOKEN_DIVIDE TOKEN_MOD
+%right TOKEN_POWER
 %right TOKEN_NOT UNARY_MINUS
 
 /* 起始符号 */
+%expect 2
 %start program
 
 %%
@@ -187,7 +190,41 @@ import_decl:
         aliases[0] = $4;
         $$ = ast_create_import($6, symbols, 1, aliases);
     }
-    /* TODO: 支持多个符号导入 IMPORT func1, func2 FROM 'module.stbc'; */
+    /* IMPORT func1, func2, ... FROM 'module.stbc'; - 导入多个函数 */
+    | TOKEN_IMPORT identifier_list TOKEN_FROM TOKEN_STRING_LITERAL TOKEN_SEMICOLON
+    {
+        // 计算符号数
+        int count = 0;
+        ASTNode* id = $2;
+        while (id) { count++; id = id->next; }
+        
+        char** symbols = (char**)malloc(sizeof(char*) * count);
+        id = $2;
+        for (int i = 0; i < count; i++) {
+            symbols[i] = id->data.identifier.name;
+            ASTNode* next = id->next;
+            id = next;
+        }
+        $$ = ast_create_import($4, symbols, count, NULL);
+    }
+    | TOKEN_IMPORT identifier_list TOKEN_FROM TOKEN_STRING_LITERAL TOKEN_AS TOKEN_IDENTIFIER TOKEN_SEMICOLON
+    {
+        // IMPORT f1, f2 FROM 'mod' AS alias; - 所有符号共享别名
+        int count = 0;
+        ASTNode* id = $2;
+        while (id) { count++; id = id->next; }
+        
+        char** symbols = (char**)malloc(sizeof(char*) * count);
+        char** aliases = (char**)malloc(sizeof(char*) * count);
+        id = $2;
+        for (int i = 0; i < count; i++) {
+            symbols[i] = id->data.identifier.name;
+            aliases[i] = $6;
+            ASTNode* next = id->next;
+            id = next;
+        }
+        $$ = ast_create_import($4, symbols, count, aliases);
+    }
     ;
 
 /* 变量声明列表 */
@@ -938,6 +975,10 @@ unary_expr:
     {
         $$ = ast_create_unary_op(UNOP_NOT, $2);
     }
+    | TOKEN_BIT_NOT unary_expr
+    {
+        $$ = ast_create_unary_op(UNOP_BIT_NOT, $2);
+    }
     | TOKEN_MINUS unary_expr %prec UNARY_MINUS
     {
         $$ = ast_create_unary_op(UNOP_NEG, $2);
@@ -1029,6 +1070,22 @@ primary_expr:
     | TOKEN_LPAREN expression TOKEN_RPAREN
     {
         $$ = $2;
+    }
+    ;
+
+/* 逗号分隔的标识符列表 (用于 IMPORT 多符号) */
+identifier_list:
+    TOKEN_IDENTIFIER
+    {
+        $$ = ast_create_identifier($1);
+    }
+    | identifier_list TOKEN_COMMA TOKEN_IDENTIFIER
+    {
+        ASTNode* new_id = ast_create_identifier($3);
+        ASTNode* last = $1;
+        while (last->next) last = last->next;
+        last->next = new_id;
+        $$ = $1;
     }
     ;
 

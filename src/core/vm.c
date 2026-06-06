@@ -1953,7 +1953,7 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             
             case OP_LOAD_INDEXED: {
                 // 从栈顶弹出索引，使用 operand 作为基地址，压入数组元素
-                if (vm->sp < 0) {
+                if (vm->sp < 1) {
                     vm->error_code = ERR_STACK_UNDERFLOW;
                     snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in LOAD_INDEXED");
                     return ERR_STACK_UNDERFLOW;
@@ -2001,7 +2001,7 @@ ErrorCode vm_run_from(VM* vm, uint32_t entry_point) {
             
             case OP_STORE_INDEXED: {
                 // 从栈顶弹出值和索引，使用 operand 作为基地址，存储到数组元素
-                if (vm->sp < 1) {
+                if (vm->sp < 2) {
                     vm->error_code = ERR_STACK_UNDERFLOW;
                     snprintf(vm->error_msg, sizeof(vm->error_msg), "Stack underflow in STORE_INDEXED");
                     return ERR_STACK_UNDERFLOW;
